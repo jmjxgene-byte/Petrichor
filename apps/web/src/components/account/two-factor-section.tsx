@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { notifyTwoFactorStatusChanged } from "@/lib/two-factor-status"
 
 type Props = {
   profile: UserProfileResponse | null
@@ -148,6 +149,7 @@ export function TwoFactorSection({ profile, onChanged }: Props) {
       await twoFactorApi.verifyTotp({ code })
       toast.success("二步验证已启用")
       setMode({ kind: "idle" })
+      notifyTwoFactorStatusChanged()
       onChanged()
     } catch (e) {
       toast.error(normalizeAxiosError(e, "验证码错误，请重试"))
@@ -168,6 +170,7 @@ export function TwoFactorSection({ profile, onChanged }: Props) {
       toast.success("二步验证已关闭")
       setMode({ kind: "idle" })
       setPassword("")
+      notifyTwoFactorStatusChanged()
       onChanged()
     } catch (e) {
       toast.error(normalizeAxiosError(e, "关闭二步验证失败"))

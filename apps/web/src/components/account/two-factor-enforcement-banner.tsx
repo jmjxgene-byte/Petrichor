@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { authApi } from "@/lib/api"
 import { dashboardRoutes } from "@/lib/dashboard-routes"
+import { TWO_FACTOR_STATUS_CHANGED_EVENT } from "@/lib/two-factor-status"
 
 export function TwoFactorEnforcementBanner() {
   const location = useLocation()
@@ -15,21 +16,30 @@ export function TwoFactorEnforcementBanner() {
 
   React.useEffect(() => {
     let cancelled = false
-    authApi.profile()
-      .then((res) => {
-        if (cancelled) return
-        const profile = res.data
-        const needsSetup =
-          profile.userType === "LOCAL" &&
-          profile.systemRole === "SUPER_ADMIN" &&
-          !profile.twoFactorEnabled
-        setShow(needsSetup)
-      })
-      .catch(() => {
-        if (!cancelled) setShow(false)
-      })
+    let requestId = 0
+
+    const refresh = () => {
+      const currentRequestId = ++requestId
+      void authApi.profile()
+        .then((res) => {
+          if (cancelled || currentRequestId !== requestId) return
+          const profile = res.data
+          const needsSetup =
+            profile.userType === "LOCAL" &&
+            profile.systemRole === "SUPER_ADMIN" &&
+            !profile.twoFactorEnabled
+          setShow(needsSetup)
+        })
+        .catch(() => {
+          if (!cancelled && currentRequestId === requestId) setShow(false)
+        })
+    }
+
+    refresh()
+    window.addEventListener(TWO_FACTOR_STATUS_CHANGED_EVENT, refresh)
     return () => {
       cancelled = true
+      window.removeEventListener(TWO_FACTOR_STATUS_CHANGED_EVENT, refresh)
     }
   }, [])
 
