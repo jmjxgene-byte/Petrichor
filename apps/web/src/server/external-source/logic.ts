@@ -14,7 +14,8 @@ export const GENEOPS_PROJECT_REF = "snsvqlqwnpyzcftubeab"
 export const GENEOPS_POOLER_HOST = "aws-0-ap-southeast-1.pooler.supabase.com"
 export const GENEOPS_POOLER_PORT = 6543
 export const GENEOPS_DATABASE = "postgres"
-export const GENEOPS_READER_USERNAME = `petrichor_geneops_reader.${GENEOPS_PROJECT_REF}`
+export const GENEOPS_READER_ROLE = "petrichor_geneops_reader"
+export const GENEOPS_READER_USERNAME = `${GENEOPS_READER_ROLE}.${GENEOPS_PROJECT_REF}`
 export const GENEOPS_CONTRACT_VERSION = 1
 
 const connectionSchema = z.object({
@@ -124,7 +125,7 @@ export async function testSourceConnection(source: ExternalSourceRecord) {
                 has_table_privilege(current_user, 'public.source_documents', 'SELECT') as "canSelectPublicDocuments",
                 has_table_privilege(current_user, 'public.source_documents', 'INSERT') as "canInsertPublicDocuments"
         `
-        if (identity?.currentUser !== GENEOPS_READER_USERNAME) throw new Error("连接角色不正确")
+        if (identity?.currentUser !== GENEOPS_READER_ROLE) throw new Error("连接角色不正确")
         if (identity.transactionReadOnly !== "on") throw new Error("连接角色未强制只读事务")
         if (identity.canSelectPublicDocuments || identity.canInsertPublicDocuments) {
             throw new Error("连接角色拥有不允许的 public 表权限")

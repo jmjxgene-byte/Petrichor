@@ -5,12 +5,18 @@ import {
     GENEOPS_DATABASE,
     GENEOPS_POOLER_HOST,
     GENEOPS_POOLER_PORT,
+    GENEOPS_READER_ROLE,
     GENEOPS_READER_USERNAME,
     sourceCreateSchema,
     toSourceResponse,
 } from "./logic"
 
 describe("GeneOps 外部连接配置", () => {
+    it("区分 Supavisor 登录用户名和数据库当前角色", () => {
+        expect(GENEOPS_READER_ROLE).toBe("petrichor_geneops_reader")
+        expect(GENEOPS_READER_USERNAME).toBe(`${GENEOPS_READER_ROLE}.snsvqlqwnpyzcftubeab`)
+    })
+
     it("连接密码加密后可回读，且响应不泄露密码", () => {
         const encoded = encodeConnection("a-strong-reader-password-123")
         const decoded = decodeConnection(encoded)
