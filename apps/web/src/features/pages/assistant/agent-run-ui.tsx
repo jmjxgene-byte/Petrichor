@@ -9,7 +9,7 @@ import {
     useThreadRuntime,
 } from "@assistant-ui/react"
 import { AgentRun } from "@/components/agent/agent-run"
-import { AgentCitation } from "@/components/agent/agent-evidence"
+import { AgentCitation, AgentEvidencePanel } from "@/components/agent/agent-evidence"
 import { markRetry, useAgentRunsStore } from "@/features/agent-runs/store"
 import { selectCitedEvidenceSources, shouldShowCitationSources } from "@/features/agent-runs/selectors"
 import { isAgentStreamEvent, shouldShowExecutionPanel } from "@/features/agent-runs/types"
@@ -155,7 +155,7 @@ export function AgentCitationBar() {
 
     return (
         <div className="not-prose mt-2 flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] text-muted-foreground">来源</span>
+            <AgentEvidencePanel evidence={cited} />
             {cited.map((evidence) => (
                 <AgentCitation key={evidence.id} evidence={evidence} />
             ))}
