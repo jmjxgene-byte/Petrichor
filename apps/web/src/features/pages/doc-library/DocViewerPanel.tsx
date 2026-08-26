@@ -197,12 +197,61 @@ function OriginalFilePreview({
         )
     }
 
+    if (document.fileType === "markdown") {
+        return <MarkdownFilePreview url={url} />
+    }
+
     // CSV 的解析内容在「文本」标签展示，避免把非工作簿交给表格运行时。
     return (
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             CSV 请切换到「文本」标签查看解析内容
         </div>
     )
+}
+
+function MarkdownFilePreview({ url }: { url: string }) {
+    const [state, setState] = React.useState<{
+        url: string
+        text: string | null
+        error: string | null
+    }>({ url, text: null, error: null })
+
+    React.useEffect(() => {
+        let cancelled = false
+        fetch(url)
+            .then(async (response) => {
+                if (!response.ok) throw new Error(`HTTP ${response.status}`)
+                return await response.text()
+            })
+            .then((text) => {
+                if (!cancelled) setState({ url, text, error: null })
+            })
+            .catch(() => {
+                if (!cancelled) setState({ url, text: null, error: "Markdown 原文件读取失败" })
+            })
+        return () => {
+            cancelled = true
+        }
+    }, [url])
+
+    const current = state.url === url ? state : { url, text: null, error: null }
+    if (current.error) {
+        return (
+            <div className="flex h-full items-center justify-center text-sm text-destructive">
+                {current.error}
+            </div>
+        )
+    }
+    if (current.text == null) {
+        return (
+            <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-5 animate-spin" />
+                正在读取 Markdown…
+            </div>
+        )
+    }
+
+    return <ParsedTextPreview text={current.text} />
 }
 
 function ParsedTextPreview({ text }: { text: string }) {

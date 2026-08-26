@@ -909,7 +909,7 @@ export const docFolders = pgTable("petrichor_doc_folder", {
     index("petrichor_doc_folder_parent_idx").on(table.libraryId, table.parentId, table.sortOrder),
 ])
 
-// 文档（文件）：首版仅支持 pdf / docx / csv
+// 文档（文件）：支持 pdf / docx / markdown / csv
 export const docDocuments = pgTable("petrichor_doc_document", {
     id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
     userId: bigint("user_id", { mode: "number" }).notNull(),
