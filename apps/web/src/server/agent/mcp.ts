@@ -25,6 +25,14 @@ import {
     agentWikiPageList,
 } from "@/server/agent/handlers"
 import {
+    agentExpandGeneOpsGraph,
+    agentGetGeneOpsBacklinks,
+    agentListExternalSources,
+    agentReadGeneOps,
+    agentSearchGeneOps,
+    agentSearchGeneOpsGraph,
+} from "@/server/agent/external-handlers"
+import {
     AGENT_MCP_TOOL_SPECS,
     buildAgentMcpDelegateHeaders,
     missingAgentMcpTokenResult,
@@ -43,6 +51,7 @@ export const AGENT_MCP_SERVER_INSTRUCTIONS = [
     "写入策略：update_article 是全量覆盖，改前先 view_document 读原文。",
     "危险操作：delete_article、revoke_article_share 必须先向用户复述目标并获得明确确认。",
     "所有工具都要求 API Key 具备对应 scope，权限不足会返回 403。",
+    "GeneOps 工具要求 external:read；search 只定位候选，必须 read 后才能据此回答。",
 ].join("\n")
 
 type AgentRestHandler = (request: AppRequest) => Promise<Response>
@@ -56,6 +65,12 @@ const AGENT_MCP_TOOL_HANDLERS: Record<AgentMcpToolName, AgentRestHandler> = {
     semantic_search_document_tree: agentSemanticSearchDocumentTree,
     view_document: agentViewDocument,
     ask_documents: agentAskDocument,
+    list_external_sources: agentListExternalSources,
+    search_geneops: agentSearchGeneOps,
+    read_geneops_chunks: agentReadGeneOps,
+    search_geneops_graph: agentSearchGeneOpsGraph,
+    expand_geneops_graph: agentExpandGeneOpsGraph,
+    get_geneops_backlinks: agentGetGeneOpsBacklinks,
     list_articles: agentListArticles,
     create_folder: agentCreateFolder,
     create_article: agentCreateArticle,

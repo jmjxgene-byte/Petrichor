@@ -39,6 +39,18 @@ const MCP_TOOL_GROUPS: Array<{ title: string; scopes: string[]; tools: string[] 
     tools: ["ask_documents"],
   },
   {
+    title: "GeneOps 实时资料",
+    scopes: ["external:read"],
+    tools: [
+      "list_external_sources",
+      "search_geneops",
+      "read_geneops_chunks",
+      "search_geneops_graph",
+      "expand_geneops_graph",
+      "get_geneops_backlinks",
+    ],
+  },
+  {
     title: "文章与文件夹",
     scopes: ["article:write", "article:delete"],
     tools: ["create_folder", "create_article", "update_article", "move_article", "delete_article"],
@@ -68,7 +80,8 @@ export function AgentMcpPage() {
         description={
           <>
             标准 Model Context Protocol 服务器，Claude Code、Codex、Cursor 等 MCP 客户端一行配置即可
-            检索、阅读、写入你的知识库。与 REST 层共用同一套 API Key 与调用审计。
+            检索、阅读、写入你的知识库，也可在独立权限下查询 GeneOps 实时资料。
+            与 REST 层共用同一套 API Key 与调用审计。
           </>
         }
         actions={

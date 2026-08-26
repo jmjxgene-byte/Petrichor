@@ -97,7 +97,8 @@ export const WIKI_FINAL_ANSWER_PROMPT = `
  */
 export function detectConflictHints(evidence: AgentEvidence[]): string[] {
     const internal = evidence.filter((item) =>
-        item.source === "knowledge" || item.source === "graph" || item.source === "geneops")
+        item.source === "knowledge" || item.source === "document"
+        || item.source === "graph" || item.source === "geneops")
     const external = evidence.filter((item) => item.source === "web")
     if (internal.length === 0 || external.length === 0) return []
 

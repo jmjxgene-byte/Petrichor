@@ -20,6 +20,7 @@ export const INTENT_ROUTE_PART_TYPE = "data-intent-route"
 const AGENT_DOMAIN_IDS = [
     "knowledge",
     "doc_library",
+    "external_source",
     "system",
     "content_write",
     "admin",
@@ -28,6 +29,7 @@ const AGENT_DOMAIN_IDS = [
 export const DOMAIN_LABELS: Record<AgentDomainId, string> = {
     knowledge: "知识库",
     doc_library: "文档库",
+    external_source: "实时资料源",
     system: "系统",
     content_write: "内容写入",
     admin: "管理",
@@ -243,5 +245,6 @@ function summarizeFocus(focus: AssistantFocus | null): string {
     if (focus.articleId != null) parts.push(`articleId=${focus.articleId}`)
     if (focus.libraryId != null) parts.push(`libraryId=${focus.libraryId}`)
     if (focus.documentId != null) parts.push(`documentId=${focus.documentId}`)
+    if (focus.sourceScope != null) parts.push(`sourceScope=${JSON.stringify(focus.sourceScope)}`)
     return parts.length > 0 ? parts.join(", ") : "无"
 }

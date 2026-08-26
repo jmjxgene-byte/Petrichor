@@ -11,7 +11,7 @@ export const RESEARCH_FANOUT_MAX_TASKS = 3
 
 const fanoutTaskSchema = z.object({
     goal: z.string().trim().min(1).max(2000),
-    domains: z.array(z.enum(["knowledge", "doc_library", "system", "content_write", "admin"])).min(1).max(3),
+    domains: z.array(z.enum(["knowledge", "doc_library", "external_source", "system", "content_write", "admin"])).min(1).max(4),
     focus: assistantFocusSchema.optional().nullable(),
 })
 

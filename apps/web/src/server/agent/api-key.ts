@@ -15,6 +15,7 @@ export const AGENT_API_KEY_SCOPES = [
     "ai:write",
     "wiki:read",
     "wiki:write",
+    "external:read",
 ] as const
 
 export type AgentApiKeyScope = typeof AGENT_API_KEY_SCOPES[number]
@@ -26,11 +27,26 @@ export type AgentAuthContext = {
 }
 
 const scopeSet = new Set<string>(AGENT_API_KEY_SCOPES)
+export const DEFAULT_AGENT_API_KEY_SCOPES = AGENT_API_KEY_SCOPES.filter(
+    (scope): scope is Exclude<AgentApiKeyScope, "external:read"> => scope !== "external:read",
+)
 
 export const agentApiKeyCreateSchema = z.object({
     expiresAt: z.string().datetime().optional().nullable(),
     name: z.string().trim().min(1).max(80).default("Agent Skill Key"),
-    scopes: z.array(z.enum(AGENT_API_KEY_SCOPES)).optional().default([...AGENT_API_KEY_SCOPES]),
+    scopes: z.array(z.enum(AGENT_API_KEY_SCOPES)).optional().default([...DEFAULT_AGENT_API_KEY_SCOPES]),
+})
+
+export const agentApiKeyUpdateSchema = z.object({
+    id: z.union([z.string(), z.number()]).transform((value, ctx) => {
+        const id = Number(value)
+        if (!Number.isInteger(id) || id <= 0) {
+            ctx.addIssue({ code: "custom", message: "ID 必须是正整数" })
+            return z.NEVER
+        }
+        return id
+    }),
+    scopes: z.array(z.enum(AGENT_API_KEY_SCOPES)).min(1),
 })
 
 export const agentApiKeyRevokeSchema = z.object({

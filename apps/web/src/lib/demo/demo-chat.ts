@@ -1,6 +1,10 @@
 import type { AssistantPersistedPlan } from "@/lib/api"
 
-import { beginDemoExchange, completeDemoExchange } from "./demo-assistant"
+import {
+    beginDemoExchange,
+    completeDemoExchange,
+    normalizeDemoAssistantFocus,
+} from "./demo-assistant"
 import { demoStore } from "./demo-store"
 
 /*
@@ -270,7 +274,11 @@ export async function demoAssistantChatResponse(init?: RequestInit): Promise<Res
     const userText = extractUserText(body) || "（空消息）"
     const signal = init?.signal ?? null
 
-    const thread = beginDemoExchange(requestThreadId, userText)
+    const thread = beginDemoExchange(
+        requestThreadId,
+        userText,
+        normalizeDemoAssistantFocus(record.focus),
+    )
     const script = pickScript(userText)
 
     // 回放过程中同步收集「持久化 parts」，结束时落线程

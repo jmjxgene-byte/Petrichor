@@ -1,5 +1,35 @@
 import { describe, expect, it } from "vitest"
-import { readPersistedTiming } from "./assistant-message-utils"
+import {
+    focusFromThread,
+    focusToRequestBody,
+    readPersistedTiming,
+    sourceScopesEqual,
+} from "./assistant-message-utils"
+
+describe("assistant source scope messages", () => {
+    it("new messages persist explicit all scope", () => {
+        expect(focusToRequestBody({ mode: "all" })).toEqual({ sourceScope: { mode: "all" } })
+        expect(focusToRequestBody({ mode: "selected", refs: ["knowledge-base:3"] })).toEqual({
+            sourceScope: { mode: "selected", refs: ["knowledge-base:3"] },
+            knowledgeBaseId: "3",
+        })
+    })
+
+    it("legacy empty focus remains local-only", () => {
+        expect(focusFromThread(null)).toEqual({ mode: "local" })
+        expect(focusFromThread({ knowledgeBaseId: "3" })).toEqual({
+            mode: "selected",
+            refs: ["knowledge-base:3"],
+        })
+    })
+
+    it("compares canonical multi-source scopes", () => {
+        expect(sourceScopesEqual(
+            { mode: "selected", refs: ["doc-library:1", "external-source:2"] },
+            { mode: "selected", refs: ["doc-library:1", "external-source:2"] },
+        )).toBe(true)
+    })
+})
 
 describe("readPersistedTiming", () => {
     it("从 custom 扁平字段读取", () => {

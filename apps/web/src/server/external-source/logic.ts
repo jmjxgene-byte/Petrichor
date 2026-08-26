@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, or } from "drizzle-orm"
 import postgres from "postgres"
 import { z } from "zod"
 
@@ -97,12 +97,20 @@ export async function getExternalSource(id: number) {
     return source
 }
 
-export async function getActiveGeneOpsSource() {
+export async function getActiveGeneOpsSource(userId: number, sourceId?: number) {
     if (!getServerConfig().geneOpsConnector.enabled) throw new Error("GeneOps Connector 尚未启用")
     const [source] = await getDb()
         .select()
         .from(externalSources)
-        .where(and(eq(externalSources.sourceType, "GENEOPS_SUPABASE"), eq(externalSources.enabled, true)))
+        .where(and(
+            eq(externalSources.sourceType, "GENEOPS_SUPABASE"),
+            eq(externalSources.enabled, true),
+            or(
+                eq(externalSources.globalShared, true),
+                eq(externalSources.createdByUserId, userId),
+            ),
+            ...(sourceId != null ? [eq(externalSources.id, sourceId)] : []),
+        ))
         .orderBy(desc(externalSources.updatedAt))
         .limit(1)
     if (!source) throw new Error("GeneOps 数据源尚未配置或未启用")
@@ -160,6 +168,7 @@ export async function updateSourceCheck(
 export async function executeGeneOpsRpc<T>(
     input: {
         userId: number
+        sourceId?: number
         threadId?: number
         runId?: number
         toolName: string
@@ -168,7 +177,7 @@ export async function executeGeneOpsRpc<T>(
     },
     query: (client: ReturnType<typeof postgres>) => Promise<T>,
 ): Promise<T> {
-    const source = await getActiveGeneOpsSource()
+    const source = await getActiveGeneOpsSource(input.userId, input.sourceId)
     const startedAt = Date.now()
     let status = "OK"
     let errorCode: string | null = null

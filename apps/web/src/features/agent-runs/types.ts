@@ -63,7 +63,7 @@ export type SubAgentViewModel = {
     completedAt?: number
 }
 
-export type EvidenceSource = "knowledge" | "wiki" | "web" | "graph" | "memory" | "subagent" | "tool"
+export type EvidenceSource = "knowledge" | "document" | "wiki" | "web" | "graph" | "memory" | "subagent" | "tool" | "geneops"
 
 export type EvidenceViewModel = {
     id: string
@@ -77,6 +77,9 @@ export type EvidenceViewModel = {
     knowledgeBaseId?: string
     path?: string[]
     relevance?: number
+    sourceName?: string
+    author?: string
+    queriedAt?: string
     /** 引用编号，用于答案中的 [n] 定位（§162.17） */
     citationIndex: number
 }

@@ -58,7 +58,9 @@ export function needsQuirkFetch(providerKey: string, modelId: string): boolean {
  * 做结构化输出。对不支持它的供应商要改走 jsonPromptInjection，否则每轮都会 400。
  */
 export function needsJsonPromptInjectionForStructuredOutput(providerKey: string, modelId: string): boolean {
-    return resolveQuirks(providerKey, modelId).downgradeJsonSchema
+    // 自定义 OpenAI-compatible 端点经常声称支持 json_schema，却忽略嵌套对象约束。
+    // PromptInjectionDetector 的 categories 需要对象数组；忽略 schema 会导致检测失败后放行。
+    return providerKey === "openai-compatible" || resolveQuirks(providerKey, modelId).downgradeJsonSchema
 }
 
 /**

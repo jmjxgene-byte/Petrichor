@@ -19,6 +19,7 @@ import { PipelineStatusPanel } from "./components/PipelineStatusPanel"
 import { RecentActivityFeed } from "./components/RecentActivityFeed"
 import { RecentThreadsList } from "./components/RecentThreadsList"
 import { ToolUsageChart } from "./components/ToolUsageChart"
+import { ExternalSourceHealthPanel } from "./components/ExternalSourceHealthPanel"
 import { WritingRhythmGrid } from "./components/WritingRhythmGrid"
 
 export function DashboardMetricsPage() {
@@ -98,6 +99,8 @@ export function DashboardMetricsPage() {
         </div>
 
         <AgentHealthPanel agent={overview?.agent} loading={firstLoad} />
+
+        <ExternalSourceHealthPanel data={overview?.externalSources} loading={firstLoad} />
 
         <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-2">
           <DistributionChart

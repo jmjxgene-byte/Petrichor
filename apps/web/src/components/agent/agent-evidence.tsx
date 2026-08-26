@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { BookOpen, ExternalLink, Globe, Network, Brain, Wrench } from "@/components/iconimate"
+import { BookOpen, Database, ExternalLink, FileText, Globe, Network, Brain, Wrench } from "@/components/iconimate"
 import { Button } from "@/components/ui/button"
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
@@ -26,8 +26,11 @@ export function AgentEvidencePanel({
     if (evidence.length === 0) return null
 
     const knowledge = evidence.filter((item) => item.source === "knowledge" || item.source === "wiki")
+    const documents = evidence.filter((item) => item.source === "document")
+    const geneops = evidence.filter((item) => item.source === "geneops")
     const internal = evidence.filter((item) =>
-        item.source !== "web" && item.source !== "knowledge" && item.source !== "wiki")
+        item.source !== "web" && item.source !== "knowledge" && item.source !== "wiki"
+        && item.source !== "document" && item.source !== "geneops")
     const external = evidence.filter((item) => item.source === "web")
     const sourceCount = groupEvidenceBySource(evidence).length
 
@@ -49,12 +52,16 @@ export function AgentEvidencePanel({
                     <DrawerDescription>
                         共 {sourceCount} 个来源 · {evidence.length} 条可追溯证据
                         {knowledge.length > 0 ? ` · 知识库章节 ${knowledge.length}` : ""}
+                        {documents.length > 0 ? ` · 文档 ${documents.length}` : ""}
+                        {geneops.length > 0 ? ` · GeneOps ${geneops.length}` : ""}
                         {internal.length > 0 ? ` · 站内其他 ${internal.length}` : ""}
                         {external.length > 0 ? ` · 外部 ${external.length}` : ""}
                     </DrawerDescription>
                 </DrawerHeader>
                 <div className="overflow-y-auto px-4 pb-6">
                     <EvidenceGroup title="知识库章节" items={knowledge} numberedChapters />
+                    <EvidenceGroup title="文档库" items={documents} />
+                    <EvidenceGroup title="GeneOps 实时来源" items={geneops} />
                     <EvidenceGroup title="站内其他证据" items={internal} />
                     <EvidenceGroup title="外部来源" items={external} />
                 </div>
@@ -112,6 +119,13 @@ export function AgentEvidenceCard({
                         </p>
                     ) : null}
                     <h4 className="text-[13px] font-medium wrap-break-word">{evidence.title}</h4>
+                    {evidence.sourceName || evidence.queriedAt ? (
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                            {evidence.sourceName ?? "实时来源"}
+                            {evidence.author ? ` · ${evidence.author}` : ""}
+                            {evidence.queriedAt ? ` · 查询于 ${new Date(evidence.queriedAt).toLocaleString("zh-CN")}` : ""}
+                        </p>
+                    ) : null}
                 </div>
             </header>
             {evidence.path?.length ? (
@@ -129,11 +143,11 @@ export function AgentEvidenceCard({
             {href ? (
                 <a
                     href={href}
-                    target={evidence.source === "web" ? "_blank" : undefined}
-                    rel={evidence.source === "web" ? "noreferrer noopener" : undefined}
+                    target={isExternalEvidence(evidence.source) ? "_blank" : undefined}
+                    rel={isExternalEvidence(evidence.source) ? "noreferrer noopener" : undefined}
                     className="mt-2 inline-flex items-center gap-1 text-[12px] text-primary hover:underline"
                 >
-                    {evidence.source === "web"
+                    {isExternalEvidence(evidence.source)
                         ? "打开来源"
                         : evidence.source === "knowledge" ? "查看本章节" : "查看原文"}
                     <ExternalLink className="size-3" aria-hidden />
@@ -154,8 +168,8 @@ export function AgentCitation({ evidence }: { evidence: EvidenceViewModel }) {
             <HoverCardTrigger asChild>
                 <a
                     href={href ?? "#"}
-                    target={evidence.source === "web" ? "_blank" : undefined}
-                    rel={evidence.source === "web" ? "noreferrer noopener" : undefined}
+                    target={isExternalEvidence(evidence.source) ? "_blank" : undefined}
+                    rel={isExternalEvidence(evidence.source) ? "noreferrer noopener" : undefined}
                     className="mx-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded bg-muted px-1 align-super text-[10px] tabular-nums text-muted-foreground hover:bg-muted/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     aria-label={`来源 ${evidence.citationIndex}：${evidence.title}`}
                 >
@@ -181,9 +195,17 @@ function EvidenceSourceIcon({ source }: { source: EvidenceViewModel["source"] })
         case "knowledge":
         case "wiki":
             return <BookOpen className={common} aria-label="知识库" />
+        case "document":
+            return <FileText className={common} aria-label="文档库" />
+        case "geneops":
+            return <Database className={common} aria-label="GeneOps 实时来源" />
         default:
             return <Wrench className={common} aria-label="工具结果" />
     }
+}
+
+function isExternalEvidence(source: EvidenceViewModel["source"]) {
+    return source === "web" || source === "geneops"
 }
 
 export function evidenceHref(evidence: EvidenceViewModel): string | null {
@@ -203,6 +225,14 @@ export function evidenceHref(evidence: EvidenceViewModel): string | null {
         if (terms.length > 0) params.set("citeTerms", terms.join("\n"))
         return `${knowledgeBaseArticlePath(evidence.knowledgeBaseId, evidence.articleId)}?${params.toString()}`
     }
-    if (evidence.url) return evidence.url
+    if (evidence.url) {
+        if (!isExternalEvidence(evidence.source)) return evidence.url
+        try {
+            const url = new URL(evidence.url)
+            return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null
+        } catch {
+            return null
+        }
+    }
     return null
 }

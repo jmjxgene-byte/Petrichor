@@ -16,6 +16,7 @@ import { isAgentStreamEvent, shouldShowExecutionPanel } from "@/features/agent-r
 import type { AgentRunViewModel } from "@/features/agent-runs/types"
 import { QaStreamingMarkdown } from "@/features/pages/knowledge/QaMarkdown"
 import { annotateNormalQaWikiMentions } from "@/lib/wiki-mentions"
+import { SaveToKnowledgeButton } from "./save-to-knowledge-dialog"
 
 /**
  * Agent 执行 UI 接线（§162.5/§162.50）。
@@ -158,6 +159,7 @@ export function AgentCitationBar() {
             {cited.map((evidence) => (
                 <AgentCitation key={evidence.id} evidence={evidence} />
             ))}
+            <SaveToKnowledgeButton run={run} />
         </div>
     )
 }

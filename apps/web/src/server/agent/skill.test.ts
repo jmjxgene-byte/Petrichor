@@ -34,6 +34,7 @@ describe("Agent Skill 文件", () => {
             "petrichor/skills/share.md",
             "petrichor/skills/ai.md",
             "petrichor/skills/wiki.md",
+            "petrichor/skills/sources.md",
             "petrichor/scripts/petrichor",
             "petrichor/scripts/petrichor-api.sh",
             "petrichor/references/endpoints.md",
@@ -63,6 +64,7 @@ describe("Agent Skill 文件", () => {
         expect(rootSkill).toContain("Read skills/share.md")
         expect(rootSkill).toContain("Read skills/ai.md")
         expect(rootSkill).toContain("Read skills/wiki.md")
+        expect(rootSkill).toContain("Read skills/sources.md")
         expect(rootSkill).toContain("config.json")
 
         expect(files.find((file) => file.path === "petrichor/config.json")?.content)
@@ -92,6 +94,8 @@ describe("Agent Skill 文件", () => {
             .toContain("/api/agent/wiki/ingest")
         expect(files.find((file) => file.path === "petrichor/skills/wiki.md")?.content)
             .toContain("petrichor wiki ingest")
+        expect(files.find((file) => file.path === "petrichor/skills/sources.md")?.content)
+            .toContain("external:read")
         expect(files.find((file) => file.path === "petrichor/scripts/petrichor")?.content)
             .toContain("/api/agent/wiki/page/list")
 
@@ -126,8 +130,10 @@ describe("Agent Skill 文件", () => {
         expect(manifest.endpoints.skillPack).toBe("/api/agent/skill-pack")
         expect(manifest.endpoints.wikiPageList).toBe("/api/agent/wiki/page/list")
         expect(manifest.endpoints.wikiIngest).toBe("/api/agent/wiki/ingest")
+        expect(manifest.endpoints.geneOpsSearch).toBe("/api/agent/geneops/search")
         expect(manifest.scopes["wiki:read"]).toEqual(["wiki.page.list", "wiki.page.detail", "wiki.lint"])
         expect(manifest.scopes["wiki:write"]).toEqual(["wiki.ingest"])
+        expect(manifest.scopes["external:read"]).toContain("geneops.search")
         expect(manifest.endpoints.documentSemanticSearch).toBe("/api/agent/document/semantic-search")
         expect(manifest.mcp.endpoint).toBe("https://petrichor.example.com/api/mcp")
         expect(manifest.mcp.transport).toBe("streamable-http")

@@ -1,4 +1,5 @@
-import type { AssistantPersistedPlan, AssistantThreadMessage } from "@/lib/api"
+import type { AssistantFocus, AssistantPersistedPlan, AssistantThreadMessage } from "@/lib/api"
+import { assistantSourceScopeSchema } from "@/lib/assistant-source-contract"
 
 import type { DemoHandlerResult } from "./demo-adapter"
 import { demoStore, type DemoThread } from "./demo-store"
@@ -67,8 +68,26 @@ export function findThread(threadId: string) {
     return demoStore.threads.find((thread) => thread.summary.id === threadId) ?? null
 }
 
+export function normalizeDemoAssistantFocus(value: unknown): AssistantFocus | null {
+    if (!value || typeof value !== "object") return null
+    const record = value as Record<string, unknown>
+    const sourceScope = assistantSourceScopeSchema.safeParse(record.sourceScope)
+    if (!sourceScope.success) return null
+
+    const focus: AssistantFocus = { sourceScope: sourceScope.data }
+    for (const key of ["knowledgeBaseId", "libraryId", "articleId", "documentId"] as const) {
+        const candidate = record[key]
+        if (typeof candidate === "string" || candidate === null) focus[key] = candidate
+    }
+    return focus
+}
+
 /** 回放开始时由 demo-chat 调用：取到（或建出）线程并追加用户消息。 */
-export function beginDemoExchange(threadId: string | null, userText: string): DemoThread {
+export function beginDemoExchange(
+    threadId: string | null,
+    userText: string,
+    focus: AssistantFocus | null = null,
+): DemoThread {
     ensureDemoThreads()
     let thread = threadId ? findThread(threadId) : null
     if (!thread) {
@@ -77,7 +96,7 @@ export function beginDemoExchange(threadId: string | null, userText: string): De
             summary: {
                 id: `demo-thread-${threadSeq}`,
                 title: userText.slice(0, 24) || "新的对话",
-                focus: null,
+                focus,
                 createdAt: nowIso(),
                 updatedAt: nowIso(),
             },
@@ -85,6 +104,8 @@ export function beginDemoExchange(threadId: string | null, userText: string): De
             plans: [],
         }
         demoStore.threads.unshift(thread)
+    } else if (focus) {
+        thread.summary.focus = focus
     }
     thread.messages.push(makeMessage("user", [textPart(userText)]))
     thread.summary.updatedAt = nowIso()

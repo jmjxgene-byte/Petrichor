@@ -130,6 +130,8 @@ export function aggregateActivities(activities: AgentActivityViewModel[]): Agent
 }
 
 const GROUP_TITLE: Record<string, string> = {
+    sources: "跨资料源检索与深读",
+    geneops: "查询 GeneOps 实时知识",
     knowledge: "检索并阅读知识库",
     graph: "查询知识图谱",
     research: "查询外部资料",
@@ -180,6 +182,14 @@ function groupDetail(
                 .filter(hasEvidence)
                 .length
             return sourceCount > 0 ? `获取了 ${sourceCount} 个来源` : undefined
+        }
+        case "sources":
+        case "geneops": {
+            const evidenceCount = activities.reduce((count, item) =>
+                count + Number(item.metadata?.evidenceCount ?? 0), 0)
+            const failedCount = activities.filter((item) => item.status === "failed").length
+            if (evidenceCount > 0) return `获取了 ${evidenceCount} 条可引用证据${failedCount ? ` · ${failedCount} 步降级` : ""}`
+            return failedCount > 0 ? `${failedCount} 步未完成` : group.count > 1 ? `共 ${group.count} 步` : undefined
         }
         case "document": {
             const fragmentCount = activities.filter(hasEvidence).length

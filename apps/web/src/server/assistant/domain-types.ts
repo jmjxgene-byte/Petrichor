@@ -1,4 +1,5 @@
 import type { z } from "zod"
+import type { AssistantSourceScope } from "@/lib/assistant-source-contract"
 
 // 契约来源：.codestable/roadmap/chat-first-universal-agent 第 4.2 / 4.3 节。
 // 形状由 roadmap 锁定，要改先走 cs-roadmap update。
@@ -6,11 +7,13 @@ import type { z } from "zod"
 export type AgentDomainId =
     | "knowledge"
     | "doc_library"
+    | "external_source"
     | "system"
     | "content_write"
     | "admin"
 
 export type AssistantFocus = {
+    sourceScope?: AssistantSourceScope
     knowledgeBaseId?: string | null
     libraryId?: string | null
     articleId?: string | null
@@ -54,7 +57,7 @@ export type AssistantToolRegistration = {
     execute: (ctx: AssistantToolContext, input: unknown) => Promise<unknown>
 }
 
-export const DEFAULT_READ_DOMAINS: AgentDomainId[] = ["system", "knowledge", "doc_library"]
+export const DEFAULT_READ_DOMAINS: AgentDomainId[] = ["system", "knowledge", "doc_library", "external_source"]
 
 /**
  * 会话核心域（对齐 Claude Code：小工具集常驻，不靠意图硬门控藏工具）。

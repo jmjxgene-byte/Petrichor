@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Folder, FolderOpen, Loader2, MoreHorizontal, Upload } from "@/components/iconimate"
+import { Folder, FolderOpen, Loader2, MessageCircleQuestion, MoreHorizontal, Upload } from "@/components/iconimate"
 import { useLocation, useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -53,7 +53,8 @@ import {
   type DocFolderItem,
   type DocLibrary,
 } from "@/lib/api"
-import { dashboardRoutes } from "@/lib/dashboard-routes"
+import { assistantSourcePath, dashboardRoutes } from "@/lib/dashboard-routes"
+import { demoAssistantSourceRef, isDemoMode } from "@/lib/demo/demo-mode"
 
 const ACCEPT = ".pdf,.docx,.md,.markdown,.csv,.tsv"
 const TREE_NODE_INDENT_PX = 20
@@ -811,6 +812,21 @@ export function DocLibraryBrowsePage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            disabled={!libraryId}
+            onClick={() => {
+              if (!libraryId) return
+              navigate(assistantSourcePath(
+                isDemoMode()
+                  ? demoAssistantSourceRef("doc-library", libraryId)
+                  : `doc-library:${libraryId}`,
+              ))
+            }}
+          >
+            <MessageCircleQuestion className="size-4" />
+            在助手中提问
+          </Button>
           <Button variant="outline" onClick={() => navigate(dashboardRoutes.docLibrary)}>
             返回
           </Button>

@@ -688,6 +688,20 @@ export function buildDashboardOverview(): DashboardOverviewResponse {
                 { name: "upsert_plan", count: 12, okCount: 12, avgMs: 40 },
             ],
         },
+        externalSources: {
+            windowDays: 30,
+            totalSources: 1,
+            readySources: 1,
+            totalQueries: 42,
+            successQueries: 40,
+            errorQueries: 2,
+            avgDurationMs: 386,
+            tools: [
+                { name: "geneops.search", count: 24, okCount: 23, avgMs: 410 },
+                { name: "geneops.read_chunks", count: 12, okCount: 12, avgMs: 260 },
+                { name: "geneops.graph_search", count: 6, okCount: 5, avgMs: 520 },
+            ],
+        },
         pipeline: {
             documents: [
                 { status: "ready", count: 9 },

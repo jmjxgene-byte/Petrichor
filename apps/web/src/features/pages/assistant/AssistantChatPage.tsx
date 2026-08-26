@@ -36,6 +36,7 @@ import {
   X,
 } from "@/components/iconimate"
 import { toast } from "sonner"
+import { useSearchParams } from "react-router-dom"
 
 import { MarkdownText } from "@/components/assistant-ui/markdown-text"
 import { UserMessageAttachments } from "@/components/assistant-ui/attachment"
@@ -80,17 +81,17 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import {
   type AssistantPersistedPlan,
+  type AssistantSourceCatalogItem,
   type AssistantThreadSummary,
   assistantApi,
+  assistantSourceApi,
   assistantWikiApi,
+  docLibraryApi,
   knowledgeBaseQaApi,
   type KnowledgeBaseQaModelInfo,
-  type KnowledgeBaseQaSummary,
-  docLibraryApi,
-  type DocLibrary,
 } from "@/lib/api"
 import { dashboardRoutes } from "@/lib/dashboard-routes"
-import { isDemoMode } from "@/lib/demo/demo-mode"
+import { demoAssistantSourceRef, isDemoMode } from "@/lib/demo/demo-mode"
 import { gsap } from "@/lib/gsap"
 
 import { GrokComposer } from "./assistant-composer"
@@ -106,6 +107,7 @@ import {
   readPersistedTiming,
   readSubAgentUsage,
   resolveApiErrorMessage,
+  sourceScopesEqual,
   toInitialMessages,
 } from "./assistant-message-utils"
 import { InfiniteSentinel, ThreadGroup } from "./assistant-thread-list"
@@ -116,6 +118,11 @@ import {
   ContextCompressDataUI,
   DataTableToolUI,
   EmptyHint,
+  GeneOpsBacklinksToolUI,
+  GeneOpsGraphExpandToolUI,
+  GeneOpsGraphSearchToolUI,
+  GeneOpsReadToolUI,
+  GeneOpsSearchToolUI,
   IntentRouteDataUI,
   ListDocLibrariesToolUI,
   ListKbToolUI,
@@ -128,6 +135,9 @@ import {
   ReadKnowledgeToolUI,
   SearchGraphToolUI,
   SaveArtifactToolUI,
+  SourceLookupToolUI,
+  SourceReadToolUI,
+  SourceSearchToolUI,
   SearchWikiPagesToolUI,
   SpawnResearchFanoutToolUI,
   SpawnResearchSubagentToolUI,
@@ -153,16 +163,17 @@ const THREAD_PAGE_SIZE = 30
 export type AssistantQaMode = "normal" | "wiki"
 
 export function AssistantChatPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const scopeParamAppliedRef = React.useRef(false)
   const isMobile = useIsMobile()
   const [threads, setThreads] = React.useState<AssistantThreadSummary[]>([])
   const [threadsLoading, setThreadsLoading] = React.useState(true)
   const [loadingMore, setLoadingMore] = React.useState(false)
   const [nextCursor, setNextCursor] = React.useState<number | null>(null)
-  const [knowledgeBases, setKnowledgeBases] = React.useState<KnowledgeBaseQaSummary[]>([])
-  const [docLibraries, setDocLibraries] = React.useState<DocLibrary[]>([])
+  const [sourceCatalog, setSourceCatalog] = React.useState<AssistantSourceCatalogItem[]>([])
   const [modelInfo, setModelInfo] = React.useState<KnowledgeBaseQaModelInfo | null>(null)
   const [selectedConfigId, setSelectedConfigId] = React.useState<string | null>(null)
-  const [focusSelection, setFocusSelection] = React.useState<AssistantFocusSelection>({ kind: "none" })
+  const [focusSelection, setFocusSelection] = React.useState<AssistantFocusSelection>({ mode: "all" })
   // 问答模式只影响下一次提问的检索链路（请求体 qaMode 字段），不重置当前对话。
   const [qaMode, setQaMode] = React.useState<AssistantQaMode>("normal")
   const [activeThreadId, setActiveThreadId] = React.useState<string | null>(null)
@@ -250,21 +261,64 @@ export function AssistantChatPage() {
 
   const refreshThreads = fetchFirstPage
 
-  const refreshKnowledgeBases = React.useCallback(async () => {
+  const refreshSourceCatalog = React.useCallback(async () => {
     try {
-      const response = await knowledgeBaseQaApi.knowledgeBaseList()
-      setKnowledgeBases(response.data.knowledgeBases)
+      if (isDemoMode()) {
+        const [kbResponse, docResponse] = await Promise.all([
+          knowledgeBaseQaApi.knowledgeBaseList(),
+          docLibraryApi.listLibraries(),
+        ])
+        setSourceCatalog([
+          ...kbResponse.data.knowledgeBases.map((kb): AssistantSourceCatalogItem => ({
+            ref: demoAssistantSourceRef("knowledge-base", kb.id),
+            kind: "knowledge-base",
+            id: kb.id,
+            name: kb.name,
+            description: kb.description ?? null,
+            availability: "ready",
+            selectable: true,
+            unavailableReason: null,
+            updatedAt: new Date().toISOString(),
+            capabilities: null,
+          })),
+          ...docResponse.data.libraries.map((library): AssistantSourceCatalogItem => ({
+            ref: demoAssistantSourceRef("doc-library", library.id),
+            kind: "doc-library",
+            id: library.id,
+            name: library.name,
+            description: library.description,
+            availability: "ready",
+            selectable: true,
+            unavailableReason: null,
+            updatedAt: library.updatedAt,
+            capabilities: null,
+          })),
+          {
+            ref: "external-source:1",
+            kind: "external-source",
+            id: "1",
+            name: "GeneOps 实时知识（演示）",
+            description: "演示用 mock catalog，不连接生产 GeneOps",
+            availability: "ready",
+            selectable: true,
+            unavailableReason: null,
+            updatedAt: new Date().toISOString(),
+            capabilities: {
+              sourceType: "GENEOPS_SUPABASE",
+              allowedSources: ["wearesellers", "wechat_mp"],
+              searchModes: ["exact", "fuzzy"],
+              graphEnabled: true,
+              contractVersion: 1,
+              lastCheckedAt: new Date().toISOString(),
+            },
+          },
+        ])
+        return
+      }
+      const response = await assistantSourceApi.catalog()
+      setSourceCatalog(response.data.items)
     } catch (error) {
-      toast.error(resolveApiErrorMessage(error, "加载知识库列表失败"))
-    }
-  }, [])
-
-  const refreshDocLibraries = React.useCallback(async () => {
-    try {
-      const response = await docLibraryApi.listLibraries()
-      setDocLibraries(response.data.libraries)
-    } catch (error) {
-      toast.error(resolveApiErrorMessage(error, "加载文档库列表失败"))
+      toast.error(resolveApiErrorMessage(error, "加载资料源列表失败"))
     }
   }, [])
 
@@ -282,8 +336,7 @@ export function AssistantChatPage() {
     let cancelled = false
     queueMicrotask(() => {
       if (cancelled) return
-      void refreshKnowledgeBases()
-      void refreshDocLibraries()
+      void refreshSourceCatalog()
       knowledgeBaseQaApi.modelInfo()
         .then((response) => {
           if (cancelled) return
@@ -297,7 +350,28 @@ export function AssistantChatPage() {
     return () => {
       cancelled = true
     }
-  }, [refreshDocLibraries, refreshKnowledgeBases])
+  }, [refreshSourceCatalog])
+
+  React.useEffect(() => {
+    if (scopeParamAppliedRef.current || sourceCatalog.length === 0) return
+    scopeParamAppliedRef.current = true
+    const raw = searchParams.get("scope")?.trim()
+    if (!raw) return
+    if (raw === "all") setFocusSelection({ mode: "all" })
+    else if (raw === "local") setFocusSelection({ mode: "local" })
+    else {
+      const requested = new Set(raw.split(",").map((item) => item.trim()))
+      const refs = sourceCatalog
+        .filter((item) => item.selectable && requested.has(item.ref))
+        .map((item) => item.ref)
+        .sort()
+      if (refs.length > 0) setFocusSelection({ mode: "selected", refs })
+      else toast.error("链接中的资料源不可用或无权访问")
+    }
+    const next = new URLSearchParams(searchParams)
+    next.delete("scope")
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams, sourceCatalog])
 
   const selectedModel = React.useMemo<KnowledgeBaseQaModelInfo | null>(() => {
     if (!modelInfo) return null
@@ -439,12 +513,7 @@ export function AssistantChatPage() {
       const thread = threads.find((item) => item.id === activeThreadId)
       if (thread) {
         const current = focusFromThread(thread.focus)
-        const same =
-          current.kind === next.kind &&
-          (next.kind === "none" ||
-            (next.kind === "knowledge" && current.kind === "knowledge" && current.knowledgeBaseId === next.knowledgeBaseId) ||
-            (next.kind === "doc_library" && current.kind === "doc_library" && current.libraryId === next.libraryId))
-        if (!same) handleNewThread()
+        if (!sourceScopesEqual(current, next)) handleNewThread()
       }
     }
   }, [activeThreadId, handleNewThread, threads])
@@ -462,14 +531,22 @@ export function AssistantChatPage() {
   }, [refreshThreads])
 
   const activeFocusName = React.useMemo(() => {
-    if (focusSelection.kind === "knowledge") {
-      return knowledgeBases.find((kb) => kb.id === focusSelection.knowledgeBaseId)?.name ?? "知识库"
+    return formatSourceScopeLabel(focusSelection, sourceCatalog, qaMode)
+  }, [focusSelection, qaMode, sourceCatalog])
+
+  const handleQaModeChange = React.useCallback((next: AssistantQaMode) => {
+    if (next === "wiki" && focusSelection.mode === "selected") {
+      const allowed = new Set(
+        sourceCatalog.filter((item) => item.kind === "knowledge-base").map((item) => item.ref),
+      )
+      const refs = focusSelection.refs.filter((ref) => allowed.has(ref))
+      const nextScope: AssistantFocusSelection = refs.length === 1
+        ? { mode: "selected", refs }
+        : { mode: "all" }
+      if (!sourceScopesEqual(focusSelection, nextScope)) handleFocusChange(nextScope)
     }
-    if (focusSelection.kind === "doc_library") {
-      return docLibraries.find((lib) => lib.id === focusSelection.libraryId)?.name ?? "文档库"
-    }
-    return null
-  }, [docLibraries, focusSelection, knowledgeBases])
+    setQaMode(next)
+  }, [focusSelection, handleFocusChange, sourceCatalog])
 
   const groupedThreads = React.useMemo(() => groupThreadsByRecency(threads), [threads])
   const hasActiveQuery = threadFilterCommitted.length > 0
@@ -673,6 +750,7 @@ export function AssistantChatPage() {
                       manageMode={manageMode}
                       selectedIds={selectedIds}
                       onToggleSelect={toggleThreadSelected}
+                      sourceCatalog={sourceCatalog}
                     />
                   ))}
                   <InfiniteSentinel
@@ -743,7 +821,7 @@ export function AssistantChatPage() {
             key={runtimeSeed}
             focusSelection={focusSelection}
             qaMode={qaMode}
-            onQaModeChange={setQaMode}
+            onQaModeChange={handleQaModeChange}
             threadId={activeThreadId}
             initialMessages={initialMessages}
             persistedPlans={persistedPlans}
@@ -756,8 +834,7 @@ export function AssistantChatPage() {
               })
             }}
             scopeName={activeFocusName}
-            knowledgeBases={knowledgeBases}
-            docLibraries={docLibraries}
+            sources={sourceCatalog}
             onFocusChange={handleFocusChange}
             modelInfo={selectedModel}
             selectedConfigId={selectedConfigId}
@@ -865,6 +942,30 @@ export function AssistantChatPage() {
   )
 }
 
+function formatSourceScopeLabel(
+  scope: AssistantFocusSelection,
+  catalog: AssistantSourceCatalogItem[],
+  qaMode: AssistantQaMode,
+) {
+  if (qaMode === "wiki" && scope.mode !== "selected") return "全部知识库"
+  if (scope.mode === "all") return "全部资料"
+  if (scope.mode === "local") return "仅本地资料"
+  const names = catalog.filter((item) => scope.refs.includes(item.ref)).map((item) => item.name)
+  if (names.length === 0) return "所选资料源"
+  if (names.length <= 2) return names.join(" + ")
+  return `${names.slice(0, 2).join(" + ")} +${names.length - 2}`
+}
+
+function singleSelectedKnowledgeBaseId(
+  scope: AssistantFocusSelection,
+  catalog: AssistantSourceCatalogItem[],
+) {
+  if (scope.mode !== "selected") return null
+  const selected = catalog.filter((item) =>
+    item.kind === "knowledge-base" && scope.refs.includes(item.ref))
+  return selected.length === 1 ? selected[0]!.id : null
+}
+
 function QaChatPanel({
   focusSelection,
   qaMode,
@@ -876,8 +977,7 @@ function QaChatPanel({
   onStreamSettled,
   onPlanPatched,
   scopeName,
-  knowledgeBases,
-  docLibraries,
+  sources,
   onFocusChange,
   modelInfo,
   selectedConfigId,
@@ -894,8 +994,7 @@ function QaChatPanel({
   onStreamSettled: () => void | Promise<void>
   onPlanPatched?: (plan: AssistantPersistedPlan) => void
   scopeName: string | null
-  knowledgeBases: KnowledgeBaseQaSummary[]
-  docLibraries: DocLibrary[]
+  sources: AssistantSourceCatalogItem[]
   onFocusChange: (next: AssistantFocusSelection) => void
   modelInfo: KnowledgeBaseQaModelInfo | null
   selectedConfigId: string | null
@@ -967,32 +1066,43 @@ function QaChatPanel({
   }), [focusBody, onThreadKnown, selectedConfigId, threadId])
 
   const suggestions = React.useMemo(() => {
-    if (focusSelection.kind === "none") {
+    if (focusSelection.mode === "all") {
       return [
-        { prompt: "我现在有多少个知识库和文档库？" },
-        { prompt: "用一段话总结所有知识库的核心主题。" },
-        { prompt: "在文档库里找找最近值得复习的内容。" },
-        { prompt: "把「盘点我的知识库现状」拆成可见计划，再逐步执行。" },
+        { prompt: "同时检索本地资料和 GeneOps，找出最近值得关注的主题。" },
+        { prompt: "交叉核对知识库、文档库与实时资料中的共同结论。" },
+        { prompt: "我现在有哪些可用资料源？" },
+        { prompt: "把「盘点全部资料现状」拆成可见计划，再逐步执行。" },
       ]
     }
-    if (focusSelection.kind === "doc_library") {
+    if (focusSelection.mode === "local") {
       return [
-        { prompt: `请基于「${scopeName ?? "当前文档库"}」总结我可以问哪些问题。` },
-        { prompt: "找出这份资料里最值得记住的结论。" },
-        { prompt: "用表格对比文档中的关键概念。" },
-        { prompt: "帮我定位和「部署 / 回滚」相关的段落。" },
+        { prompt: "总结本地知识库和文档库中最重要的主题。" },
+        { prompt: "找出本地资料里最值得复习的结论。" },
+        { prompt: "用表格对比本地资料中的关键概念。" },
+        { prompt: "帮我定位和「部署 / 回滚」相关的本地资料。" },
+      ]
+    }
+    const selectedKinds = new Set(
+      sources.filter((item) => focusSelection.refs.includes(item.ref)).map((item) => item.kind),
+    )
+    if (selectedKinds.size === 1 && selectedKinds.has("external-source")) {
+      return [
+        { prompt: `请基于「${scopeName ?? "GeneOps 实时知识"}」总结我可以问哪些问题。` },
+        { prompt: "搜索最近的 Amazon 运营经验并深读最相关来源。" },
+        { prompt: "用图谱查找某个主题的相关实体和反向链接。" },
+        { prompt: "比较 WeAreSellers 与公众号内容中的不同观点。" },
       ]
     }
     return [
-      { prompt: `请基于「${scopeName ?? "当前知识库"}」总结我可以问哪些问题。` },
-      { prompt: "对当前知识库做一次结构化对比分析，并用表格展示。" },
-      { prompt: "找出值得沉淀的结论，并给出引用。" },
-      { prompt: "搜索这个知识库里和「目标 / 原则」相关的内容。" },
+      { prompt: `请基于「${scopeName ?? "所选资料源"}」总结我可以问哪些问题。` },
+      { prompt: "对所选资料源做一次交叉验证，并用表格展示。" },
+      { prompt: "找出值得沉淀的结论，并给出来源链接。" },
+      { prompt: "比较所选本地资料与实时来源的差异。" },
     ]
-  }, [focusSelection.kind, scopeName])
+  }, [focusSelection, scopeName, sources])
 
   const runtime = useChatRuntime({
-    id: threadId ?? `assistant-${focusSelection.kind}-draft`,
+    id: threadId ?? `assistant-${focusSelection.mode}-draft`,
     messages: initialMessages,
     transport,
     suggestions,
@@ -1019,9 +1129,9 @@ function QaChatPanel({
   // focus 指定知识库时传给弹窗，用于消除跨库同名 pageKey 的歧义
   const loadWikiDetail = React.useCallback(
     (pageKey: string) => assistantWikiApi
-      .detail(pageKey, focusSelection.kind === "knowledge" ? focusSelection.knowledgeBaseId : null)
+      .detail(pageKey, singleSelectedKnowledgeBaseId(focusSelection, sources))
       .then((res) => res.data),
-    [focusSelection],
+    [focusSelection, sources],
   )
 
   return (
@@ -1041,6 +1151,14 @@ function QaChatPanel({
         <StepBudgetDataUI />
         <CitationToolUI />
         <DataTableToolUI />
+        <SourceLookupToolUI />
+        <SourceSearchToolUI />
+        <SourceReadToolUI />
+        <GeneOpsSearchToolUI />
+        <GeneOpsReadToolUI />
+        <GeneOpsGraphSearchToolUI />
+        <GeneOpsGraphExpandToolUI />
+        <GeneOpsBacklinksToolUI />
         <ListSystemOverviewToolUI />
         <ListKbToolUI />
         <ListDocLibrariesToolUI />
@@ -1060,8 +1178,7 @@ function QaChatPanel({
             focusSelection={focusSelection}
             qaMode={qaMode}
             onQaModeChange={onQaModeChange}
-            knowledgeBases={knowledgeBases}
-            docLibraries={docLibraries}
+            sources={sources}
             onFocusChange={onFocusChange}
             modelInfo={modelInfo}
             selectedConfigId={selectedConfigId}
@@ -1088,8 +1205,7 @@ function GrokThread({
   focusSelection,
   qaMode,
   onQaModeChange,
-  knowledgeBases,
-  docLibraries,
+  sources,
   onFocusChange,
   modelInfo,
   selectedConfigId,
@@ -1103,8 +1219,7 @@ function GrokThread({
   focusSelection: AssistantFocusSelection
   qaMode: AssistantQaMode
   onQaModeChange: (next: AssistantQaMode) => void
-  knowledgeBases: KnowledgeBaseQaSummary[]
-  docLibraries: DocLibrary[]
+  sources: AssistantSourceCatalogItem[]
   onFocusChange: (next: AssistantFocusSelection) => void
   modelInfo: KnowledgeBaseQaModelInfo | null
   selectedConfigId: string | null
@@ -1114,16 +1229,18 @@ function GrokThread({
   threadId: string | null
   onPlanPatched?: (plan: AssistantPersistedPlan) => void
 }) {
-  const isUnscoped = focusSelection.kind === "none"
-  const scopeLabel =
-    focusSelection.kind === "none"
-      ? "全部资料"
-      : focusSelection.kind === "doc_library"
-        ? scopeName ?? "当前文档库"
-        : scopeName ?? "当前知识库"
+  const isUnscoped = focusSelection.mode === "all"
+  const scopeLabel = scopeName ?? (qaMode === "wiki" ? "全部知识库" : "全部资料")
+  const selectedItems = focusSelection.mode === "selected"
+    ? focusSelection.refs.map((ref) => sources.find((item) => item.ref === ref)).filter(Boolean)
+    : []
+  const unavailableSelectedItem = selectedItems.find((item) => item?.selectable === false)
+  const scopeUnavailableReason = focusSelection.mode === "selected"
+    && (selectedItems.length < focusSelection.refs.length || unavailableSelectedItem)
+    ? unavailableSelectedItem?.unavailableReason ?? "所选资料源已删除或无权访问"
+    : null
   const composerProps = {
-    knowledgeBases,
-    docLibraries,
+    sources,
     focusSelection,
     onFocusChange,
     scopeLabel,
@@ -1133,6 +1250,7 @@ function GrokThread({
     selectedConfigId,
     onConfigChange,
     onComposerFocus,
+    scopeUnavailableReason,
   }
 
   return (
@@ -1145,7 +1263,7 @@ function GrokThread({
           <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center">
             <ThreadSuggestions />
           </div>
-          <GrokComposer placeholder={isUnscoped ? "问点什么？在知识库和文档库里寻找答案..." : `在「${scopeLabel}」里问点什么？`} {...composerProps} />
+          <GrokComposer placeholder={isUnscoped ? "问点什么？在知识库、文档库和实时资料里寻找答案..." : `在「${scopeLabel}」里问点什么？`} {...composerProps} />
         </div>
       </AuiIf>
 

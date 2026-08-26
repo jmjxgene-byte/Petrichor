@@ -11,6 +11,7 @@ import {
   FolderPlus,
   GripVertical,
   Loader2,
+  MessageCircleQuestion,
   Plus,
   Trash2,
   X,
@@ -102,6 +103,7 @@ import {
 import { StatusDot, type StatusDotVariant } from "@astryxdesign/core/StatusDot"
 import { AstryxProvider } from "@/components/astryx/astryx-provider"
 import {
+  assistantSourcePath,
   dashboardRoutes,
   knowledgeBaseArticlePath,
 } from "@/lib/dashboard-routes"
@@ -111,6 +113,7 @@ import { cn } from "@/lib/utils"
 import { gsap } from "@/lib/gsap"
 import { rememberKnowledgeBase } from "@/features/pages/knowledge/kb-recent"
 import { KnowledgeExplorerPanel } from "@/features/pages/knowledge/KnowledgeExplorerDialog"
+import { demoAssistantSourceRef, isDemoMode } from "@/lib/demo/demo-mode"
 
 /**
  * 文章节点状态：用 StatusDot 降噪，悬停看含义，避免彩色胶囊墙抢标题注意力。
@@ -2107,16 +2110,40 @@ export function KnowledgeBaseTreePage() {
             ) : null}
           </div>
         </div>
-        <AnimatePresence initial={false}>
-          {activeView === "documents" ? (
-            <motion.div
+        <div className="flex flex-wrap items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="在助手中提问"
+                className="rounded-lg text-muted-foreground hover:text-foreground"
+                disabled={!knowledgeBaseId}
+                onClick={() => {
+                  if (!knowledgeBaseId) return
+                  navigate(assistantSourcePath(
+                    isDemoMode()
+                      ? demoAssistantSourceRef("knowledge-base", knowledgeBaseId)
+                      : `knowledge-base:${knowledgeBaseId}`,
+                  ))
+                }}
+              >
+                <MessageCircleQuestion className="size-[18px]" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">在助手中提问</TooltipContent>
+          </Tooltip>
+          <AnimatePresence initial={false}>
+            {activeView === "documents" ? (
+              <motion.div
               key="documents-actions"
               className="flex flex-wrap items-center gap-1"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: prefersReducedMotion ? 0 : 0.18 }}
-            >
+              >
               <KnowledgeBaseHeaderAction
                 icon={FolderPlusIcon}
                 label="新建文件夹"
@@ -2135,9 +2162,10 @@ export function KnowledgeBaseTreePage() {
                 disabled={!knowledgeBaseId || loading || saving}
                 onClick={() => openCreateArticle(null)}
               />
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* 面板跟着切换滑动：旧视图先退场，新视图再从另一侧进来，方向和标签顺序一致。 */}

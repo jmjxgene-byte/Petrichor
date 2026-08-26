@@ -37,6 +37,20 @@ describe("AGENT_MCP_TOOL_SPECS", () => {
             expect(spec.description.trim().length).toBeGreaterThan(10)
         }
     })
+
+    it("GeneOps 工具全部使用 external:read", () => {
+        const geneops = AGENT_MCP_TOOL_SPECS.filter((spec) =>
+            spec.name.includes("geneops") || spec.name === "list_external_sources")
+        expect(geneops.map((spec) => spec.name)).toEqual(expect.arrayContaining([
+            "list_external_sources",
+            "search_geneops",
+            "read_geneops_chunks",
+            "search_geneops_graph",
+            "expand_geneops_graph",
+            "get_geneops_backlinks",
+        ]))
+        expect(geneops.every((spec) => spec.scope === "external:read")).toBe(true)
+    })
 })
 
 describe("toAgentMcpToolResult", () => {

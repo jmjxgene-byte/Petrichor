@@ -1,5 +1,6 @@
 import { DEFAULT_READ_DOMAINS, type AgentDomainId, type AssistantFocus, type IntentRouteResult } from "./domain-types"
 import { getAssistantToolDomain } from "./tool-registry"
+import { assistantSourceScopeFromFocus, parseAssistantSourceRef } from "@/lib/assistant-source-contract"
 
 // 意图路由骨架（契约 4.2）：规则启发式纯打分，无 LLM 调用。
 // 实现可换（规则 / 小模型），返回形状不可改。
@@ -17,6 +18,11 @@ const DOMAIN_PATTERNS: Array<{ domain: AgentDomainId; pattern: RegExp; weight: n
     { domain: "admin", pattern: /(模型配置|ai\s*配置|密钥|api\s*key|公开问答|公开站|吊销|配额|开关)/i, weight: 3 },
     { domain: "knowledge", pattern: /(知识库|文章|wiki|笔记)/i, weight: 2 },
     { domain: "doc_library", pattern: /(文档|文件|pdf|word|excel|csv)/i, weight: 2 },
+    {
+        domain: "external_source",
+        pattern: /(geneops|wearesellers|知无不言|微信公众号|卖家论坛|社区帖子|外部数据源|实时资料)/i,
+        weight: 3,
+    },
     { domain: "system", pattern: /(多少|几个|统计|概览|状态|总数|系统|是否就绪|有没有配置)/, weight: 2 },
 ]
 
@@ -100,11 +106,30 @@ export async function routeAssistantIntent(input: {
     }
 
     const focus = input.focus
+    const focusDomains = new Set<AgentDomainId>()
     if (focus?.knowledgeBaseId != null || focus?.articleId != null) {
         bump("knowledge", FOCUS_DOMAIN_BOOST, "focus:knowledge")
+        focusDomains.add("knowledge")
     }
     if (focus?.libraryId != null || focus?.documentId != null) {
         bump("doc_library", FOCUS_DOMAIN_BOOST, "focus:doc_library")
+        focusDomains.add("doc_library")
+    }
+    if (focus?.sourceScope) {
+        const scope = assistantSourceScopeFromFocus(focus)
+        if (scope.mode === "all" || scope.mode === "local") {
+            focusDomains.add("knowledge")
+            focusDomains.add("doc_library")
+            if (scope.mode === "all") focusDomains.add("external_source")
+        } else {
+            for (const ref of scope.refs) {
+                const { kind } = parseAssistantSourceRef(ref)
+                if (kind === "knowledge-base") focusDomains.add("knowledge")
+                if (kind === "doc-library") focusDomains.add("doc_library")
+                if (kind === "external-source") focusDomains.add("external_source")
+            }
+        }
+        for (const domain of focusDomains) bump(domain, FOCUS_DOMAIN_BOOST, `scope:${domain}`)
     }
 
     for (const toolName of new Set(input.recentToolNames)) {
@@ -131,7 +156,10 @@ export async function routeAssistantIntent(input: {
         }
     }
 
-    const domains = withStickyAdminDomain(withAuxiliaryDomains(primary), input.recentIntentDomains)
+    const domains = withStickyAdminDomain(
+        withAuxiliaryDomains([...new Set([...primary, ...focusDomains])]),
+        input.recentIntentDomains,
+    )
     const stickyAdmin = input.recentIntentDomains?.includes("admin") && domains.includes("admin")
     const rationale = [
         signals.join(","),
@@ -145,10 +173,11 @@ export async function routeAssistantIntent(input: {
     }
 }
 
-/** knowledge/doc_library → 补 system；admin → 补 content_write（确认工具） */
+/** 资料读取域 → 补 system；admin → 补 content_write（确认工具） */
 export function withAuxiliaryDomains(domains: AgentDomainId[]): AgentDomainId[] {
     let next = domains
-    if ((next.includes("knowledge") || next.includes("doc_library")) && !next.includes("system")) {
+    if ((next.includes("knowledge") || next.includes("doc_library") || next.includes("external_source"))
+        && !next.includes("system")) {
         next = [...next, "system"]
     }
     if (next.includes("admin") && !next.includes("content_write")) {

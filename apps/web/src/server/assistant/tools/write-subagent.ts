@@ -53,7 +53,7 @@ export type SpawnWriteResult = {
     errorCode?: string | null
 }
 
-const WRITE_SUBAGENT_DOMAINS: AgentDomainId[] = ["knowledge", "doc_library", "system"]
+const WRITE_SUBAGENT_DOMAINS: AgentDomainId[] = ["knowledge", "doc_library", "external_source", "system"]
 
 const BLOCKED_WRITE_SUBAGENT_TOOLS = new Set([
     SPAWN_WRITE_SUBAGENT,

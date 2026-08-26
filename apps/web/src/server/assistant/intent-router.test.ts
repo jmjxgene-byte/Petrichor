@@ -8,10 +8,34 @@ beforeEach(() => {
 })
 
 describe("routeAssistantIntent", () => {
-    it("无信号时返回默认三读域", async () => {
+    it("无信号时返回默认四读域", async () => {
         const result = await routeAssistantIntent({ userText: "你好", focus: null, recentToolNames: [] })
-        expect(result.domains).toEqual(["system", "knowledge", "doc_library"])
+        expect(result.domains).toEqual(["system", "knowledge", "doc_library", "external_source"])
         expect(result.confidence).toBeLessThan(0.5)
+    })
+
+    it("all scope 显式预热本地与实时资料域", async () => {
+        const result = await routeAssistantIntent({
+            userText: "这里面主要讲了什么",
+            focus: { sourceScope: { mode: "all" } },
+            recentToolNames: [],
+        })
+        expect(result.domains).toEqual(expect.arrayContaining(["knowledge", "doc_library", "external_source", "system"]))
+    })
+
+    it("GeneOps 文本或外部来源 scope 命中 external_source", async () => {
+        const text = await routeAssistantIntent({
+            userText: "去 GeneOps 找一下 Amazon 退货标签",
+            focus: null,
+            recentToolNames: [],
+        })
+        const scoped = await routeAssistantIntent({
+            userText: "这里讲了什么",
+            focus: { sourceScope: { mode: "selected", refs: ["external-source:1"] } },
+            recentToolNames: [],
+        })
+        expect(text.domains).toContain("external_source")
+        expect(scoped.domains).toContain("external_source")
     })
 
     it("写操作意图必须包含 content_write", async () => {

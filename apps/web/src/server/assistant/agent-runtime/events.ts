@@ -135,6 +135,9 @@ export type PublicEvidence = {
     path?: string[]
     relevance?: number
     citationIndex?: number
+    sourceName?: string
+    author?: string
+    queriedAt?: string
 }
 
 export type AgentStreamEvent<T extends AgentStreamEventType = AgentStreamEventType> = {
@@ -202,5 +205,8 @@ export function toPublicEvidence(evidence: AgentEvidence, citationIndex?: number
         ...(Array.isArray(metadata.path) ? { path: metadata.path as string[] } : {}),
         ...(evidence.relevance != null ? { relevance: evidence.relevance } : {}),
         ...(citationIndex != null && citationIndex > 0 ? { citationIndex } : {}),
+        ...(typeof metadata.sourceName === "string" ? { sourceName: metadata.sourceName } : {}),
+        ...(typeof metadata.author === "string" ? { author: metadata.author } : {}),
+        ...(typeof metadata.queriedAt === "string" ? { queriedAt: metadata.queriedAt } : {}),
     }
 }

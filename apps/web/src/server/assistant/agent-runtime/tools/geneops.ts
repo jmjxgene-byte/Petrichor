@@ -1,70 +1,22 @@
-import { z } from "zod"
-import { executeGeneOpsRpc } from "@/server/external-source/logic"
+import {
+    expandGeneOpsGraph,
+    geneOpsBacklinksSchema,
+    geneOpsGraphExpandSchema,
+    geneOpsGraphSearchSchema,
+    geneOpsReadSchema,
+    geneOpsSearchSchema,
+    getGeneOpsBacklinks,
+    readGeneOpsChunks,
+    searchGeneOps,
+    searchGeneOpsGraph,
+    type GeneOpsReadRow as ReadRow,
+    type GeneOpsSearchRow as SearchRow,
+} from "@/server/external-source/geneops-query"
+import { resolveAssistantSources } from "@/server/assistant/source-catalog"
+import type { AssistantFocus } from "@/server/assistant/domain-types"
+import { badRequest } from "@/server/http/response"
 import { defineTool } from "./adapter"
 import type { AgentToolDefinition, ToolExecutionContext, ToolNormalizerResult } from "../types"
-
-const searchSchema = z.object({
-    query: z.string().trim().min(1).max(500),
-    source: z.enum(["wearesellers", "wechat_mp"]).optional(),
-    mode: z.enum(["exact", "fuzzy"]).default("exact"),
-    limit: z.number().int().min(1).max(20).default(10),
-})
-
-const readSchema = z.object({
-    documentId: z.string().trim().min(1).max(200),
-    afterPosition: z.number().int().min(-1).default(-1),
-    limit: z.number().int().min(1).max(12).default(8),
-})
-
-const graphSearchSchema = z.object({
-    query: z.string().trim().min(1).max(300),
-    nodeTypes: z.array(z.enum(["topic", "entity", "category", "tag"])).max(4).optional(),
-    limit: z.number().int().min(1).max(20).default(10),
-})
-
-const graphExpandSchema = z.object({
-    nodeId: z.string().trim().min(1).max(200),
-    maxNodes: z.number().int().min(1).max(40).default(30),
-    maxEdges: z.number().int().min(1).max(80).default(60),
-})
-
-const backlinksSchema = z.object({
-    pageId: z.string().trim().min(1).max(200),
-    limit: z.number().int().min(1).max(20).default(10),
-})
-
-type SearchRow = {
-    result_key: string
-    document_id: string
-    reply_id: string | null
-    chunk_kind: string
-    title: string
-    snippet: string
-    author: string | null
-    source_url: string
-    match_type: string
-}
-
-type ReadRow = {
-    document_id: string
-    chunk_position: number
-    chunk_kind: string
-    title: string
-    content: string
-    author: string | null
-    source_url: string
-}
-
-function auditContext(ctx: ToolExecutionContext, toolName: string, queryType: string, parameters: unknown) {
-    return {
-        userId: ctx.userId,
-        threadId: ctx.threadId,
-        runId: ctx.dbRunId,
-        toolName,
-        queryType,
-        parameters,
-    }
-}
 
 export const geneOpsTools: AgentToolDefinition[] = [
     defineTool({
@@ -77,17 +29,10 @@ export const geneOpsTools: AgentToolDefinition[] = [
         timeoutMs: 12_000,
         maxRetries: 0,
         description: "实时搜索 GeneOps 已授权的 WeAreSellers / 微信公众号知识内容，返回候选，不访问受限内容。",
-        inputSchema: searchSchema,
+        inputSchema: geneOpsSearchSchema,
         execute: async (ctx, raw) => {
-            const input = searchSchema.parse(raw)
-            return await executeGeneOpsRpc(
-                auditContext(ctx, "geneops.search", "search", input),
-                async (client) => await client<SearchRow[]>`
-                    select * from knowledge_vault.search_v1(
-                        ${input.query}, ${input.source ?? null}, ${input.mode}, ${input.limit}
-                    )
-                `,
-            )
+            const source = await requireGeneOpsInScope(ctx)
+            return await searchGeneOps(actorContext(ctx, source.id), raw)
         },
         normalize: (output): ToolNormalizerResult => {
             const rows = Array.isArray(output) ? output as SearchRow[] : []
@@ -121,17 +66,10 @@ export const geneOpsTools: AgentToolDefinition[] = [
         timeoutMs: 12_000,
         maxRetries: 0,
         description: "按游标深读一个 GeneOps 文档的安全检索分片，返回正文证据。",
-        inputSchema: readSchema,
+        inputSchema: geneOpsReadSchema,
         execute: async (ctx, raw) => {
-            const input = readSchema.parse(raw)
-            return await executeGeneOpsRpc(
-                auditContext(ctx, "geneops.read_chunks", "read", input),
-                async (client) => await client<ReadRow[]>`
-                    select * from knowledge_vault.read_chunks_v1(
-                        ${input.documentId}, ${input.afterPosition}, ${input.limit}
-                    )
-                `,
-            )
+            const source = await requireGeneOpsInScope(ctx)
+            return await readGeneOpsChunks(actorContext(ctx, source.id), raw)
         },
         normalize: (output): ToolNormalizerResult => {
             const rows = Array.isArray(output) ? output as ReadRow[] : []
@@ -168,17 +106,10 @@ export const geneOpsTools: AgentToolDefinition[] = [
         timeoutMs: 10_000,
         maxRetries: 0,
         description: "实时搜索 GeneOps 知识图谱节点。",
-        inputSchema: graphSearchSchema,
+        inputSchema: geneOpsGraphSearchSchema,
         execute: async (ctx, raw) => {
-            const input = graphSearchSchema.parse(raw)
-            return await executeGeneOpsRpc(
-                auditContext(ctx, "geneops.graph_search", "graph_search", input),
-                async (client) => await client<Record<string, unknown>[]>`
-                    select * from knowledge_vault.graph_search_v1(
-                        ${input.query}, ${input.nodeTypes ?? null}, ${input.limit}
-                    )
-                `,
-            )
+            const source = await requireGeneOpsInScope(ctx)
+            return await searchGeneOpsGraph(actorContext(ctx, source.id), raw)
         },
         normalize: (output): ToolNormalizerResult => {
             const rows = Array.isArray(output) ? output : []
@@ -195,20 +126,10 @@ export const geneOpsTools: AgentToolDefinition[] = [
         timeoutMs: 10_000,
         maxRetries: 0,
         description: "展开 GeneOps 图谱节点的安全邻域。",
-        inputSchema: graphExpandSchema,
+        inputSchema: geneOpsGraphExpandSchema,
         execute: async (ctx, raw) => {
-            const input = graphExpandSchema.parse(raw)
-            return await executeGeneOpsRpc(
-                auditContext(ctx, "geneops.graph_expand", "graph_expand", input),
-                async (client) => {
-                    const [row] = await client<Array<{ result: unknown }>>`
-                        select knowledge_vault.graph_neighborhood_v1(
-                            ${input.nodeId}, ${input.maxNodes}, ${input.maxEdges}
-                        ) as result
-                    `
-                    return row?.result ?? null
-                },
-            )
+            const source = await requireGeneOpsInScope(ctx)
+            return await expandGeneOpsGraph(actorContext(ctx, source.id), raw)
         },
         normalize: (output): ToolNormalizerResult => ({
             progress: output != null,
@@ -226,15 +147,10 @@ export const geneOpsTools: AgentToolDefinition[] = [
         timeoutMs: 10_000,
         maxRetries: 0,
         description: "读取 GeneOps Wiki 页面反向关联。",
-        inputSchema: backlinksSchema,
+        inputSchema: geneOpsBacklinksSchema,
         execute: async (ctx, raw) => {
-            const input = backlinksSchema.parse(raw)
-            return await executeGeneOpsRpc(
-                auditContext(ctx, "geneops.backlinks", "backlinks", input),
-                async (client) => await client<Record<string, unknown>[]>`
-                    select * from knowledge_vault.backlinks_v1(${input.pageId}, ${input.limit})
-                `,
-            )
+            const source = await requireGeneOpsInScope(ctx)
+            return await getGeneOpsBacklinks(actorContext(ctx, source.id), raw)
         },
         normalize: (output): ToolNormalizerResult => {
             const rows = Array.isArray(output) ? output : []
@@ -242,3 +158,24 @@ export const geneOpsTools: AgentToolDefinition[] = [
         },
     }),
 ]
+
+async function requireGeneOpsInScope(ctx: ToolExecutionContext) {
+    const resolved = await resolveAssistantSources(
+        ctx.userId,
+        (ctx.focus ?? null) as AssistantFocus | null,
+    )
+    const source = resolved.selected.find((item) => item.kind === "external-source")
+    if (!source) {
+        throw badRequest("当前提问范围不包含 GeneOps 实时资料源")
+    }
+    return source
+}
+
+function actorContext(ctx: ToolExecutionContext, sourceId: string) {
+    return {
+        userId: ctx.userId,
+        sourceId: Number(sourceId),
+        ...(ctx.threadId != null ? { threadId: ctx.threadId } : {}),
+        ...(ctx.dbRunId != null ? { runId: ctx.dbRunId } : {}),
+    }
+}

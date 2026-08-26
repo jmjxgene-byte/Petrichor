@@ -1,10 +1,10 @@
 "use client"
 
 import * as React from "react"
-import { Copy, KeyRound, RefreshCw, ShieldCheck, Trash2 } from "@/components/iconimate"
+import { Copy, KeyRound, Pencil, RefreshCw, ShieldCheck, Trash2 } from "@/components/iconimate"
 import { toast } from "sonner"
 
-import { agentApi, type AgentApiKeyItem } from "@/lib/api"
+import { agentApi, type AgentApiKeyItem, type AgentApiKeyScope } from "@/lib/api"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Checkbox } from "@/components/ui/checkbox"
+import { ModalShell } from "@/components/petrichor-ui/modal-shell"
 
 import {
   DEFAULT_AGENT_SCOPES,
@@ -30,6 +32,9 @@ export function AgentKeysPage() {
   const [revokingId, setRevokingId] = React.useState<string | null>(null)
   const [createdApiKey, setCreatedApiKey] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+  const [scopeEditorOpen, setScopeEditorOpen] = React.useState(false)
+  const [scopeTarget, setScopeTarget] = React.useState<AgentApiKeyItem | null>(null)
+  const [draftScopes, setDraftScopes] = React.useState<AgentApiKeyScope[]>(() => [...DEFAULT_AGENT_SCOPES])
 
   const fetchKeys = React.useCallback(async () => {
     setLoading(true)
@@ -54,16 +59,49 @@ export function AgentKeysPage() {
     try {
       const res = await agentApi.createKey({
         name: `Agent Skill ${new Date().toLocaleDateString()}`,
-        scopes: DEFAULT_AGENT_SCOPES,
+        scopes: draftScopes,
       })
       setCreatedApiKey(res.data.apiKey)
       setItems((prev) => [res.data.item, ...prev])
+      setScopeEditorOpen(false)
       toast.success("Agent API Key 已生成")
     } catch (e) {
       toast.error(normalizeAxiosErrorMessage(e, "生成失败"))
     } finally {
       setCreating(false)
     }
+  }
+
+  const updateScopes = async () => {
+    if (!scopeTarget) return
+    if (draftScopes.length === 0) {
+      toast.error("至少保留一个权限")
+      return
+    }
+    setCreating(true)
+    try {
+      const response = await agentApi.updateKey(scopeTarget.id, draftScopes)
+      setItems((prev) => prev.map((item) => item.id === scopeTarget.id ? response.data.item : item))
+      setScopeEditorOpen(false)
+      setScopeTarget(null)
+      toast.success("API Key 权限已更新")
+    } catch (e) {
+      toast.error(normalizeAxiosErrorMessage(e, "权限更新失败"))
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const openCreate = () => {
+    setScopeTarget(null)
+    setDraftScopes([...DEFAULT_AGENT_SCOPES])
+    setScopeEditorOpen(true)
+  }
+
+  const openScopeEditor = (item: AgentApiKeyItem) => {
+    setScopeTarget(item)
+    setDraftScopes([...item.scopes])
+    setScopeEditorOpen(true)
   }
 
   const revokeKey = async (item: AgentApiKeyItem) => {
@@ -96,7 +134,7 @@ export function AgentKeysPage() {
               <RefreshCw className="mr-2 size-4" />
               刷新
             </Button>
-            <Button type="button" size="sm" onClick={() => void createKey()} disabled={creating}>
+            <Button type="button" size="sm" onClick={openCreate} disabled={creating}>
               <KeyRound className="mr-2 size-4" />
               {creating ? "生成中..." : "生成 Key"}
             </Button>
@@ -163,7 +201,7 @@ export function AgentKeysPage() {
                     生成后即可接入 MCP Server 或安装 Skill 包，调用文档能力。
                   </div>
                 </div>
-                <Button type="button" size="sm" onClick={() => void createKey()} disabled={creating}>
+                <Button type="button" size="sm" onClick={openCreate} disabled={creating}>
                   <KeyRound className="mr-2 size-4" />
                   {creating ? "生成中..." : "生成第一个 Key"}
                 </Button>
@@ -191,22 +229,66 @@ export function AgentKeysPage() {
                     {item.expiresAt ? ` · 到期：${formatDateTime(item.expiresAt)}` : null}
                   </div>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="shrink-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => void revokeKey(item)}
-                  disabled={revokingId === item.id}
-                >
-                  <Trash2 className="mr-2 size-4" />
-                  {revokingId === item.id ? "撤销中..." : "撤销"}
-                </Button>
+                <div className="flex shrink-0 gap-1">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => openScopeEditor(item)}>
+                    <Pencil className="mr-2 size-4" />权限
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => void revokeKey(item)}
+                    disabled={revokingId === item.id}
+                  >
+                    <Trash2 className="mr-2 size-4" />
+                    {revokingId === item.id ? "撤销中..." : "撤销"}
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
         </CardContent>
       </Card>
+
+      <ModalShell
+        open={scopeEditorOpen}
+        onOpenChange={(open) => { if (!creating) setScopeEditorOpen(open) }}
+        disableClose={creating}
+        title={scopeTarget ? "更新 API Key 权限" : "生成 API Key"}
+        description={scopeTarget
+          ? "扩大权限会立即作用于现有 Key；勾选 GeneOps 后，持有者可实时查询生产只读资料源。"
+          : "选择该 Key 可以使用的能力。GeneOps 权限默认不启用，必须显式勾选。"}
+        footer={(
+          <>
+            <Button variant="outline" disabled={creating} onClick={() => setScopeEditorOpen(false)}>取消</Button>
+            <Button disabled={creating || draftScopes.length === 0} onClick={() => void (scopeTarget ? updateScopes() : createKey())}>
+              {creating ? "处理中..." : scopeTarget ? "确认更新" : "生成 Key"}
+            </Button>
+          </>
+        )}
+      >
+        <div className="grid gap-2 sm:grid-cols-2">
+          {(Object.keys(scopeLabels) as Array<keyof typeof scopeLabels>).map((scope) => {
+            const checked = draftScopes.includes(scope)
+            const isExternal = scope === "external:read"
+            return (
+              <label key={scope} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${isExternal ? "border-emerald-500/30 bg-emerald-500/5" : ""}`}>
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={(next) => setDraftScopes((current) => next
+                    ? [...new Set([...current, scope])]
+                    : current.filter((item) => item !== scope))}
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">{scopeLabels[scope]}</span>
+                  <span className="block font-mono text-[10px] text-muted-foreground">{scope}</span>
+                </span>
+              </label>
+            )
+          })}
+        </div>
+      </ModalShell>
     </div>
   )
 }

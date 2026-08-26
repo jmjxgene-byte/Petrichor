@@ -10,6 +10,7 @@ import { memoryTools } from "./memory"
 import { writerTools } from "./writer"
 import { researchTools } from "./research"
 import { geneOpsTools } from "./geneops"
+import { sourceTools } from "./sources"
 import type { AgentToolDefinition } from "../types"
 
 /**
@@ -24,6 +25,7 @@ let registered = false
 export function buildAllAgentTools(): AgentToolDefinition[] {
     return [
         ...agentMetaTools,
+        ...sourceTools,
         ...knowledgeTools,
         ...wikiQaTools,
         ...graphTools,

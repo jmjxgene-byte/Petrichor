@@ -60,6 +60,12 @@ export function docLibraryDocumentPath(libraryId: string, documentId: string) {
     return `${docLibraryBrowsePath(libraryId)}?documentId=${encodeURIComponent(documentId)}`
 }
 
+export function assistantSourcePath(scope: "all" | "local" | string | string[]) {
+    const value = Array.isArray(scope) ? scope.join(",") : scope
+    const params = new URLSearchParams({ scope: value })
+    return `${dashboardRoutes.assistant}?${params.toString()}`
+}
+
 export function isDashboardSectionPath(pathname: string, sectionPath: string) {
     const targetPath = dashboardPath(sectionPath)
     return pathname === targetPath || pathname.startsWith(`${targetPath}/`)

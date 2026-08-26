@@ -126,9 +126,9 @@ describe("Agent Runtime 集成", () => {
     it("简单知识问题先走一次复合检索，再用单轮无工具模型生成", async () => {
         let lookupCalls = 0
         tools.register(makeTool(
-            "knowledge.lookup",
-            "lookup_knowledge",
-            "knowledge",
+            "source.lookup",
+            "lookup_sources",
+            "source",
             async () => {
                 lookupCalls += 1
                 return { title: "Mole", content: "Mole 是 macOS 清理工具" }
@@ -157,7 +157,7 @@ describe("Agent Runtime 集成", () => {
 
         expect(lookupCalls).toBe(1)
         expect(result.state.toolCallCount).toBe(1)
-        expect(result.trace.toolCalls.map((item) => item.toolId)).toEqual(["knowledge.lookup"])
+        expect(result.trace.toolCalls.map((item) => item.toolId)).toEqual(["source.lookup"])
         expect(result.answer).toContain("macOS 清理工具")
     })
 

@@ -121,13 +121,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         ],
       },
       {
-        title: "文档库",
+        title: "资料源",
         url: dashboardRoutes.docLibrary,
         icon: IconFolders,
         isActive: isDashboardSectionPath(pathname, "doc-library"),
         items: [
           {
-            title: "文档列表",
+            title: "本地文档",
             url: dashboardRoutes.docLibrary,
             icon: IconFiles,
             match: matchDocLibraryList,

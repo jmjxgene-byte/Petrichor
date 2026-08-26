@@ -19,6 +19,14 @@ import { asRecord, asRows, isPresent } from "./assistant-message-utils"
  * 承载回答内容的工具（引用、表格、计划、确认）不在此列——它们是结果不是过程。
  */
 export const PROCESS_TOOL_NAMES = new Set([
+  "lookup_sources",
+  "search_sources",
+  "read_source",
+  "geneops_search",
+  "geneops_read_chunks",
+  "geneops_graph_search",
+  "geneops_graph_expand",
+  "geneops_backlinks",
   "read_knowledge_node",
   "read_document",
   "save_answer_artifact",
@@ -92,6 +100,36 @@ function describeCall(
   const payload = asRecord(result)
 
   switch (toolName) {
+    case "lookup_sources": {
+      const search = asRecord(payload?.search)
+      const degraded = asRows(search?.degradedSources)
+      return {
+        status: chatStatus,
+        label: "跨源检索",
+        target: degraded.length > 0 ? `所选资料源 · ${degraded.length} 个降级` : "所选资料源",
+      }
+    }
+    case "search_sources": {
+      const candidates = asRows(result, "candidates")
+      return { status: chatStatus, label: "搜索资料源", target: `${candidates.length} 个候选` }
+    }
+    case "read_source": {
+      return { status: chatStatus, label: "深读资料", target: "相关来源" }
+    }
+    case "geneops_search": {
+      const rows = Array.isArray(result) ? result : asRows(result, "results")
+      return { status: chatStatus, label: "搜索 GeneOps", target: `${rows.length} 个候选` }
+    }
+    case "geneops_read_chunks": {
+      const rows = Array.isArray(result) ? result : asRows(result, "chunks")
+      return { status: chatStatus, label: "深读 GeneOps", target: `${rows.length} 个分片` }
+    }
+    case "geneops_graph_search":
+      return { status: chatStatus, label: "查询 GeneOps 图谱", target: "相关节点" }
+    case "geneops_graph_expand":
+      return { status: chatStatus, label: "展开 GeneOps 关联", target: "节点邻域" }
+    case "geneops_backlinks":
+      return { status: chatStatus, label: "读取 GeneOps 反链", target: "关联页面" }
     case "read_knowledge_node": {
       return {
         status: chatStatus,
@@ -154,6 +192,7 @@ function describeCall(
         ["文章", String(num("articles"))],
         ["文档库", String(num("docLibraries"))],
         ["文档", String(num("documents"))],
+        ["实时资料源", `${num("externalSourcesReady")}/${num("externalSources")} 可用`],
         ["对话", String(num("assistantThreads"))],
         ["模型", `CHAT ${payload?.chatModelReady ? "就绪" : "未配"} · EMBED ${payload?.embeddingModelReady ? "就绪" : "未配"}`],
       ]

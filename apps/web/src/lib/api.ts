@@ -673,6 +673,7 @@ export type AgentApiKeyScope =
   | "ai:write"
   | "wiki:read"
   | "wiki:write"
+  | "external:read"
 
 export interface AgentApiKeyItem {
   id: string
@@ -730,6 +731,8 @@ export interface AgentCallLogListResponse {
 export const agentApi = {
   listKeys: () => api.post<AgentApiKeyListResponse>("/agent/api-key/list", {}),
   createKey: (data: AgentApiKeyCreateRequest) => api.post<AgentApiKeyCreateResponse>("/agent/api-key/create", data),
+  updateKey: (id: string, scopes: AgentApiKeyScope[]) =>
+    api.post<AgentApiKeyRevokeResponse>("/agent/api-key/update", { id, scopes }),
   revokeKey: (id: string) => api.post<AgentApiKeyRevokeResponse>("/agent/api-key/revoke", { id }),
   listCallLogs: (data?: { limit?: number }) =>
     api.post<AgentCallLogListResponse>("/agent/call-log/list", data ?? {}),
@@ -2334,6 +2337,16 @@ export interface DashboardOverviewResponse {
     windowDays: number
     items: DashboardToolStat[]
   }
+  externalSources: {
+    windowDays: number
+    totalSources: number
+    readySources: number
+    totalQueries: number
+    successQueries: number
+    errorQueries: number
+    avgDurationMs: number
+    tools: DashboardToolStat[]
+  }
   pipeline: {
     documents: DashboardStatusBucket[]
     imports: DashboardStatusBucket[]
@@ -2537,7 +2550,11 @@ export interface ExternalSourceResponse {
 }
 
 export const externalSourceApi = {
-  list: () => api.post<{ featureEnabled: boolean; items: ExternalSourceResponse[] }>("/external-source/list", {}),
+  list: () => api.post<{
+    featureEnabled: boolean
+    items: ExternalSourceResponse[]
+    metrics: { windowDays: number; total: number; success: number; errors: number; avgMs: number } | null
+  }>("/external-source/list", {}),
   create: (data: { name: string; password: string }) =>
     api.post<ExternalSourceResponse>("/external-source/create", data),
   update: (data: { id: string; name?: string; password?: string; enabled?: boolean }) =>
@@ -2549,11 +2566,19 @@ export const externalSourceApi = {
 
 // 站内 Assistant（chat-first 壳）：形状对齐 src/server/assistant/thread-handlers.ts
 export interface AssistantFocus {
+  sourceScope?: import("@/lib/assistant-source-contract").AssistantSourceScope
   knowledgeBaseId?: string | null
   libraryId?: string | null
   articleId?: string | null
   documentId?: string | null
 }
+
+export type {
+  AssistantSourceCatalogItem,
+  AssistantSourceKind,
+  AssistantSourceRef,
+  AssistantSourceScope,
+} from "@/lib/assistant-source-contract"
 
 export interface AssistantThreadSummary {
   id: string
@@ -2561,6 +2586,12 @@ export interface AssistantThreadSummary {
   focus: AssistantFocus | null
   createdAt: string
   updatedAt: string
+}
+
+export const assistantSourceApi = {
+  catalog: () => api.post<{
+    items: import("@/lib/assistant-source-contract").AssistantSourceCatalogItem[]
+  }>("/assistant/source-catalog", {}),
 }
 
 export interface AssistantThreadListResponse {
@@ -2608,7 +2639,7 @@ export interface AgentRunActivityResponse {
 
 export interface AgentRunEvidenceResponse {
   id: string
-  source: "knowledge" | "wiki" | "web" | "graph" | "memory" | "subagent" | "tool"
+  source: "knowledge" | "document" | "wiki" | "web" | "graph" | "memory" | "subagent" | "tool" | "geneops"
   title: string
   snippet?: string
   url?: string
@@ -2619,6 +2650,9 @@ export interface AgentRunEvidenceResponse {
   path?: string[]
   relevance?: number
   citationIndex?: number
+  sourceName?: string
+  author?: string
+  queriedAt?: string
 }
 
 export interface AgentRunDetailResponse {

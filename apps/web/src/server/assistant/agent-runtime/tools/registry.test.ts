@@ -28,6 +28,7 @@ describe("Agent 工具装配", () => {
         expect(core).toContain("agent.delegate")
         expect(core).toContain("knowledge.search")
         expect(core).toContain("knowledge.read")
+        expect(core).toContain("source.lookup")
     })
 
     it("所有工具 id 都带 namespace 前缀", () => {

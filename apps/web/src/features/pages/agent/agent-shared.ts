@@ -22,6 +22,7 @@ export const scopeLabels: Record<AgentApiKeyScope, string> = {
   "ai:write": "AI 摘要/思维导图",
   "wiki:read": "知识 Wiki 浏览",
   "wiki:write": "知识 Wiki 重建",
+  "external:read": "GeneOps 实时资料读取",
 }
 
 export function formatDateTime(value?: string | null) {

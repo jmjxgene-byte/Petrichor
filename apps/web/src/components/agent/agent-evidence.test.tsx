@@ -52,3 +52,34 @@ describe("知识库章节溯源", () => {
         expect(href).toMatch(/^\/dashboard\/knowledge\/5\/articles\/12\?/)
     })
 })
+
+describe("GeneOps 实时来源", () => {
+    it("展示来源名称和查询时间，并在新窗口打开原文", () => {
+        render(<AgentEvidenceCard evidence={{
+            id: "g1",
+            source: "geneops",
+            title: "Amazon 退货标签经验",
+            url: "https://example.com/geneops",
+            sourceName: "GeneOps 生产知识",
+            author: "seller",
+            queriedAt: "2026-08-27T00:00:00.000Z",
+            citationIndex: 1,
+        }} />)
+
+        expect(screen.getByText(/GeneOps 生产知识/)).toBeTruthy()
+        expect(screen.getByText(/seller/)).toBeTruthy()
+        const link = screen.getByRole("link", { name: /打开来源/ })
+        expect(link.getAttribute("target")).toBe("_blank")
+        expect(link.getAttribute("rel")).toContain("noreferrer")
+    })
+
+    it("拒绝把非 HTTP(S) 外部地址渲染为可点击链接", () => {
+        expect(evidenceHref({
+            id: "g2",
+            source: "geneops",
+            title: "不可信来源",
+            url: "javascript:alert(1)",
+            citationIndex: 1,
+        })).toBeNull()
+    })
+})

@@ -6,6 +6,7 @@ import {
     KNOWLEDGE_SKILL_PROMPT,
     MEMORY_SKILL_PROMPT,
     RESEARCH_SKILL_PROMPT,
+    SOURCES_SKILL_PROMPT,
     SYSTEM_SKILL_PROMPT,
     WRITER_SKILL_PROMPT,
 } from "./prompts/skills"
@@ -69,6 +70,14 @@ export const agentSkillRegistry = new AgentSkillRegistry()
 /** 内置技能定义。toolIds 引用 tool-registry 中的工具 id。 */
 export const BUILTIN_SKILLS: AgentSkill[] = [
     {
+        id: "sources",
+        name: "统一资料源",
+        description: "在知识库、文档库与实时外部来源中统一检索和深读",
+        instructions: SOURCES_SKILL_PROMPT,
+        toolIds: ["source.lookup", "source.search", "source.read"],
+        tags: ["retrieval"],
+    },
+    {
         id: "knowledge",
         name: "知识库",
         description: "检索并深读站内知识库内容",
@@ -111,6 +120,7 @@ export const BUILTIN_SKILLS: AgentSkill[] = [
             "geneops.graph_expand",
             "geneops.backlinks",
         ],
+        dependencies: ["sources"],
         tags: ["external", "retrieval"],
     },
     {

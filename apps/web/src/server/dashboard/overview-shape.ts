@@ -293,6 +293,16 @@ export type DashboardOverview<TThread> = {
         windowDays: number
         items: DashboardToolStat[]
     }
+    externalSources: {
+        windowDays: number
+        totalSources: number
+        readySources: number
+        totalQueries: number
+        successQueries: number
+        errorQueries: number
+        avgDurationMs: number
+        tools: DashboardToolStat[]
+    }
     pipeline: {
         documents: DashboardStatusBucket[]
         imports: DashboardStatusBucket[]

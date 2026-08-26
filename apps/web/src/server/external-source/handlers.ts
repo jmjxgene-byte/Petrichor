@@ -1,9 +1,9 @@
-import { eq } from "drizzle-orm"
+import { count, eq, gte, sql } from "drizzle-orm"
 import type { AppRequest } from "@/server/http/request"
 import { getServerConfig } from "@/config/server"
 import { requireCurrentUser } from "@/server/auth/current-user"
 import { getDb } from "@/server/db/client"
-import { externalSources } from "@/server/db/schema"
+import { externalQueryAudits, externalSources } from "@/server/db/schema"
 import { badRequest, ok, readJson, toErrorResponse, unauthorized } from "@/server/http/response"
 import {
     assertSuperAdmin,
@@ -31,10 +31,28 @@ async function withUser(request: AppRequest, handler: (user: User) => Promise<Re
 export async function listSources(request: AppRequest) {
     return withUser(request, async (user) => {
         const isAdmin = user.systemRole === "SUPER_ADMIN" || user.id === 1
-        const sources = await listExternalSources()
+        const sources = (await listExternalSources()).filter((source) => (
+            isAdmin || source.globalShared || source.createdByUserId === user.id
+        ))
+        const [metrics] = isAdmin
+            ? await getDb().select({
+                total: count(),
+                success: sql<number>`coalesce(sum(case when ${externalQueryAudits.status} = 'OK' then 1 else 0 end), 0)`,
+                errors: sql<number>`coalesce(sum(case when ${externalQueryAudits.status} <> 'OK' then 1 else 0 end), 0)`,
+                avgMs: sql<number>`coalesce(avg(${externalQueryAudits.durationMs}), 0)`,
+            }).from(externalQueryAudits)
+                .where(gte(externalQueryAudits.createdAt, new Date(Date.now() - 30 * 86_400_000)))
+            : [null]
         return ok({
             featureEnabled: getServerConfig().geneOpsConnector.enabled,
             items: sources.map((source) => toSourceResponse(source, { isAdmin })),
+            metrics: metrics ? {
+                windowDays: 30,
+                total: Number(metrics.total ?? 0),
+                success: Number(metrics.success ?? 0),
+                errors: Number(metrics.errors ?? 0),
+                avgMs: Math.round(Number(metrics.avgMs ?? 0)),
+            } : null,
         })
     })
 }

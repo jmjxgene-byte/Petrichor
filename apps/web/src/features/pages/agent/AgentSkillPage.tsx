@@ -30,6 +30,7 @@ const SKILL_PACKAGE_FILES: Array<{ path: string; description: string }> = [
   { path: "skills/share.md", description: "分享链接、密码与到期管理" },
   { path: "skills/ai.md", description: "AI 摘要、思维导图、知识图谱生成" },
   { path: "skills/wiki.md", description: "知识 Wiki 浏览、重建与体检" },
+  { path: "skills/sources.md", description: "GeneOps 实时搜索、深读与图谱查询" },
   { path: "scripts/petrichor", description: "零依赖 Python CLI（所有能力的统一入口）" },
   { path: "scripts/petrichor-api.sh", description: "curl 版回退脚本（无 Python 环境时）" },
   { path: "references/endpoints.md", description: "全部 REST 端点的字段与示例" },
@@ -45,6 +46,7 @@ const SKILL_CAPABILITIES = [
   "AI 摘要",
   "思维导图",
   "Wiki 维护",
+  "GeneOps 实时资料",
 ]
 
 export function AgentSkillPage() {

@@ -228,6 +228,7 @@ function mergeEvidence(existing: AgentEvidence, incoming: EvidenceInput): void {
  */
 export function scoreSourceQuality(input: EvidenceInput): number {
     if (input.source === "geneops") return 0.9
+    if (input.source === "document") return 0.8
     if (input.source === "knowledge" || input.source === "graph") return 0.85
     if (input.source === "memory") return 0.7
     if (input.source === "subagent" || input.source === "tool") return 0.6

@@ -59,13 +59,14 @@ describe("system assistant tools", () => {
     })
 
     it("list_system_overview 返回当前用户计数与用途绑定就绪状态", async () => {
-        // 前 5 次是各实体计数，后 2 次是 CHAT / EMBEDDING 的用途绑定探测
+        // 前 6 次是各实体计数（含实时资料源），后 2 次是 CHAT / EMBEDDING 的用途绑定探测
         const selectResults = [
             [{ total: 2 }],
             [{ total: 15 }],
             [{ total: 1 }],
             [{ total: 8 }],
             [{ total: 4 }],
+            [{ total: 1, ready: 1 }],
             [{ id: 1 }],
             [],
         ]
@@ -81,10 +82,12 @@ describe("system assistant tools", () => {
             docLibraries: 1,
             documents: 8,
             assistantThreads: 4,
+            externalSources: 1,
+            externalSourcesReady: 1,
             chatModelReady: true,
             embeddingModelReady: false,
         })
-        expect(db.select).toHaveBeenCalledTimes(7)
+        expect(db.select).toHaveBeenCalledTimes(8)
     })
 
     it("save_answer_artifact 把 thread/run/kind/title/content_json 写入既有表", async () => {

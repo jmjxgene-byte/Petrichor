@@ -22,9 +22,17 @@ describe("assistantIdSchema", () => {
 
 describe("assistantFocusSchema", () => {
     it("接受 string / number，归一化为字符串", () => {
-        const focus = assistantFocusSchema.parse({ knowledgeBaseId: 7, libraryId: "8" })
+        const focus = assistantFocusSchema.parse({
+            sourceScope: { mode: "selected", refs: ["external-source:2", "knowledge-base:7"] },
+            knowledgeBaseId: 7,
+            libraryId: "8",
+        })
         expect(focus.knowledgeBaseId).toBe("7")
         expect(focus.libraryId).toBe("8")
+        expect(focus.sourceScope).toEqual({
+            mode: "selected",
+            refs: ["external-source:2", "knowledge-base:7"],
+        })
     })
 
     it("字段全部可空可缺省", () => {

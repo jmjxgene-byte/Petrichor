@@ -11,6 +11,7 @@ import {
 import { notFound } from "@/server/http/response"
 import type { AgentDomainId, AssistantFocus } from "./domain-types"
 import { listActiveAssistantPlans } from "./plan-store"
+import { assistantSourceScopeSchema } from "@/lib/assistant-source-contract"
 
 export const assistantIdSchema = z.union([z.string(), z.number()]).transform((value, ctx) => {
     const raw = String(value).trim()
@@ -25,6 +26,7 @@ export const assistantIdSchema = z.union([z.string(), z.number()]).transform((va
 const focusIdSchema = z.union([z.string(), z.number()]).transform((value) => String(value)).nullable().optional()
 
 export const assistantFocusSchema = z.object({
+    sourceScope: assistantSourceScopeSchema.optional(),
     knowledgeBaseId: focusIdSchema,
     libraryId: focusIdSchema,
     articleId: focusIdSchema,
@@ -65,6 +67,88 @@ export function redactAssistantStepInput(input: unknown): unknown {
     return next
 }
 
+const EXTERNAL_METADATA_ONLY_TOOL_NAMES = new Set([
+    "lookup_sources",
+    "search_sources",
+    "read_source",
+    "geneops_search",
+    "geneops_read_chunks",
+    "geneops_graph_search",
+    "geneops_graph_expand",
+    "geneops_backlinks",
+])
+
+export function isExternalMetadataOnlyTool(toolName: string) {
+    return toolName.startsWith("source.")
+        || toolName.startsWith("geneops.")
+        || EXTERNAL_METADATA_ONLY_TOOL_NAMES.has(toolName)
+}
+
+export function sanitizeAssistantStepPayload(toolName: string, value: unknown) {
+    if (!isExternalMetadataOnlyTool(toolName)) return value
+    return { redacted: true, reason: "external-source-metadata-only" }
+}
+
+export function sanitizeAssistantMessageContentForPersistence(content: unknown) {
+    if (!content || typeof content !== "object") return content
+    const record = content as Record<string, unknown>
+    if (!Array.isArray(record.parts)) return content
+    const externalRun = record.parts.some((part) => isExternalAgentEventPart(part))
+    if (!externalRun) return content
+    return {
+        ...record,
+        parts: record.parts.map((part) => sanitizeExternalAgentEventPart(part)),
+    }
+}
+
+function isExternalAgentEventPart(part: unknown) {
+    const event = readAgentEvent(part)
+    if (!event) return false
+    const payload = event.payload
+    if (typeof payload.toolId === "string" && isExternalMetadataOnlyTool(payload.toolId)) return true
+    if (event.type !== "evidence_created" || !Array.isArray(payload.evidence)) return false
+    return payload.evidence.some((item) => (
+        item && typeof item === "object" && (item as Record<string, unknown>).source === "geneops"
+    ))
+}
+
+function sanitizeExternalAgentEventPart(part: unknown) {
+    const event = readAgentEvent(part)
+    if (!event) return part
+    const payload = { ...event.payload }
+    if (event.type === "evidence_created" && Array.isArray(payload.evidence)) {
+        payload.evidence = payload.evidence.map((item) => {
+            if (!item || typeof item !== "object") return item
+            const evidence = item as Record<string, unknown>
+            if (evidence.source !== "geneops") return evidence
+            return {
+                id: evidence.id,
+                source: evidence.source,
+                title: evidence.title,
+                ...(typeof evidence.url === "string" ? { url: evidence.url } : {}),
+                ...(typeof evidence.sourceName === "string" ? { sourceName: evidence.sourceName } : {}),
+                ...(typeof evidence.queriedAt === "string" ? { queriedAt: evidence.queriedAt } : {}),
+                ...(typeof evidence.citationIndex === "number" ? { citationIndex: evidence.citationIndex } : {}),
+            }
+        })
+    }
+    return {
+        ...(part as Record<string, unknown>),
+        data: { ...event, payload },
+    }
+}
+
+function readAgentEvent(part: unknown): { type: string; payload: Record<string, unknown>; [key: string]: unknown } | null {
+    if (!part || typeof part !== "object") return null
+    const partRecord = part as Record<string, unknown>
+    if (partRecord.type !== "data-agent-event" || !partRecord.data || typeof partRecord.data !== "object") {
+        return null
+    }
+    const event = partRecord.data as Record<string, unknown>
+    if (typeof event.type !== "string" || !event.payload || typeof event.payload !== "object") return null
+    return { ...event, type: event.type, payload: event.payload as Record<string, unknown> }
+}
+
 export const assistantThreadDeleteManySchema = z.object({
     threadIds: z.array(assistantIdSchema).min(1).max(200),
 })
@@ -81,7 +165,8 @@ export function parseAssistantFocus(focusJson: string | null): AssistantFocus | 
     if (!focusJson) return null
     try {
         const parsed = JSON.parse(focusJson)
-        return parsed && typeof parsed === "object" ? parsed as AssistantFocus : null
+        const result = assistantFocusSchema.safeParse(parsed)
+        return result.success ? result.data : null
     } catch {
         return null
     }
@@ -156,7 +241,9 @@ export async function persistAssistantMessage(input: {
     await db.insert(assistantMessages).values({
         threadId: input.threadId,
         role: input.role,
-        contentJson: JSON.stringify(input.content),
+        contentJson: JSON.stringify(input.role === "assistant"
+            ? sanitizeAssistantMessageContentForPersistence(input.content)
+            : input.content),
         createdAt: now,
     })
     await db
@@ -246,13 +333,14 @@ export async function recordAssistantStep(input: {
     errorCode?: string | null
     durationMs: number | null
 }) {
-    const safeInput = redactAssistantStepInput(input.input)
+    const safeInput = redactAssistantStepInput(sanitizeAssistantStepPayload(input.toolName, input.input))
+    const safeOutput = sanitizeAssistantStepPayload(input.toolName, input.output)
     await getDb().insert(assistantSteps).values({
         runId: input.runId,
         stepIndex: input.stepIndex,
         toolName: input.toolName,
         inputJson: safeInput === undefined ? null : JSON.stringify(safeInput),
-        outputJson: input.output === undefined ? null : JSON.stringify(input.output),
+        outputJson: safeOutput === undefined ? null : JSON.stringify(safeOutput),
         status: input.status,
         errorCode: input.errorCode ?? null,
         durationMs: input.durationMs,

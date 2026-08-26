@@ -1,6 +1,13 @@
 import { z } from "zod"
 import type { AgentApiKeyScope } from "@/server/agent/api-key"
 import { buildAgentEndpointMap } from "@/server/agent/skill"
+import {
+    geneOpsBacklinksSchema,
+    geneOpsGraphExpandSchema,
+    geneOpsGraphSearchSchema,
+    geneOpsReadSchema,
+    geneOpsSearchSchema,
+} from "@/server/external-source/geneops-query"
 
 // MCP 工具与 REST 能力层一一对应：本文件只放纯规格与转换逻辑（可单测），
 // 真实 handler 接线在 mcp.ts，避免测试环境拉起 better-auth / 数据库依赖。
@@ -98,6 +105,54 @@ export const AGENT_MCP_TOOL_SPECS = [
             knowledgeBaseId: idInputSchema.optional().describe("可选：限定单个知识库"),
             limit: z.number().int().min(1).max(10).optional().describe("检索上下文条数上限，默认 6"),
         },
+    },
+    {
+        name: "list_external_sources",
+        title: "列出实时外部资料源",
+        description: "列出当前 Key 可使用的实时只读外部资料源、健康状态与能力，不返回连接信息。",
+        scope: "external:read",
+        endpointPath: endpoints.externalSourceList,
+        inputSchema: {},
+    },
+    {
+        name: "search_geneops",
+        title: "搜索 GeneOps",
+        description: "实时搜索已授权的 WeAreSellers / 微信公众号内容。只返回候选，命中后必须用 read_geneops_chunks 深读。",
+        scope: "external:read",
+        endpointPath: endpoints.geneOpsSearch,
+        inputSchema: geneOpsSearchSchema.shape,
+    },
+    {
+        name: "read_geneops_chunks",
+        title: "深读 GeneOps 内容",
+        description: "按游标读取 GeneOps 文档安全分片。documentId 必须来自 search_geneops 结果。",
+        scope: "external:read",
+        endpointPath: endpoints.geneOpsRead,
+        inputSchema: geneOpsReadSchema.shape,
+    },
+    {
+        name: "search_geneops_graph",
+        title: "搜索 GeneOps 图谱",
+        description: "实时搜索 GeneOps 安全知识图谱节点。",
+        scope: "external:read",
+        endpointPath: endpoints.geneOpsGraphSearch,
+        inputSchema: geneOpsGraphSearchSchema.shape,
+    },
+    {
+        name: "expand_geneops_graph",
+        title: "展开 GeneOps 图谱",
+        description: "展开 search_geneops_graph 返回节点的安全邻域。",
+        scope: "external:read",
+        endpointPath: endpoints.geneOpsGraphExpand,
+        inputSchema: geneOpsGraphExpandSchema.shape,
+    },
+    {
+        name: "get_geneops_backlinks",
+        title: "读取 GeneOps 反向链接",
+        description: "读取 GeneOps Wiki 页面的安全反向关联。",
+        scope: "external:read",
+        endpointPath: endpoints.geneOpsBacklinks,
+        inputSchema: geneOpsBacklinksSchema.shape,
     },
     {
         name: "list_articles",

@@ -35,6 +35,7 @@ describe("resolveQuirks", () => {
 
     it("needsJsonPromptInjectionForStructuredOutput 与降级判定一致", () => {
         expect(needsJsonPromptInjectionForStructuredOutput("deepseek", "deepseek-chat")).toBe(true)
+        expect(needsJsonPromptInjectionForStructuredOutput("openai-compatible", "gpt-custom")).toBe(true)
         expect(needsJsonPromptInjectionForStructuredOutput("openai", "gpt-5.2")).toBe(false)
     })
 })

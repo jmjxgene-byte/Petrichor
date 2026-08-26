@@ -1,3 +1,9 @@
+import {
+    assistantSourceRef,
+    type AssistantSourceKind,
+    type AssistantSourceRef,
+} from "@/lib/assistant-source-contract"
+
 /*
  * 演示模式开关。
  * 访客从 /demo 进入 → sessionStorage 落一个标记 → 复用真实 /dashboard 页面，
@@ -14,6 +20,23 @@ export function isDemoMode(): boolean {
     } catch {
         return false
     }
+}
+
+/**
+ * Demo fixtures use readable string IDs, while the production source contract
+ * deliberately accepts database-style positive integers only. Convert a demo
+ * ID into a stable synthetic integer so Preview exercises the real contract.
+ */
+export function demoAssistantSourceRef(
+    kind: AssistantSourceKind,
+    id: string,
+): AssistantSourceRef {
+    let hash = 2166136261
+    for (const character of `${kind}:${id}`) {
+        hash ^= character.charCodeAt(0)
+        hash = Math.imul(hash, 16777619)
+    }
+    return assistantSourceRef(kind, (hash >>> 0) || 1)
 }
 
 export function enterDemoMode() {

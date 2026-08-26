@@ -43,6 +43,7 @@ import type {
     TaskComplexity,
     ToolExecutionContext,
 } from "./types"
+import { assistantSourceScopeFromFocus, parseAssistantSourceRef } from "@/lib/assistant-source-contract"
 
 /**
  * Petrichor Agent Runtime（§3/§9/§157）。
@@ -387,17 +388,17 @@ export class PetrichorAgentRuntime {
         let simpleKnowledgeFastPath = false
         if (request.qaMode !== "wiki"
             && !request.abortSignal?.aborted
-            && this.tools.has("knowledge.lookup")
+            && this.tools.has("source.lookup")
             && shouldUseSimpleKnowledgeFastPath({
                 goal: request.goal,
                 complexity,
                 focus: request.focus,
                 routingHint,
             })) {
-            const outcome = await executor.execute("knowledge.lookup", { query: request.goal }, buildCtx())
+            const outcome = await executor.execute("source.lookup", { query: request.goal }, buildCtx())
             simpleKnowledgeFastPath = outcome.ok && outcome.evidence.length > 0
             trace.event("observation", {
-                strategy: "simple_knowledge_fast_path",
+                strategy: "simple_source_fast_path",
                 hit: simpleKnowledgeFastPath,
                 evidenceCount: outcome.evidence.length,
             })
@@ -435,7 +436,13 @@ export class PetrichorAgentRuntime {
 
                 const tools = simpleKnowledgeFastPath
                     ? []
-                    : this.resolveActiveTools(skillLoader, complexity, request.isOperator === true, request.qaMode)
+                    : this.resolveActiveTools(
+                        skillLoader,
+                        complexity,
+                        request.isOperator === true,
+                        request.qaMode,
+                        request.focus,
+                    )
                 const built = contextManager.build({
                     state: state.current,
                     observations,
@@ -665,6 +672,7 @@ export class PetrichorAgentRuntime {
         complexity: TaskComplexity,
         isOperator: boolean,
         qaMode?: "normal" | "wiki",
+        focus?: unknown,
     ): AgentToolDefinition[] {
         if (complexity === "direct") return []
         const ids = new Set([...this.tools.coreToolIds({ isOperator }), ...skillLoader.activeToolIds])
@@ -679,6 +687,25 @@ export class PetrichorAgentRuntime {
             .filter((tool): tool is AgentToolDefinition => {
                 if (!tool) return false
                 if (tool.requiresOperator && !isOperator) return false
+                if (qaMode === "wiki"
+                    && (tool.namespace === "source" || tool.namespace === "document" || tool.namespace === "geneops")) {
+                    return false
+                }
+                const focusRecord = focus && typeof focus === "object"
+                    ? focus as { sourceScope?: unknown }
+                    : null
+                if (qaMode !== "wiki" && focusRecord?.sourceScope != null) {
+                    const scope = assistantSourceScopeFromFocus(focusRecord)
+                    const selectedKinds = scope.mode === "selected"
+                        ? new Set(scope.refs.map((ref) => parseAssistantSourceRef(ref).kind))
+                        : null
+                    // 新版 scope 一律通过 source.* 访问本地资料，避免旧工具忽略多选范围后跨库检索。
+                    if (tool.namespace === "knowledge" || tool.namespace === "document") return false
+                    if (tool.namespace === "geneops"
+                        && scope.mode !== "all"
+                        && !selectedKinds?.has("external-source")) return false
+                    if (tool.namespace === "graph" && scope.mode === "selected") return false
+                }
                 return true
             })
     }
@@ -785,24 +812,26 @@ export class PetrichorAgentRuntime {
 
 /** 域名 → 技能预加载映射（仅提示用途） */
 export function mapDomainsToSkills(domains: string[], availableSkillIds: string[]): string[] {
-    const alias: Record<string, string> = {
-        knowledge: "knowledge",
-        doc_library: "documents",
-        document: "documents",
-        documents: "documents",
-        system: "system",
-        content_write: "writer",
-        write: "writer",
-        writer: "writer",
-        admin: "admin",
-        research: "research",
-        graph: "graph",
-        memory: "memory",
+    const alias: Record<string, string[]> = {
+        knowledge: ["sources", "knowledge"],
+        doc_library: ["sources", "documents"],
+        external_source: ["sources", "geneops"],
+        document: ["sources", "documents"],
+        documents: ["sources", "documents"],
+        system: ["system"],
+        content_write: ["writer"],
+        write: ["writer"],
+        writer: ["writer"],
+        admin: ["admin"],
+        research: ["research"],
+        graph: ["graph"],
+        memory: ["memory"],
     }
     const out = new Set<string>()
     for (const domain of domains) {
-        const skillId = alias[domain]
-        if (skillId && availableSkillIds.includes(skillId)) out.add(skillId)
+        for (const skillId of alias[domain] ?? []) {
+            if (availableSkillIds.includes(skillId)) out.add(skillId)
+        }
     }
     return [...out]
 }

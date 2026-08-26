@@ -29,7 +29,7 @@ const LEGACY_SPECS: LegacySpec[] = [
         riskLevel: "low",
         sideEffect: false,
         description:
-            "读取站点概览：知识库/文章/文档库/文档/对话计数与默认模型就绪状态。"
+            "读取站点概览：知识库/文章/文档库/文档/实时资料源/对话计数与默认模型就绪状态。"
             + "何时用：回答「有多少知识库/文档」这类计数或清单问题。"
             + "输入：无。输出：各类资源计数。"
             + "何时不用：要查内容时用 search_knowledge / search_documents。",

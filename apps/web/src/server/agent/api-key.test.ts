@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
 import {
+    AGENT_API_KEY_SCOPES,
+    DEFAULT_AGENT_API_KEY_SCOPES,
+    agentApiKeyUpdateSchema,
     extractAgentBearerToken,
     generateAgentApiKey,
     hashAgentApiKey,
@@ -33,5 +36,14 @@ describe("Agent API Key 工具函数", () => {
             "doc:read",
             "qa:read",
         ])
+    })
+
+    it("external:read 是合法但默认不授予的独立权限", () => {
+        expect(AGENT_API_KEY_SCOPES).toContain("external:read")
+        expect(DEFAULT_AGENT_API_KEY_SCOPES).not.toContain("external:read")
+        expect(agentApiKeyUpdateSchema.parse({ id: "3", scopes: ["doc:read", "external:read"] })).toEqual({
+            id: 3,
+            scopes: ["doc:read", "external:read"],
+        })
     })
 })

@@ -3,11 +3,18 @@ import { getDb } from "@/server/db/client"
 import { docDocuments, docLibraries, knowledgeBaseArticles, knowledgeBases } from "@/server/db/schema"
 import { badRequest, forbidden } from "@/server/http/response"
 import type { AssistantFocus } from "./domain-types"
+import { resolveAssistantSources } from "./source-catalog"
 
 // 契约 4.1：focus 实体非当前用户所有 → 403。focus 只约束默认上下文，这里只做归属校验。
 
 export async function assertAssistantFocusOwnership(userId: number, focus: AssistantFocus | null): Promise<void> {
     if (!focus) return
+    if (focus.sourceScope) {
+        const resolved = await resolveAssistantSources(userId, focus)
+        if (resolved.scope.mode === "selected" && resolved.unavailable.length > 0) {
+            throw badRequest(resolved.unavailable[0]?.unavailableReason ?? "所选资料源当前不可用")
+        }
+    }
     const db = getDb()
     const checks: Array<{ label: string; value: string | null | undefined; verify: (id: number) => Promise<boolean> }> = [
         {

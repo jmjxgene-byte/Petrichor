@@ -15,6 +15,7 @@ import {
   Library,
   MessageCircleQuestion,
   Square,
+  Database,
 } from "@/components/iconimate"
 
 import { ContextDisplay } from "@/components/assistant-ui/context-display"
@@ -40,13 +41,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import {
-  type DocLibrary,
+  type AssistantSourceCatalogItem,
   type KnowledgeBaseQaModelInfo,
   type KnowledgeBaseQaModelOption,
-  type KnowledgeBaseQaSummary,
 } from "@/lib/api"
 import { gsap } from "@/lib/gsap"
 import { cn } from "@/lib/utils"
+import {
+  ASSISTANT_SOURCE_SELECTION_MAX,
+  type AssistantSourceRef,
+} from "@/lib/assistant-source-contract"
 
 import {
   type AssistantFocusSelection,
@@ -59,8 +63,7 @@ import {
 
 export function GrokComposer({
   placeholder,
-  knowledgeBases,
-  docLibraries,
+  sources,
   focusSelection,
   onFocusChange,
   scopeLabel,
@@ -70,10 +73,10 @@ export function GrokComposer({
   selectedConfigId,
   onConfigChange,
   onComposerFocus,
+  scopeUnavailableReason,
 }: {
   placeholder: string
-  knowledgeBases: KnowledgeBaseQaSummary[]
-  docLibraries: DocLibrary[]
+  sources: AssistantSourceCatalogItem[]
   focusSelection: AssistantFocusSelection
   onFocusChange: (next: AssistantFocusSelection) => void
   scopeLabel: string
@@ -83,6 +86,7 @@ export function GrokComposer({
   selectedConfigId: string | null
   onConfigChange: (next: string) => void
   onComposerFocus?: () => void
+  scopeUnavailableReason?: string | null
 }) {
   const isEmpty = useAuiState((s) => s.composer.isEmpty)
   const isRunning = useAuiState((s) => s.thread.isRunning)
@@ -113,12 +117,12 @@ export function GrokComposer({
             <InlineModeSwitch value={qaMode} onChange={onQaModeChange} />
 
             <InlineScopeSelector
-              knowledgeBases={knowledgeBases}
-              docLibraries={docLibraries}
+              sources={sources}
               value={focusSelection}
               onChange={onFocusChange}
               scopeLabel={scopeLabel}
               isEmpty={isEmpty}
+              qaMode={qaMode}
             />
 
             <div className="relative size-8 shrink-0 rounded-full bg-[#0d0d0d] text-white dark:bg-[#e8e8e8] dark:text-[#0d0d0d]">
@@ -128,7 +132,7 @@ export function GrokComposer({
               >
                 <ComposerPrimitive.Send
                   className="flex h-full w-full items-center justify-center disabled:opacity-40"
-                  disabled={isEmpty}
+                  disabled={isEmpty || Boolean(scopeUnavailableReason)}
                 >
                   <ArrowUp className="size-4" strokeWidth={2.25} />
                 </ComposerPrimitive.Send>
@@ -160,6 +164,9 @@ export function GrokComposer({
             <ComposerContextBar contextWindow={contextWindow} />
           </div>
         </div>
+      ) : null}
+      {scopeUnavailableReason ? (
+        <p className="mx-2 mt-1.5 text-[11px] text-destructive">{scopeUnavailableReason}，请更换提问范围。</p>
       ) : null}
     </ComposerPrimitive.Root>
   )
@@ -225,23 +232,42 @@ export function InlineModeSwitch({
 }
 
 export function InlineScopeSelector({
-  knowledgeBases,
-  docLibraries,
+  sources,
   value,
   onChange,
   scopeLabel,
   isEmpty,
+  qaMode,
 }: {
-  knowledgeBases: KnowledgeBaseQaSummary[]
-  docLibraries: DocLibrary[]
+  sources: AssistantSourceCatalogItem[]
   value: AssistantFocusSelection
   onChange: (next: AssistantFocusSelection) => void
   scopeLabel: string
   isEmpty: boolean
+  qaMode: "normal" | "wiki"
 }) {
   const [open, setOpen] = React.useState(false)
-  const isAll = value.kind === "none"
-  const ScopeIcon = value.kind === "doc_library" ? FileText : isAll ? Globe2 : Library
+  const [draftRefs, setDraftRefs] = React.useState<AssistantSourceRef[]>([])
+  const eligibleSources = React.useMemo(
+    () => qaMode === "wiki" ? sources.filter((item) => item.kind === "knowledge-base") : sources,
+    [qaMode, sources],
+  )
+  const isAll = value.mode === "all"
+  const selectedSources = value.mode === "selected"
+    ? eligibleSources.filter((item) => value.refs.includes(item.ref))
+    : []
+  const ScopeIcon = selectedSources.length === 1
+    ? selectedSources[0]!.kind === "doc-library"
+      ? FileText
+      : selectedSources[0]!.kind === "external-source"
+        ? Database
+        : Library
+    : isAll ? Globe2 : Library
+
+  React.useEffect(() => {
+    if (!open) return
+    setDraftRefs(value.mode === "selected" ? value.refs : [])
+  }, [open, value])
 
   const triggerRef = React.useRef<HTMLButtonElement | null>(null)
   const innerRef = React.useRef<HTMLDivElement | null>(null)
@@ -313,63 +339,107 @@ export function InlineScopeSelector({
       </PopoverTrigger>
       <PopoverContent align="end" side="top" sideOffset={8} className="w-[min(320px,calc(100vw-2rem))] p-0">
         <Command>
-          <CommandInput placeholder="搜索知识库或文档库..." />
+          <CommandInput placeholder={qaMode === "wiki" ? "搜索知识库..." : "搜索知识库、文档库或外部数据源..."} />
           <CommandList>
             <CommandEmpty>没有找到范围</CommandEmpty>
             <CommandGroup heading="范围">
               <CommandItem
-                value="all all-sources 全部资料"
+                value={qaMode === "wiki" ? "all knowledge 全部知识库" : "all all-sources 全部资料"}
                 onSelect={() => {
-                  onChange({ kind: "none" })
+                  onChange({ mode: "all" })
                   setOpen(false)
                 }}
               >
                 <Globe2 className="size-3.5 text-violet-600 dark:text-violet-300" />
-                <span className="flex-1">全部资料</span>
+                <span className="flex-1">{qaMode === "wiki" ? "全部知识库" : "全部资料"}</span>
                 {isAll ? <Check className="size-3.5 text-primary" /> : null}
               </CommandItem>
+              {qaMode === "normal" ? (
+                <CommandItem
+                  value="local local-sources 仅本地资料"
+                  onSelect={() => {
+                    onChange({ mode: "local" })
+                    setOpen(false)
+                  }}
+                >
+                  <Library className="size-3.5 text-muted-foreground" />
+                  <span className="flex-1">仅本地资料</span>
+                  {value.mode === "local" ? <Check className="size-3.5 text-primary" /> : null}
+                </CommandItem>
+              ) : null}
             </CommandGroup>
-            {knowledgeBases.length > 0 ? (
-              <CommandGroup heading="知识库">
-                {knowledgeBases.map((kb) => (
+            {(["knowledge-base", "doc-library", "external-source"] as const).map((kind) => {
+              const items = eligibleSources.filter((source) => source.kind === kind)
+              if (items.length === 0) return null
+              return (
+                <CommandGroup key={kind} heading={sourceGroupLabel(kind)}>
+                  {items.map((source) => {
+                    const checked = draftRefs.includes(source.ref)
+                    const selectionLimitReached = !checked
+                      && draftRefs.length >= ASSISTANT_SOURCE_SELECTION_MAX
+                    const Icon = source.kind === "knowledge-base"
+                      ? Library
+                      : source.kind === "doc-library" ? FileText : Database
+                    return (
                   <CommandItem
-                    key={`kb-${kb.id}`}
-                    value={`kb ${kb.name} ${kb.id}`}
+                    key={source.ref}
+                    value={`${source.kind} ${source.name} ${source.id}`}
+                    disabled={!checked && (!source.selectable || selectionLimitReached)}
                     onSelect={() => {
-                      onChange({ kind: "knowledge", knowledgeBaseId: kb.id })
-                      setOpen(false)
+                      if (!source.selectable && !checked) return
+                      setDraftRefs((current) => current.includes(source.ref)
+                        ? current.filter((ref) => ref !== source.ref)
+                        : [...current, source.ref].sort())
                     }}
                   >
-                    <Library className="size-3.5 text-muted-foreground" />
-                    <span className="flex-1 truncate">{kb.name}</span>
-                    {value.kind === "knowledge" && value.knowledgeBaseId === kb.id ? <Check className="size-3.5 text-primary" /> : null}
+                    <Icon className={cn(
+                      "size-3.5",
+                      source.kind === "external-source" && source.availability === "ready"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-muted-foreground",
+                    )} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{source.name}</span>
+                      {source.unavailableReason ? (
+                        <span className="block truncate text-[10px] text-muted-foreground">{source.unavailableReason}</span>
+                      ) : source.kind === "external-source" ? (
+                        <span className="block text-[10px] text-emerald-700 dark:text-emerald-400">实时 · Exact / Fuzzy / Graph</span>
+                      ) : null}
+                    </span>
+                    {checked ? <Check className="size-3.5 text-primary" /> : null}
                   </CommandItem>
-                ))}
-              </CommandGroup>
-            ) : null}
-            {docLibraries.length > 0 ? (
-              <CommandGroup heading="文档库">
-                {docLibraries.map((lib) => (
-                  <CommandItem
-                    key={`lib-${lib.id}`}
-                    value={`lib ${lib.name} ${lib.id}`}
-                    onSelect={() => {
-                      onChange({ kind: "doc_library", libraryId: lib.id })
-                      setOpen(false)
-                    }}
-                  >
-                    <FileText className="size-3.5 text-muted-foreground" />
-                    <span className="flex-1 truncate">{lib.name}</span>
-                    {value.kind === "doc_library" && value.libraryId === lib.id ? <Check className="size-3.5 text-primary" /> : null}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ) : null}
+                    )
+                  })}
+                </CommandGroup>
+              )
+            })}
           </CommandList>
+          <div className="flex items-center justify-between gap-3 border-t px-3 py-2">
+            <span className="text-xs text-muted-foreground">
+              已选 {draftRefs.length}/{ASSISTANT_SOURCE_SELECTION_MAX} 个资料源
+            </span>
+            <button
+              type="button"
+              disabled={draftRefs.length === 0}
+              onClick={() => {
+                onChange({ mode: "selected", refs: draftRefs })
+                setOpen(false)
+              }}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-40"
+            >
+              应用
+            </button>
+          </div>
         </Command>
       </PopoverContent>
     </Popover>
   )
+}
+
+function sourceGroupLabel(kind: AssistantSourceCatalogItem["kind"]) {
+  if (kind === "knowledge-base") return "知识库"
+  if (kind === "doc-library") return "文档库"
+  return "实时外部来源"
 }
 
 export function BottomModelSelector({

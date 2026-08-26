@@ -59,6 +59,7 @@ import {
     AGENT_API_KEY_SCOPES,
     agentApiKeyCreateSchema,
     agentApiKeyRevokeSchema,
+    agentApiKeyUpdateSchema,
     authenticateAgentRequest,
     generateAgentApiKey,
     hashAgentApiKey,
@@ -342,6 +343,23 @@ export async function revokeAgentApiKey(request: AppRequest) {
     })
 }
 
+export async function updateAgentApiKey(request: AppRequest) {
+    return withUser(request, async (user) => {
+        const input = agentApiKeyUpdateSchema.parse(await readJson(request))
+        const [record] = await getDb()
+            .update(agentApiKeys)
+            .set({ scopesJson: JSON.stringify([...new Set(input.scopes)]), updatedAt: new Date() })
+            .where(and(
+                eq(agentApiKeys.id, input.id),
+                eq(agentApiKeys.userId, user.id),
+                isNull(agentApiKeys.revokedAt),
+            ))
+            .returning()
+        if (!record) throw notFound("API Key 不存在")
+        return ok({ item: toAgentApiKeyResponse(record) })
+    })
+}
+
 export async function listAgentCallLogs(request: AppRequest) {
     return withUser(request, async (user) => {
         const input = agentCallLogListSchema.parse(await readJson(request))
@@ -390,6 +408,12 @@ export async function agentCapabilities(request: AppRequest) {
                 "wiki.page.detail",
                 "wiki.lint",
                 "wiki.ingest",
+                "external-source.list",
+                "geneops.search",
+                "geneops.read",
+                "geneops.graph.search",
+                "geneops.graph.expand",
+                "geneops.backlinks",
             ],
             manifest: buildAgentManifest(baseUrl),
             mcp: buildAgentMcpInfo(baseUrl),

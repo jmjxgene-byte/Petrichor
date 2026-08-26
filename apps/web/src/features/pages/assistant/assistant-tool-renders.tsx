@@ -312,6 +312,22 @@ export const ReadDocumentToolUI = makeAssistantToolUI({
   render: ({ toolCallId }) => <ProcessToolGroup toolCallId={toolCallId} />,
 })
 
+function makeProcessToolUI(toolName: string) {
+  return makeAssistantToolUI({
+    toolName,
+    render: ({ toolCallId }) => <ProcessToolGroup toolCallId={toolCallId} />,
+  })
+}
+
+export const SourceLookupToolUI = makeProcessToolUI("lookup_sources")
+export const SourceSearchToolUI = makeProcessToolUI("search_sources")
+export const SourceReadToolUI = makeProcessToolUI("read_source")
+export const GeneOpsSearchToolUI = makeProcessToolUI("geneops_search")
+export const GeneOpsReadToolUI = makeProcessToolUI("geneops_read_chunks")
+export const GeneOpsGraphSearchToolUI = makeProcessToolUI("geneops_graph_search")
+export const GeneOpsGraphExpandToolUI = makeProcessToolUI("geneops_graph_expand")
+export const GeneOpsBacklinksToolUI = makeProcessToolUI("geneops_backlinks")
+
 export const SaveArtifactToolUI = makeAssistantToolUI({
   toolName: "save_answer_artifact",
   render: ({ toolCallId }) => <ProcessToolGroup toolCallId={toolCallId} />,

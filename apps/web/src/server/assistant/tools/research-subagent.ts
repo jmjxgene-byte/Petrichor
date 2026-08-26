@@ -38,7 +38,7 @@ const BLOCKED_SUBAGENT_TOOLS = new Set([
 
 const spawnSchema = z.object({
     goal: z.string().trim().min(1).max(2000),
-    domains: z.array(z.enum(["knowledge", "doc_library", "system", "content_write", "admin"])).min(1).max(3),
+    domains: z.array(z.enum(["knowledge", "doc_library", "external_source", "system", "content_write", "admin"])).min(1).max(4),
     focus: assistantFocusSchema.optional().nullable(),
     depth: z.number().int().min(0).max(SUBAGENT_ABSOLUTE_MAX_DEPTH).optional(),
     maxDepth: z.number().int().min(0).max(SUBAGENT_ABSOLUTE_MAX_DEPTH).optional(),

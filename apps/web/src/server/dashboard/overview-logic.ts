@@ -7,6 +7,8 @@ import {
     assistantSteps,
     assistantThreads,
     docDocuments,
+    externalQueryAudits,
+    externalSources,
     knowledgeBaseArticleTags,
     knowledgeBaseArticles,
     knowledgeBaseImportJobs,
@@ -138,6 +140,7 @@ export async function loadDashboardOverview(
         groupRows,
         agentPathRows,
         toolRows,
+        externalToolRows,
         rhythmRows,
         recentArticleRows,
         recentThreadPage,
@@ -153,6 +156,12 @@ export async function loadDashboardOverview(
                 tags: sql<number>`(select ${d.countDistinct(knowledgeBaseArticleTags.tag)} from ${knowledgeBaseArticleTags} inner join ${knowledgeBaseArticles} on ${eq(knowledgeBaseArticleTags.articleId, knowledgeBaseArticles.id)} where ${ownArticles})`,
                 wikiPages: sql<number>`(select ${d.countAll()} from ${knowledgeBaseWikiPages} where ${and(eq(knowledgeBaseWikiPages.userId, userId), isNull(knowledgeBaseWikiPages.archivedAt))})`,
                 graphEdges: sql<number>`(select ${d.countAll()} from ${siteGraphEdges} where ${eq(siteGraphEdges.userId, userId)})`,
+                externalSources: sql<number>`(select ${d.countAll()} from ${externalSources})`,
+                externalSourcesReady: sql<number>`(select ${d.countWhen(sql`${externalSources.enabled} = true and ${externalSources.lastCheckStatus} = 'OK' and ${externalSources.contractVersion} = 1`)} from ${externalSources})`,
+                externalQueryTotal: sql<number>`(select ${d.countAll()} from ${externalQueryAudits} where ${and(eq(externalQueryAudits.userId, userId), gte(externalQueryAudits.createdAt, agentStart))})`,
+                externalQuerySuccess: sql<number>`(select ${d.countWhen(sql`${externalQueryAudits.status} = 'OK'`)} from ${externalQueryAudits} where ${and(eq(externalQueryAudits.userId, userId), gte(externalQueryAudits.createdAt, agentStart))})`,
+                externalQueryErrors: sql<number>`(select ${d.countWhen(sql`${externalQueryAudits.status} <> 'OK'`)} from ${externalQueryAudits} where ${and(eq(externalQueryAudits.userId, userId), gte(externalQueryAudits.createdAt, agentStart))})`,
+                externalQueryAvgMs: sql<number>`(select ${d.avgOf(externalQueryAudits.durationMs)} from ${externalQueryAudits} where ${and(eq(externalQueryAudits.userId, userId), gte(externalQueryAudits.createdAt, agentStart))})`,
                 agentCallsTotal: sql<number>`(select ${d.countAll()} from ${agentCallLogs} where ${eq(agentCallLogs.userId, userId)})`,
                 // Agent 接口健康：窗口内的总量、成功、4xx、5xx、均值与峰值
                 agentWindowTotal: sql<number>`(select ${d.countAll()} from ${agentCallLogs} where ${agentWindow})`,
@@ -274,8 +283,25 @@ export async function loadDashboardOverview(
             .from(assistantSteps)
             .innerJoin(assistantRuns, eq(assistantSteps.runId, assistantRuns.id))
             .innerJoin(assistantThreads, eq(assistantRuns.threadId, assistantThreads.id))
-            .where(and(liveThreads, gte(assistantRuns.startedAt, agentStart)))
+            .where(and(
+                liveThreads,
+                gte(assistantRuns.startedAt, agentStart),
+                sql`${assistantSteps.toolName} not like ${"geneops%"}`,
+                sql`${assistantSteps.toolName} not in (${"lookup_sources"}, ${"search_sources"}, ${"read_source"})`,
+            ))
             .groupBy(assistantSteps.toolName)
+            .orderBy(desc(sql`count(*)`))
+            .limit(8),
+        db
+            .select({
+                name: externalQueryAudits.toolName,
+                count: d.countAll(),
+                okCount: d.countWhen(sql`${externalQueryAudits.status} = 'OK'`),
+                avgMs: d.avgOf(externalQueryAudits.durationMs),
+            })
+            .from(externalQueryAudits)
+            .where(and(eq(externalQueryAudits.userId, userId), gte(externalQueryAudits.createdAt, agentStart)))
+            .groupBy(externalQueryAudits.toolName)
             .orderBy(desc(sql`count(*)`))
             .limit(8),
         // 创作节律：按 UTC 的星期 × 小时统计，前端再折算到浏览器本地时区
@@ -467,6 +493,21 @@ export async function loadDashboardOverview(
         tools: {
             windowDays: AGENT_WINDOW_DAYS,
             items: toolRows.map((row) => ({
+                name: row.name,
+                count: num(row.count),
+                okCount: num(row.okCount),
+                avgMs: num(row.avgMs),
+            })),
+        },
+        externalSources: {
+            windowDays: AGENT_WINDOW_DAYS,
+            totalSources: num(scalars?.externalSources),
+            readySources: num(scalars?.externalSourcesReady),
+            totalQueries: num(scalars?.externalQueryTotal),
+            successQueries: num(scalars?.externalQuerySuccess),
+            errorQueries: num(scalars?.externalQueryErrors),
+            avgDurationMs: num(scalars?.externalQueryAvgMs),
+            tools: externalToolRows.map((row) => ({
                 name: row.name,
                 count: num(row.count),
                 okCount: num(row.okCount),

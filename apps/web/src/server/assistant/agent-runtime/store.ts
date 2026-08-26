@@ -121,11 +121,12 @@ export async function finishAgentRunRecord(input: {
 export async function persistTrace(trace: AgentTrace): Promise<void> {
     if (trace.steps.length === 0) return
     try {
+        const externalRun = traceContainsExternalSource(trace)
         await getDb().insert(agentTraceEvents).values(trace.steps.map((event) => ({
             runKey: trace.runId,
             sequence: event.sequence,
             eventType: event.type,
-            payloadJson: JSON.stringify(sanitizeExternalTracePayload(event.payload)),
+            payloadJson: JSON.stringify(sanitizeExternalTracePayload(event.payload, { externalRun })),
             toolId: typeof event.payload.toolId === "string" ? event.payload.toolId : null,
         }))).onConflictDoNothing()
 
@@ -135,7 +136,7 @@ export async function persistTrace(trace: AgentTrace): Promise<void> {
                 runKey: trace.runId,
                 sequence: trace.steps.length + index + 1,
                 eventType: call.ok ? "tool_result" : "error",
-                payloadJson: JSON.stringify(call.toolId.startsWith("geneops.")
+                payloadJson: JSON.stringify(isExternalSourceTool(call.toolId)
                     ? { ...call, input: { redacted: true }, rawOutput: { redacted: true } }
                     : call),
                 toolId: call.toolId,
@@ -147,7 +148,9 @@ export async function persistTrace(trace: AgentTrace): Promise<void> {
 }
 
 export async function persistEvidence(runKey: string, evidence: AgentEvidence[]): Promise<void> {
-    const persistentEvidence = evidence.filter(shouldPersistEvidence)
+    const persistentEvidence = evidence
+        .map(evidenceForPersistence)
+        .filter((item): item is AgentEvidence => item != null)
     if (persistentEvidence.length === 0) return
     try {
         await getDb().insert(agentEvidence).values(persistentEvidence.map((item) => ({
@@ -169,20 +172,53 @@ export async function persistEvidence(runKey: string, evidence: AgentEvidence[])
 }
 
 export function shouldPersistEvidence(item: AgentEvidence) {
-    return item.source !== "geneops" && item.metadata?.ephemeral !== true
+    return item.source === "geneops" || item.metadata?.ephemeral !== true
 }
 
-export function sanitizeExternalTracePayload(payload: Record<string, unknown>) {
+export function evidenceForPersistence(item: AgentEvidence): AgentEvidence | null {
+    if (!shouldPersistEvidence(item)) return null
+    if (item.source !== "geneops") return item
+    const { sourceId: _sourceId, metadata, ...rest } = item
+    return {
+        ...rest,
+        content: "",
+        metadata: {
+            ...(typeof metadata?.sourceRef === "string" ? { sourceRef: metadata.sourceRef } : {}),
+            ...(typeof metadata?.sourceName === "string" ? { sourceName: metadata.sourceName } : {}),
+            ...(typeof metadata?.queriedAt === "string" ? { queriedAt: metadata.queriedAt } : {}),
+            persistedMetadataOnly: true,
+        },
+    }
+}
+
+export function sanitizeExternalTracePayload(
+    payload: Record<string, unknown>,
+    options: { externalRun?: boolean } = {},
+) {
     const toolId = typeof payload.toolId === "string" ? payload.toolId : ""
     const source = typeof payload.source === "string" ? payload.source : ""
-    if (!toolId.startsWith("geneops.") && !source.startsWith("geneops.")) return payload
-    return {
+    const externalToolPayload = isExternalSourceTool(toolId) || isExternalSourceTool(source)
+    if (!externalToolPayload && !options.externalRun) return payload
+    const sanitized = {
         ...payload,
-        ...(payload.input !== undefined ? { input: { redacted: true } } : {}),
-        ...(payload.output !== undefined ? { output: { redacted: true } } : {}),
-        ...(payload.observation !== undefined ? { observation: { redacted: true } } : {}),
-        ...(payload.data !== undefined ? { data: { redacted: true } } : {}),
+        ...(externalToolPayload && payload.input !== undefined ? { input: { redacted: true } } : {}),
+        ...(externalToolPayload && payload.output !== undefined ? { output: { redacted: true } } : {}),
+        ...(externalToolPayload && payload.observation !== undefined ? { observation: { redacted: true } } : {}),
+        ...(externalToolPayload && payload.data !== undefined ? { data: { redacted: true } } : {}),
+        ...(options.externalRun && payload.goal !== undefined ? { goal: "[redacted]" } : {}),
+        ...(options.externalRun && Array.isArray(payload.steps)
+            ? { steps: { redacted: true, count: payload.steps.length } }
+            : {}),
     }
+    return sanitized
+}
+
+function isExternalSourceTool(value: string) {
+    return value.startsWith("geneops.") || value.startsWith("source.")
+}
+
+function traceContainsExternalSource(trace: AgentTrace) {
+    return trace.toolCalls.some((call) => isExternalSourceTool(call.toolId))
 }
 
 export async function persistSubtasks(runKey: string, trace: AgentTrace): Promise<void> {

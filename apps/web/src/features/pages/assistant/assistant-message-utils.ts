@@ -1,24 +1,37 @@
 import type { ToolCallMessagePartStatus } from "@assistant-ui/react"
 import type { ThreadTokenUsage, UseChatRuntimeOptions } from "@assistant-ui/react-ai-sdk"
 import type { AssistantFocus, AssistantThreadSummary } from "@/lib/api"
+import {
+  assistantSourceScopeFromFocus,
+  assistantSourceScopeSchema,
+  type AssistantSourceScope,
+} from "@/lib/assistant-source-contract"
 
 export type AssistantUIMessage = NonNullable<UseChatRuntimeOptions["messages"]>[number]
 
-export type AssistantFocusSelection =
-  | { kind: "none" }
-  | { kind: "knowledge"; knowledgeBaseId: string }
-  | { kind: "doc_library"; libraryId: string }
+export type AssistantFocusSelection = AssistantSourceScope
 
 export function focusToRequestBody(focus: AssistantFocusSelection): AssistantFocus | null {
-  if (focus.kind === "knowledge") return { knowledgeBaseId: focus.knowledgeBaseId }
-  if (focus.kind === "doc_library") return { libraryId: focus.libraryId }
-  return null
+  const sourceScope = assistantSourceScopeSchema.parse(focus)
+  if (sourceScope.mode !== "selected" || sourceScope.refs.length !== 1) return { sourceScope }
+  const ref = sourceScope.refs[0]!
+  if (ref.startsWith("knowledge-base:")) {
+    return { sourceScope, knowledgeBaseId: ref.slice("knowledge-base:".length) }
+  }
+  if (ref.startsWith("doc-library:")) {
+    return { sourceScope, libraryId: ref.slice("doc-library:".length) }
+  }
+  return { sourceScope }
 }
 
 export function focusFromThread(focus: AssistantFocus | null): AssistantFocusSelection {
-  if (focus?.knowledgeBaseId) return { kind: "knowledge", knowledgeBaseId: String(focus.knowledgeBaseId) }
-  if (focus?.libraryId) return { kind: "doc_library", libraryId: String(focus.libraryId) }
-  return { kind: "none" }
+  return assistantSourceScopeFromFocus(focus)
+}
+
+export function sourceScopesEqual(left: AssistantSourceScope, right: AssistantSourceScope) {
+  if (left.mode !== right.mode) return false
+  if (left.mode !== "selected" || right.mode !== "selected") return true
+  return left.refs.length === right.refs.length && left.refs.every((ref, index) => ref === right.refs[index])
 }
 
 export function threadRecencyKey(thread: AssistantThreadSummary) {

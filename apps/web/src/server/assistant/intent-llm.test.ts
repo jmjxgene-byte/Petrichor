@@ -133,7 +133,7 @@ describe("intent-llm", () => {
             model: {} as LanguageModel,
         })
         expect(result.source).toBe("rules")
-        expect(result.domains).toEqual(["system", "knowledge", "doc_library"])
+        expect(result.domains).toEqual(["system", "knowledge", "doc_library", "external_source"])
         expect(result.confidence).toBeLessThan(INTENT_LLM_CONFIDENCE_THRESHOLD)
     })
 

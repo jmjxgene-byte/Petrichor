@@ -1,4 +1,4 @@
-import { and, count, eq, isNull } from "drizzle-orm"
+import { and, count, eq, isNull, sql } from "drizzle-orm"
 import { z } from "zod"
 import { createLogger, toLogError } from "@/lib/logger"
 import { SerializableCitationSchema } from "@/components/tool-ui/citation/schema"
@@ -11,6 +11,7 @@ import {
     assistantThreads,
     docDocuments,
     docLibraries,
+    externalSources,
     knowledgeBaseArticles,
     knowledgeBases,
 } from "@/server/db/schema"
@@ -59,6 +60,12 @@ export async function listSystemOverview(userId: number) {
         .select({ total: count() })
         .from(assistantThreads)
         .where(and(eq(assistantThreads.userId, userId), isNull(assistantThreads.deletedAt)))
+    const [externalSourceRow] = await db
+        .select({
+            total: count(),
+            ready: sql<number>`coalesce(sum(case when ${externalSources.enabled} = true and ${externalSources.lastCheckStatus} = 'OK' and ${externalSources.contractVersion} = 1 then 1 else 0 end), 0)`,
+        })
+        .from(externalSources)
     // 用途绑定 + 模型/供应商都启用才算就绪
     const [chatModelReady, embeddingModelReady] = await Promise.all([
         hasUsableBinding(userId, "CHAT"),
@@ -71,6 +78,8 @@ export async function listSystemOverview(userId: number) {
         docLibraries: Number(docLibraryRow?.total ?? 0),
         documents: Number(documentRow?.total ?? 0),
         assistantThreads: Number(assistantThreadRow?.total ?? 0),
+        externalSources: Number(externalSourceRow?.total ?? 0),
+        externalSourcesReady: Number(externalSourceRow?.ready ?? 0),
         chatModelReady,
         embeddingModelReady,
     }
@@ -106,7 +115,7 @@ export const systemAssistantTools: AssistantToolRegistration[] = [
         name: "list_system_overview",
         domain: "system",
         risk: "read",
-        description: "读取当前用户的知识库、文章、文档库、文档、Assistant 对话计数，以及默认对话/向量模型是否就绪。",
+        description: "读取当前用户的知识库、文章、文档库、文档、实时资料源、Assistant 对话计数，以及默认对话/向量模型是否就绪。",
         inputSchema: z.object({}),
         execute: async (ctx, input) => {
             z.object({}).parse(input)

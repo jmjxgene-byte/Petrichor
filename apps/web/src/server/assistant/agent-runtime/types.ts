@@ -67,6 +67,7 @@ export type AgentObservation = {
 
 export type AgentEvidenceSource =
     | "knowledge"
+    | "document"
     | "wiki"
     | "web"
     | "memory"
@@ -174,6 +175,7 @@ export type RoutingHint = {
 // ============================================================================
 
 export type ToolNamespace =
+    | "source"
     | "knowledge"
     | "research"
     | "memory"
@@ -186,6 +188,7 @@ export type ToolNamespace =
     | "geneops"
 
 export const TOOL_NAMESPACES: ToolNamespace[] = [
+    "source",
     "knowledge",
     "research",
     "memory",

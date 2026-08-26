@@ -32,6 +32,14 @@ type ToolUiSpec = {
 }
 
 const TOOL_UI: Record<string, ToolUiSpec> = {
+    "source.lookup": { activityType: "knowledge_search", running: "正在跨资料源检索并深读", done: "跨资料源检索并深读", group: "sources" },
+    "source.search": { activityType: "knowledge_search", running: "正在搜索所选资料源", done: "搜索所选资料源", group: "sources" },
+    "source.read": { activityType: "knowledge_read", running: "正在深读资料来源", done: "深读资料来源", group: "sources" },
+    "geneops.search": { activityType: "web_search", running: "正在搜索 GeneOps 实时知识", done: "搜索 GeneOps 实时知识", group: "geneops" },
+    "geneops.read_chunks": { activityType: "web_read", running: "正在深读 GeneOps 内容", done: "深读 GeneOps 内容", group: "geneops" },
+    "geneops.graph_search": { activityType: "graph_search", running: "正在查询 GeneOps 图谱", done: "查询 GeneOps 图谱", group: "geneops" },
+    "geneops.graph_expand": { activityType: "graph_search", running: "正在展开 GeneOps 关联", done: "展开 GeneOps 关联", group: "geneops" },
+    "geneops.backlinks": { activityType: "graph_search", running: "正在读取 GeneOps 反向链接", done: "读取 GeneOps 反向链接", group: "geneops" },
     "knowledge.lookup": { activityType: "knowledge_search", running: "正在检索并阅读知识库", done: "检索并阅读知识库", group: "knowledge" },
     "knowledge.search": { activityType: "knowledge_search", running: "正在搜索知识库", done: "搜索知识库", group: "knowledge" },
     "knowledge.read_many": { activityType: "knowledge_read", running: "正在并行阅读知识章节", done: "并行阅读知识章节", group: "knowledge" },
@@ -63,6 +71,7 @@ const TOOL_UI: Record<string, ToolUiSpec> = {
 }
 
 const NAMESPACE_FALLBACK: Record<string, ToolUiSpec> = {
+    source: { activityType: "knowledge_search", running: "正在查询资料源", done: "查询资料源", group: "sources" },
     knowledge: { activityType: "knowledge_search", running: "正在使用知识库", done: "使用知识库", group: "knowledge" },
     graph: { activityType: "graph_search", running: "正在查询知识图谱", done: "查询知识图谱", group: "graph" },
     research: { activityType: "web_search", running: "正在查询外部资料", done: "查询外部资料", group: "research" },
@@ -72,6 +81,7 @@ const NAMESPACE_FALLBACK: Record<string, ToolUiSpec> = {
     admin: { activityType: "tool", running: "正在执行管理操作", done: "执行管理操作" },
     system: { activityType: "analysis", running: "正在分析", done: "分析", group: "system" },
     agent: { activityType: "delegation", running: "正在协调子任务", done: "协调子任务" },
+    geneops: { activityType: "web_search", running: "正在查询 GeneOps", done: "查询 GeneOps", group: "geneops" },
 }
 
 const GENERIC: ToolUiSpec = { activityType: "tool", running: "正在处理", done: "处理" }

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { FileText, Globe2, Library, Loader2, Trash2 } from "@/components/iconimate"
+import { Database, FileText, Globe2, Library, Loader2, Trash2 } from "@/components/iconimate"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -10,7 +10,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { type AssistantThreadSummary } from "@/lib/api"
+import { type AssistantSourceCatalogItem, type AssistantThreadSummary } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 import { focusFromThread, formatRelativeTime } from "./assistant-message-utils"
@@ -24,6 +24,7 @@ export function ThreadGroup({
   manageMode,
   selectedIds,
   onToggleSelect,
+  sourceCatalog,
 }: {
   label: string
   threads: AssistantThreadSummary[]
@@ -33,6 +34,7 @@ export function ThreadGroup({
   manageMode: boolean
   selectedIds: Set<string>
   onToggleSelect: (threadId: string) => void
+  sourceCatalog: AssistantSourceCatalogItem[]
 }) {
   return (
     <div className="px-2 pt-2 first:pt-0">
@@ -52,6 +54,7 @@ export function ThreadGroup({
             onDelete={() => onDelete(thread)}
             manageMode={manageMode}
             selected={selectedIds.has(thread.id)}
+            sourceCatalog={sourceCatalog}
           />
         ))}
       </div>
@@ -66,6 +69,7 @@ export function ThreadButton({
   onDelete,
   manageMode,
   selected,
+  sourceCatalog,
 }: {
   thread: AssistantThreadSummary
   active: boolean
@@ -73,8 +77,19 @@ export function ThreadButton({
   onDelete: () => void
   manageMode: boolean
   selected: boolean
+  sourceCatalog: AssistantSourceCatalogItem[]
 }) {
   const focus = focusFromThread(thread.focus)
+  const scopedSources = focus.mode === "selected"
+    ? sourceCatalog.filter((item) => focus.refs.includes(item.ref))
+    : []
+  const focusLabel = focus.mode === "selected"
+    ? scopedSources.length === 0
+      ? `${focus.refs.length} 个来源`
+      : scopedSources.length === 1
+        ? scopedSources[0]!.name
+        : `${scopedSources.slice(0, 1).map((item) => item.name).join("")} +${scopedSources.length - 1}`
+    : null
   const showSelectionHighlight = manageMode && selected
   return (
     <div
@@ -109,20 +124,24 @@ export function ThreadButton({
         <span className="block min-w-0 max-w-full overflow-hidden">
           <span className="block max-w-full truncate text-[13px] leading-tight">{thread.title}</span>
           <span className="mt-0.5 flex min-w-0 max-w-full items-center gap-1.5 overflow-hidden text-[10.5px] text-muted-foreground">
-            {focus.kind === "none" ? (
+            {focus.mode === "all" ? (
               <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-violet-500/10 px-1 py-px font-medium text-violet-600 dark:text-violet-300">
                 <Globe2 className="size-2.5" />
                 全部
               </span>
-            ) : focus.kind === "doc_library" ? (
+            ) : focus.mode === "local" ? (
               <span className="inline-flex min-w-0 max-w-[120px] shrink items-center gap-0.5 rounded-sm bg-muted px-1 py-px text-muted-foreground">
                 <FileText className="size-2.5 shrink-0" />
-                <span className="truncate">文档库</span>
+                <span className="truncate">仅本地</span>
               </span>
             ) : (
               <span className="inline-flex min-w-0 max-w-[120px] shrink items-center gap-0.5 rounded-sm bg-muted px-1 py-px text-muted-foreground">
-                <Library className="size-2.5 shrink-0" />
-                <span className="truncate">知识库</span>
+                {focus.refs.every((ref) => ref.startsWith("external-source:")) ? (
+                  <Database className="size-2.5 shrink-0" />
+                ) : <Library className="size-2.5 shrink-0" />}
+                <span className="truncate">
+                  {focusLabel ?? "指定来源"}
+                </span>
               </span>
             )}
             <span className="min-w-0 shrink truncate">{formatRelativeTime(thread.updatedAt)}</span>
