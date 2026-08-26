@@ -10,7 +10,14 @@ import { runSqliteMigration } from "./sqlite-migration"
 // Vitest、ESLint、tsc 仍由各自的 Node CLI 执行。Bun 专属模块必须惰性加载，
 // 这样质量工具可以导入服务端模块，而 Bun 开发/生产运行时进入 SQLite 分支时
 // 仍使用原生 bun:sqlite 与对应的 Drizzle 驱动。
-function loadSqliteDeps() {
+export function loadSqliteDeps() {
+    const bundled = (globalThis as Record<string, unknown>).__PETRICHOR_BUNDLED_SQLITE_RUNTIME__
+    if (bundled && typeof bundled === "object") {
+        return bundled as {
+            Database: typeof BunSqliteDatabase
+            drizzleSqlite: typeof drizzleSqliteType
+        }
+    }
     const require = createRequire(import.meta.url)
     const { Database } = require("bun:sqlite") as { Database: typeof BunSqliteDatabase }
     const { drizzle: drizzleSqlite } = require(
