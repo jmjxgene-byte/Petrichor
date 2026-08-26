@@ -39,6 +39,9 @@ import {
   detectFileType,
   DOC_LIBRARY_MAX_BATCH_FILES,
   DOC_LIBRARY_MAX_FILE_BYTES,
+  DOC_LIBRARY_MAX_MARKDOWN_BYTES,
+  DOC_LIBRARY_MAX_REGISTER_PAYLOAD_BYTES,
+  jsonPayloadByteLength,
   parseDocument,
 } from "@/features/pages/doc-library/lib/parse"
 import {
@@ -52,7 +55,7 @@ import {
 } from "@/lib/api"
 import { dashboardRoutes } from "@/lib/dashboard-routes"
 
-const ACCEPT = ".pdf,.docx,.csv,.tsv"
+const ACCEPT = ".pdf,.docx,.md,.markdown,.csv,.tsv"
 const TREE_NODE_INDENT_PX = 20
 
 type DocTreeNode =
@@ -475,16 +478,39 @@ export function DocLibraryBrowsePage() {
     if (!libraryId) return
     const fileType = detectFileType(file)
     if (!fileType) {
-      toast.error(`不支持的文件类型：${file.name}（仅支持 PDF / DOCX / CSV）`)
+      toast.error(`不支持的文件类型：${file.name}（仅支持 PDF / DOCX / Markdown / CSV）`)
       return
     }
-    if (file.size <= 0 || file.size > DOC_LIBRARY_MAX_FILE_BYTES) {
-      toast.error(`文件大小必须在 1 B 到 25 MB 之间：${file.name}`)
+    const maxFileBytes = fileType === "markdown"
+      ? DOC_LIBRARY_MAX_MARKDOWN_BYTES
+      : DOC_LIBRARY_MAX_FILE_BYTES
+    if (file.size <= 0 || file.size > maxFileBytes) {
+      const maxSizeLabel = fileType === "markdown" ? "2 MiB" : "25 MiB"
+      toast.error(`文件大小必须在 1 B 到 ${maxSizeLabel} 之间：${file.name}`)
       return
     }
 
-    setUploadProgress(`正在上传 ${file.name}...`)
+    setUploadProgress(`正在解析 ${file.name}...`)
+    const parsed = await parseDocument(file, fileType)
     const presign = await uploadApi.presignPut({ filename: file.name })
+    const registerPayload = {
+      libraryId,
+      folderId: uploadParentId,
+      fileName: file.name,
+      title: parsed.title ?? null,
+      fileType,
+      contentType: file.type || (fileType === "markdown" ? "text/markdown" : null),
+      objectKey: presign.data.objectKey,
+      sizeBytes: file.size,
+      pageCount: parsed.pageCount,
+      blocks: parsed.blocks,
+      chunks: parsed.chunks,
+    }
+    if (jsonPayloadByteLength(registerPayload) > DOC_LIBRARY_MAX_REGISTER_PAYLOAD_BYTES) {
+      throw new Error(`「${file.name}」解析内容过大，请拆分后再上传`)
+    }
+
+    setUploadProgress(`正在上传 ${file.name}...`)
     const putResponse = await fetch(presign.data.presignedUrl, {
       method: "PUT",
       body: file,
@@ -494,20 +520,8 @@ export function DocLibraryBrowsePage() {
       throw new Error(`上传失败：HTTP ${putResponse.status}`)
     }
 
-    setUploadProgress(`正在解析 ${file.name}...`)
-    const parsed = await parseDocument(file, fileType)
-    await docLibraryApi.registerDocument({
-      libraryId,
-      folderId: uploadParentId,
-      fileName: file.name,
-      fileType,
-      contentType: file.type || null,
-      objectKey: presign.data.objectKey,
-      sizeBytes: file.size,
-      pageCount: parsed.pageCount,
-      blocks: parsed.blocks,
-      chunks: parsed.chunks,
-    })
+    setUploadProgress(`正在登记 ${file.name}...`)
+    await docLibraryApi.registerDocument(registerPayload)
   }, [libraryId, uploadParentId])
 
   const handleFilesAccepted = React.useCallback(async (files: File[]) => {
@@ -977,7 +991,7 @@ export function DocLibraryBrowsePage() {
             multiple
             showFileList={false}
             title="拖拽文件到此处，或点击选择"
-            description="支持 PDF / Word / CSV；暂不支持 Excel"
+            description="支持 PDF / Word / Markdown / CSV；暂不支持 Excel"
             onFilesAccepted={handleFilesAccepted}
           />
         )}

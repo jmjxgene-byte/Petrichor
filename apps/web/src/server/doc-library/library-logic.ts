@@ -30,7 +30,7 @@ export const optionalIdSchema = z.union([z.string(), z.number(), z.null()]).opti
     return Number(raw)
 })
 
-export const FILE_TYPES = ["pdf", "docx", "csv"] as const
+export const FILE_TYPES = ["pdf", "docx", "csv", "markdown"] as const
 export type DocFileType = (typeof FILE_TYPES)[number]
 
 const MAX_CHUNKS = 4000
@@ -625,7 +625,7 @@ function parseJsonArray(value: string | null | undefined): unknown[] {
 export function assertFileType(value: unknown): DocFileType {
     const v = String(value ?? "").toLowerCase()
     if ((FILE_TYPES as readonly string[]).includes(v)) return v as DocFileType
-    throw badRequest("仅支持 PDF / DOCX / CSV")
+    throw badRequest("仅支持 PDF / DOCX / Markdown / CSV")
 }
 
 function decrementDocumentCountSql() {
