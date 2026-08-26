@@ -94,5 +94,7 @@ describe("全新数据库初始化 SQL", () => {
         expect(sql).not.toContain("create extension")
         expect(sql).toContain("create table if not exists petrichor_user")
         expect(sql).toContain("create table if not exists better_auth_user")
+        expect(sql).toContain("failed_verification_count integer not null default 0")
+        expect(sql).toContain("locked_until timestamptz")
     })
 })

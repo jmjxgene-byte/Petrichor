@@ -53,8 +53,14 @@ create table if not exists better_auth_two_factor (
     secret text not null,
     backup_codes text not null,
     verified boolean not null default true,
+    failed_verification_count integer not null default 0,
+    locked_until timestamptz,
     user_id text not null references better_auth_user(id) on delete cascade
 );
+
+alter table better_auth_two_factor
+    add column if not exists failed_verification_count integer not null default 0,
+    add column if not exists locked_until timestamptz;
 
 create index if not exists idx_better_auth_two_factor_user_id
     on better_auth_two_factor(user_id);

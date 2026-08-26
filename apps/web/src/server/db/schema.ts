@@ -123,6 +123,8 @@ export const betterAuthTwoFactors = pgTable("better_auth_two_factor", {
     secret: text("secret").notNull(),
     backupCodes: text("backup_codes").notNull(),
     verified: boolean("verified").notNull().default(true),
+    failedVerificationCount: integer("failed_verification_count").notNull().default(0),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
     userId: text("user_id").notNull().references(() => betterAuthUsers.id, { onDelete: "cascade" }),
 }, (table) => [
     index("idx_better_auth_two_factor_user_id").on(table.userId),

@@ -15,6 +15,9 @@
     },
     {
       "file": "2026-08-24-add-article-knowledge-build-jobs.sql"
+    },
+    {
+      "file": "2026-08-26-better-auth-two-factor-lockout.sql"
     }
   ]
 }
