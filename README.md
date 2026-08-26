@@ -13,12 +13,12 @@
 [![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)](https://vite.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com)
-[![Vercel](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel)](#-vercel-一键部署傻瓜式教程)
+[![Vercel](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel)](#-安全部署流程)
 
 [**🌐 产品介绍**](https://wl.do/tags) ·
 [**📖 在线 Demo（前台）**](https://wl.do)
 
-[**🚀 一键部署到 Vercel**](#-vercel-一键部署傻瓜式教程) ·
+[**🚀 安全部署到 Vercel**](#-安全部署流程) ·
 [功能特性](#-功能特性) ·
 [环境变量](#-环境变量速查表) ·
 [本地开发](#-本地开发) ·
@@ -64,173 +64,105 @@
 
 ---
 
-## 🚀 Vercel 一键部署（傻瓜式教程）
+## 🚀 安全部署流程
 
-> 整个过程大约 **5–10 分钟**，无需懂代码，只要会复制粘贴。
+> 生产部署不再执行“一键建库”。数据库权限、初始化与应用构建分离，避免 Vercel 构建拿到迁移凭据或公开注册被绕过。
 
-### 第 1 步：准备一个 Supabase 数据库（免费）
+### 第 1 步：创建全新 Supabase 项目
 
-1. 打开 <https://supabase.com>，注册并登录。
-2. 点击 **New Project**，填写项目名（如 `petrichor`），设置一个数据库密码，**密码记下来**。
-3. 等待数据库初始化完成（约 1–2 分钟）。
-4. 进入 **Project Settings → Database → Connection string**，选择 **Transaction (port 6543)** 模式，复制连接串。它形如：
-   ```
-   postgresql://postgres.xxxxxxx:你的密码@aws-1-us-west-2.pooler.supabase.com:6543/postgres
-   ```
-   这串就是后面要填的 **`DATABASE_URL`**。
-
-### 第 2 步：准备一个 S3 兼容的对象存储
-
-任选其一即可，都有免费额度：
-
-| 服务 | 推荐场景 | 链接 |
-| --- | --- | --- |
-| **缤纷云 Bitiful** | 国内访问快、免费额度大 | <https://www.bitiful.com> |
-| **AWS S3** | 标准方案 | <https://aws.amazon.com/s3/> |
-| **MinIO** | 自托管 | <https://min.io> |
-
-创建一个 Bucket（公开读权限），并获取以下信息：
-
-- **S3_ENDPOINT**：S3 API 地址，例如 `https://blog-1.s3.bitiful.net`
-- **S3_REGION**：区域，例如 `cn-east-1`、`us-east-1`、`auto`
-- **S3_BUCKET**：桶名
-- **S3_ACCESS_KEY_ID** / **S3_SECRET_ACCESS_KEY**：访问密钥对
-
-### 第 3 步：生成必要的密钥
-
-随机生成 3 串密钥，本地终端执行（macOS / Linux 通用）：
+1. 新建独立项目，建议选择与 Vercel Function 相同或相邻的区域。
+2. 保持 `public` schema 为空，不要手工粘贴初始化 SQL。
+3. 准备管理员连接、迁移角色密码、运行角色密码；两个角色密码必须不同且至少 32 位。
+4. 在本地配置 `SUPABASE_ADMIN_DATABASE_URL`、`PETRICHOR_MIGRATOR_PASSWORD`、`PETRICHOR_RUNTIME_PASSWORD`，执行：
 
 ```bash
-# SESSION_SECRET：32 字节 base64
-openssl rand -base64 32
-
-# PETRICHOR_ENCRYPT_KEY：32 字节 base64
-openssl rand -base64 32
-
-# PETRICHOR_ENCRYPT_SALT：8 字节 hex（16 位十六进制）
-openssl rand -hex 8
+bun install --frozen-lockfile
+bun db:provision
 ```
 
-> Windows 用户：可在 <https://www.random.org/bytes/> 上分别生成对应长度的随机串，或用 PowerShell 的 `[Convert]::ToBase64String((1..32 | %{[byte](Get-Random -Min 0 -Max 256)}))`。
+命令会启用 `pg_trgm` / `vector`，并创建最小权限的 `petrichor_migrator` 与 `petrichor_runtime`。详细约束见 [数据库初始化与迁移](docs/database-migrations.md)。
 
-把这 3 串结果先保存到记事本，待会儿填到部署平台。
+### 第 2 步：初始化数据库
 
-### 第 4 步：点击下方按钮，一键部署
+从 Supabase Connect 页面生成：
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FCiao1019%2FPetrichor&project-name=petrichor&repository-name=petrichor&env=DATABASE_URL,SESSION_SECRET,PETRICHOR_ENCRYPT_KEY,PETRICHOR_ENCRYPT_SALT,S3_ENDPOINT,S3_REGION,S3_BUCKET,S3_ACCESS_KEY_ID,S3_SECRET_ACCESS_KEY,APP_BASE_URL&envDescription=%E5%A1%AB%E5%85%A5%E6%95%B0%E6%8D%AE%E5%BA%93%E3%80%81%E4%BC%9A%E8%AF%9D%E5%AF%86%E9%92%A5%E3%80%81%E5%8A%A0%E5%AF%86%E5%AF%86%E9%92%A5%E5%92%8C%E5%AF%B9%E8%B1%A1%E5%AD%98%E5%82%A8%E7%AD%89%E5%BF%85%E5%A1%AB%E7%8E%AF%E5%A2%83%E5%8F%98%E9%87%8F&envLink=https%3A%2F%2Fgithub.com%2FCiao1019%2FPetrichor%23-%E7%8E%AF%E5%A2%83%E5%8F%98%E9%87%8F%E9%80%9F%E6%9F%A5%E8%A1%A8)
+- `MIGRATION_DATABASE_URL`：迁移角色 + Session Pooler 5432；
+- `DATABASE_URL`：运行角色 + Transaction Pooler 6543。
 
-按钮会自动：
+先执行一次 bootstrap，再确认后续迁移为空：
 
-- ✅ 把当前仓库 Fork 到你自己的 GitHub
-- ✅ 在 Vercel 创建一个新项目
-- ✅ 使用仓库根目录作为 **Root Directory**，读取根目录的 Bun workspace 与 Vercel 配置
-- ✅ 弹出表单让你填入所有**必填**环境变量
+```bash
+MIGRATION_DATABASE_URL=... bun db:bootstrap
+MIGRATION_DATABASE_URL=... bun db:migrate
+```
 
-按照下表把第 1–3 步收集到的值粘贴进去：
+bootstrap 会创建完整结构、登记增量迁移、启用 RLS，并撤销 `PUBLIC` / `anon` / `authenticated` / `service_role` 权限。第二次执行 bootstrap 会被拒绝。
 
-| 字段 | 填什么 |
-| --- | --- |
-| `DATABASE_URL` | 第 1 步 Supabase 的 Transaction Pooler 连接串 |
-| `SESSION_SECRET` | 第 3 步生成的 base64（必须 ≥ 32 字符） |
-| `PETRICHOR_ENCRYPT_KEY` | 第 3 步生成的 base64 |
-| `PETRICHOR_ENCRYPT_SALT` | 第 3 步生成的 16 位 hex |
-| `S3_ENDPOINT` | 第 2 步的 S3 接入点 |
-| `S3_REGION` | 第 2 步的区域名 |
-| `S3_BUCKET` | 第 2 步的桶名 |
-| `S3_ACCESS_KEY_ID` | 第 2 步的 Access Key ID |
-| `S3_SECRET_ACCESS_KEY` | 第 2 步的 Secret Access Key |
-| `APP_BASE_URL` | **先随便填 `http://localhost:3000`，部署完成后再来改成你的真实域名（如 `https://你的项目.vercel.app`）** |
+### 第 3 步：准备私有 S3 Bucket
 
-填完点 **Deploy**，等待 2–4 分钟构建完成。
+Bucket 保持私有，通过服务端生成的预签名 URL 上传和下载。CORS 只允许正式站点域名，并准备：
 
-### 第 5 步：初始化数据库表结构（只做一次）
+- `S3_ENDPOINT`
+- `S3_REGION`
+- `S3_BUCKET`
+- `S3_ACCESS_KEY_ID`
+- `S3_SECRET_ACCESS_KEY`
 
-部署完成后，先把数据库表建好，否则页面会报错。
+### 第 4 步：生成稳定密钥
 
-1. 在本地终端把项目克隆下来（用第 4 步 fork 出去的仓库）：
-   ```bash
-   git clone https://github.com/你的用户名/petrichor.git
-   cd petrichor
-   bun install
-   ```
-2. 生成初始化 SQL：
-   ```bash
-   bun --silent run db:sql > petrichor-init.sql
-   ```
-3. 打开 Supabase → **SQL Editor** → **New query**，把 `petrichor-init.sql` 全部内容粘贴进去，点 **Run** 执行。
-4. 看到 “Success. No rows returned” 即代表表结构已就绪。
+```bash
+openssl rand -base64 32 # SESSION_SECRET
+openssl rand -base64 32 # PETRICHOR_ENCRYPT_KEY
+openssl rand -hex 8     # PETRICHOR_ENCRYPT_SALT
+```
 
-> 不想本地装环境？直接打开仓库里的 [`docs/petrichor-init.sql`](docs/petrichor-init.sql) 复制粘贴也行。该文件随仓库提供，与最新表结构同步。
+这些值一旦用于真实数据不可随意更换。
 
-### 第 6 步：创建第一个超级管理员账号
+### 第 5 步：创建 Vercel 项目
 
-> ⚠️ **初始化 SQL 不会自动创建任何用户**。数据库刚跑完上一步时是空的，需要自己造一个超级管理员。
->
-> 二选一，**推荐方法 A**（不用写 SQL、不用懂 bcrypt）。
+以仓库根目录创建 Bun 项目。Production 只配置运行时 Sensitive Variables：
 
-#### 方法 A：临时开放注册 → 注册 → 关闭注册（推荐）
+- `DATABASE_URL`
+- `SESSION_SECRET`
+- `PETRICHOR_ENCRYPT_KEY`
+- `PETRICHOR_ENCRYPT_SALT`
+- `APP_BASE_URL`
+- `S3_*`
+- `PETRICHOR_REGISTRATION_MODE=disabled`
+- `PETRICHOR_PUBLIC_REGISTER_ENABLED=false`
 
-> 🎯 **首位管理员会自动产生**：当数据库里还没有任何 `SUPER_ADMIN` 时，**第一个注册成功的账号会自动成为超级管理员**，无需再手动配置 `PETRICHOR_REGISTER_DEFAULT_SYSTEM_ROLE`。之后再注册的账号才按默认角色（`USER`）创建。
+不要向 Vercel 配置管理员 URL、迁移 URL或数据库角色明文密码。Vercel 构建只执行应用构建，不会修改数据库。
 
-1. 在 Vercel → **Settings → Environment Variables** 新增一个变量（**所有环境**勾选 Production / Preview / Development）：
+### 第 6 步：创建首位超级管理员
 
-   | 变量 | 临时填 |
-   | --- | --- |
-   | `PETRICHOR_PUBLIC_REGISTER_ENABLED` | `true` |
+公开注册不会自动产生管理员。使用受控命令创建一次：
 
-2. 进入 **Deployments → ⋯ → Redeploy** 让新环境变量生效（约 2 分钟）。
-3. 打开你的 Vercel 域名 `https://你的项目.vercel.app/login`，**点「注册」**，填邮箱和密码，提交。系统里此时还没有管理员，这个账号会自动成为超级管理员。
-4. 注册成功后立即返回 Vercel → Environment Variables，把变量改回安全值：
+```bash
+PETRICHOR_ADMIN_EMAIL=admin@example.com \
+PETRICHOR_ADMIN_NAME=Admin \
+PETRICHOR_ADMIN_PASSWORD='至少12位强密码' \
+DATABASE_URL='运行角色连接串' \
+SESSION_SECRET='稳定会话密钥' \
+PETRICHOR_ENCRYPT_KEY='稳定加密密钥' \
+PETRICHOR_ENCRYPT_SALT='16位hex' \
+bun user:create-admin
+```
 
-   | 变量 | 改回 |
-   | --- | --- |
-   | `PETRICHOR_PUBLIC_REGISTER_ENABLED` | `false` |
+若系统中已存在超级管理员，命令会拒绝重复引导。生产环境保持 `PETRICHOR_REGISTRATION_MODE=disabled`。
 
-5. 再点一次 **Redeploy**，登录页的「注册」入口就消失了，从此只有管理员能从后台手动加用户。
+### 第 7 步：验证与发布
 
-#### 方法 B：直接在 Supabase SQL Editor 插入（需要本地 Bun）
+本地依次运行：
 
-1. 在本地仓库目录生成 bcrypt 密码哈希（先 `bun install` 安装依赖）：
-   ```bash
-   cd apps/web
-   bun -e "console.log(require('bcryptjs').hashSync('替换成你的明文密码', 10))"
-   ```
-   会输出形如 `$2a$10$...` 的哈希串，复制下来。
+```bash
+bun test
+bun typecheck
+bun lint
+bun build
+bun audit --audit-level=high
+```
 
-2. 打开 Supabase → SQL Editor，粘贴下面 SQL，把 3 个占位符替换后 **Run**：
-
-   ```sql
-   do $$
-   declare
-       v_email         text := 'admin@example.com';                    -- 改成你的邮箱
-       v_password_hash text := '$2a$10$把上一步的哈希粘贴到这里';        -- 改成上面生成的哈希
-       v_nickname      text := 'Admin';                                -- 显示名
-       v_auth_user_id  text := gen_random_uuid()::text;
-       v_username      text := split_part(v_email, '@', 1);
-   begin
-       insert into better_auth_user (id, name, email, email_verified, created_at, updated_at)
-       values (v_auth_user_id, v_nickname, lower(v_email), true, now(), now())
-       on conflict (email) do nothing;
-
-       insert into petrichor_user (auth_user_id, email, password_hash, system_role, user_type, username, nickname)
-       values (v_auth_user_id, lower(v_email), v_password_hash, 'SUPER_ADMIN', 'LOCAL', v_username, v_nickname)
-       on conflict (email) do nothing;
-
-       insert into better_auth_account (id, account_id, provider_id, user_id, password, created_at, updated_at)
-       values (gen_random_uuid()::text, v_auth_user_id, 'credential', v_auth_user_id, v_password_hash, now(), now())
-       on conflict (provider_id, account_id) do nothing;
-   end $$;
-   ```
-
-3. 用这个邮箱密码登录即可。
-
-### 第 7 步：回填 `APP_BASE_URL` 并重新部署
-
-1. 在 Vercel 项目首页找到自己分配到的域名，例如 `https://petrichor-abc123.vercel.app`。
-2. 进入 **Settings → Environment Variables**，把 `APP_BASE_URL` 改成上面这个域名（**不要带斜杠结尾**）。
-3. 进入 **Deployments**，对最新一次部署点 **⋯ → Redeploy**。
-
-**完成！** 🎉 用第 6 步创建的管理员账号登录，开始使用。
+部署后验证 `/healthz`、管理员登录、知识库 CRUD、AI 凭证加解密、S3 上传下载、公开文章与 RSS，再检查 Vercel Runtime Logs 和 Supabase Advisors。
 
 ---
 
@@ -242,7 +174,7 @@ openssl rand -hex 8
 | --- | --- | --- |
 | `DATABASE_URL` | Postgres 连接串，非空 | **所有数据持久化**：用户、文章、知识库、通知、AI 配置、上传记录等。生产环境务必使用 Supabase **Transaction Pooler** 连接串（端口 6543） |
 | `SESSION_SECRET` | base64 字符串，**至少 32 字符** | **登录会话 Cookie 签名**（Better Auth）。一旦上线**不要修改**，否则所有已登录用户会被踢下线 |
-| `PETRICHOR_ENCRYPT_KEY` | base64 字符串，建议 32 字节 | **AI 模型 API Key 加密存储**。用户在后台配置的 OpenAI / Gemini / DeepSeek API Key 都会用它加密后写入数据库 |
+| `PETRICHOR_ENCRYPT_KEY` | 稳定随机字符串，至少 32 字符 | **AI 模型 API Key 加密存储**。缺失时服务拒绝启动；一旦产生密文不可随意更换 |
 | `PETRICHOR_ENCRYPT_SALT` | 16 位十六进制字符串 | 与 `PETRICHOR_ENCRYPT_KEY` 配套使用的盐值。**一旦有真实数据后不能再换**，否则历史密文无法解密 |
 
 ### 📦 对象存储（上传相关功能依赖；不配则上传按钮会报错）
@@ -264,8 +196,8 @@ openssl rand -hex 8
 | 变量 | 用于什么功能 |
 | --- | --- |
 | `APP_BASE_URL` | **公开站点完整 URL**（如 `https://yourdomain.com`、`https://你的项目.vercel.app`）。用于：文章分享链接、RSS/Atom 链接生成、OAuth 回调地址 fallback、SEO `og:url`。部署完成后**务必回填**为真实域名 |
-| `PETRICHOR_PUBLIC_REGISTER_ENABLED` | 是否在登录页显示「注册」入口，`"true"` / `"false"`，默认 `"false"`（关闭注册，仅管理员手动添加用户） |
-| `PETRICHOR_REGISTER_DEFAULT_SYSTEM_ROLE` | 开放注册时新用户默认角色，只允许 `USER` 或 `SUPER_ADMIN`，默认 `USER`。**通常无需设置**：系统里还没有任何超级管理员时，第一个注册的账号会自动成为 `SUPER_ADMIN` |
+| `PETRICHOR_REGISTRATION_MODE` | 服务端权威注册模式，只允许 `disabled` / `open`，默认 `disabled`；Production 保持关闭 |
+| `PETRICHOR_PUBLIC_REGISTER_ENABLED` | 仅控制登录页是否显示注册入口；不能代替服务端注册模式校验 |
 | `PETRICHOR_SESSION_EXPIRE_SECONDS` | 登录态有效期（秒），默认 `172800`（2 天） |
 
 ### 🔗 LinuxDo OAuth（可选第三方登录）
@@ -328,7 +260,7 @@ Petrichor 内置了一套**面向外部 Agent**（Claude Code、Codex、Cursor�
 
 ```ini
 # 必填
-DATABASE_URL="postgres://postgres:[password]@[host]:6543/postgres"
+DATABASE_URL="postgres://petrichor_runtime.[project-ref]:[password]@[pooler-host]:6543/postgres"
 SESSION_SECRET="<openssl rand -base64 32 的输出>"
 PETRICHOR_ENCRYPT_KEY="<openssl rand -base64 32 的输出>"
 PETRICHOR_ENCRYPT_SALT="<openssl rand -hex 8 的输出>"
@@ -346,7 +278,7 @@ S3_USE_SSL="true"
 # 应用 URL 与注册策略
 APP_BASE_URL="https://yourdomain.com"
 PETRICHOR_PUBLIC_REGISTER_ENABLED="false"
-PETRICHOR_REGISTER_DEFAULT_SYSTEM_ROLE="USER"
+PETRICHOR_REGISTRATION_MODE="disabled"
 PETRICHOR_SESSION_EXPIRE_SECONDS="172800"
 
 # 可选：LinuxDo OAuth
@@ -374,8 +306,8 @@ bun install
 cp apps/web/.env.example apps/web/.env.local
 # 编辑 apps/web/.env.local 填入真实值
 
-# 初始化数据库（生成 SQL 后到 Supabase / psql 执行）
-bun --silent run db:sql > petrichor-init.sql
+# 本地开发可把 DATABASE_URL 改为 file:/tmp/petrichor-dev.sqlite；
+# 生产 Supabase 初始化见 docs/database-migrations.md。
 
 bun dev
 ```
@@ -461,24 +393,17 @@ bun test
 - 🌐 **Product site**: <https://petrichor.wl.do>
 - 📖 **Live demo (public site)**: <https://wl.do>
 
-### Quick deploy
+### Secure deploy
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FCiao1019%2FPetrichor&project-name=petrichor&repository-name=petrichor&env=DATABASE_URL,SESSION_SECRET,PETRICHOR_ENCRYPT_KEY,PETRICHOR_ENCRYPT_SALT,S3_ENDPOINT,S3_REGION,S3_BUCKET,S3_ACCESS_KEY_ID,S3_SECRET_ACCESS_KEY,APP_BASE_URL)
+1. Create a dedicated, empty Supabase project.
+2. Configure `SUPABASE_ADMIN_DATABASE_URL` and two distinct 32+ character role passwords, then run `bun db:provision` once.
+3. Build a Session Pooler URL for `petrichor_migrator` and run `bun db:bootstrap` once.
+4. Build a Transaction Pooler URL for `petrichor_runtime`; this is the only database URL stored in Vercel.
+5. Create a private S3-compatible bucket and stable session/encryption secrets.
+6. Create the first super-admin with `bun user:create-admin`; public sign-up never auto-promotes an administrator.
+7. Run tests, typecheck, lint, build and `bun audit --audit-level=high` before deploying.
 
-1. **Provision Postgres** — create a free Supabase project, copy the **Transaction Pooler** connection string (port 6543) as `DATABASE_URL`.
-2. **Provision object storage** — any S3-compatible service (Bitiful / AWS S3 / MinIO). Collect endpoint, region, bucket, access key, secret.
-3. **Generate secrets**:
-   ```bash
-   openssl rand -base64 32   # SESSION_SECRET
-   openssl rand -base64 32   # PETRICHOR_ENCRYPT_KEY
-   openssl rand -hex 8       # PETRICHOR_ENCRYPT_SALT
-   ```
-4. **Click the deploy button** above and fill the env form.
-5. **Initialize the database**: run `bun --silent run db:sql` (or copy [`docs/petrichor-init.sql`](docs/petrichor-init.sql)) into Supabase SQL Editor.
-6. **Create the first super-admin** — the init SQL does **not** seed any user. Two options:
-   - **Recommended (no SQL):** temporarily set `PETRICHOR_PUBLIC_REGISTER_ENABLED=true` on Vercel → redeploy → register from `/login`. While no super-admin exists yet, the **first registered account automatically becomes `SUPER_ADMIN`** — no need to touch `PETRICHOR_REGISTER_DEFAULT_SYSTEM_ROLE`. Then revert the var and redeploy.
-   - **Via SQL:** generate a bcrypt hash locally (`cd apps/web && bun -e "console.log(require('bcryptjs').hashSync('YourPwd', 10))"`) and run [`docs/create-first-admin.sql`](docs/create-first-admin.sql) in Supabase with your email + hash filled in.
-7. **Set `APP_BASE_URL`** to your deployed Vercel domain and redeploy.
+Database migrations are never run during a Vercel build. See [database initialization and migrations](docs/database-migrations.md) for the exact role, RLS and release workflow.
 
 ### Required env
 
@@ -494,8 +419,8 @@ bun test
 
 | Variable | Purpose |
 | --- | --- |
-| `PETRICHOR_PUBLIC_REGISTER_ENABLED` | Show the "Sign up" entry on the login page (`true` / `false`) |
-| `PETRICHOR_REGISTER_DEFAULT_SYSTEM_ROLE` | Default role for self-registered users — `USER` or `SUPER_ADMIN` (default `USER`). Usually unnecessary: the first account registered while no super-admin exists is auto-promoted to `SUPER_ADMIN` |
+| `PETRICHOR_REGISTRATION_MODE` | Authoritative server mode: `disabled` or `open`; keep production disabled |
+| `PETRICHOR_PUBLIC_REGISTER_ENABLED` | UI-only visibility of the sign-up entry; it never replaces the server gate |
 | `PETRICHOR_SESSION_EXPIRE_SECONDS` | Session lifetime in seconds (default `172800`) |
 | `PETRICHOR_LINUXDO_CLIENT_ID` / `PETRICHOR_LINUXDO_CLIENT_SECRET` / `PETRICHOR_LINUXDO_REDIRECT_URI` | LinuxDo OAuth (optional third-party login) |
 

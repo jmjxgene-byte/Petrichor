@@ -59,8 +59,10 @@ export const auth = betterAuth({
     }),
     emailAndPassword: {
         enabled: true,
+        // 只允许经过 /api/auth/register 的服务端策略注册，阻断 Better Auth 原生绕过入口。
+        disableSignUp: true,
         autoSignIn: true,
-        minPasswordLength: 6,
+        minPasswordLength: 12,
         password: {
             hash: (password) => Promise.resolve(bcrypt.hashSync(password, 10)),
             verify: ({ hash, password }) =>

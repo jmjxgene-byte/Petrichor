@@ -1,4 +1,5 @@
 import { buildInitialMigrationSql } from "@/server/db/full-migration"
+import type { Database as BunSqliteDatabase } from "bun:sqlite"
 
 function toSingleQuotedSql(value: string) {
     return `'${value.replace(/'/g, "''")}'`
@@ -37,7 +38,7 @@ function convertStatement(statement: string) {
     return replaceDollarQuotedStrings(statement)
         .replace(
             /(\s+original_author_name text,\n)(\s+revoked_at timestamptz,)/i,
-            "$1    pin_order integer,\n$2",
+            "$1    internal_url text,\n    pin_order integer,\n$2",
         )
         .replace(/\bbigint generated always as identity primary key\b/gi, "integer primary key autoincrement")
         .replace(/\bbigint\b/gi, "integer")
@@ -61,6 +62,21 @@ export function buildSqliteMigrationSql() {
     ].join(";\n\n")
 }
 
-export function runSqliteMigration(client: { exec: (sql: string) => unknown }) {
+function ensureSqliteColumn(
+    client: Pick<BunSqliteDatabase, "exec" | "query">,
+    table: string,
+    column: string,
+    definition: string,
+) {
+    const columns = client.query(`pragma table_info(${table})`).all() as Array<{ name: string }>
+    if (!columns.some((item) => item.name === column)) {
+        client.exec(`alter table ${table} add column ${column} ${definition}`)
+    }
+}
+
+export function runSqliteMigration(client: Pick<BunSqliteDatabase, "exec" | "query">) {
     client.exec(buildSqliteMigrationSql())
+    // 兼容在 internal_url / pin_order 引入前已经创建的本地 SQLite 文件。
+    ensureSqliteColumn(client, "petrichor_kb_article_share", "internal_url", "text")
+    ensureSqliteColumn(client, "petrichor_kb_article_share", "pin_order", "integer")
 }

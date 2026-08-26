@@ -1,38 +1,80 @@
-# 数据库自动迁移
+# 数据库初始化与迁移
 
-Vercel production 部署会先执行数据库增量迁移，成功后才开始 Vite 前端构建与 Bun 服务打包。
-Preview 和 Development 部署默认跳过迁移，避免预览分支误改生产数据库。
+Petrichor 把数据库结构变更与 Vercel 构建完全分开。发布顺序固定为：
 
-## 工作方式
+**备份 → 迁移 → 验证 → 部署**
 
-- `docs/migrations/manifest.json` 是唯一自动执行清单，历史回滚和删除脚本不会被目录扫描误执行。
-- `petrichor_schema_migration` 记录文件名、SHA-256、执行时间和完成时间。
-- PostgreSQL transaction advisory lock 保证并发部署不会同时迁移。
-- 清单中的待执行迁移在同一事务内运行；任一语句失败会整体回滚并阻止部署。
-- 已执行文件的校验和变化会阻止部署。不要修改旧迁移，应新增一个后续迁移。
+`MIGRATION_DATABASE_URL` 只存在于受控本地/CI 环境，不得配置到 Vercel。Vercel 运行时只持有权限受限的 `DATABASE_URL`。
 
-## 新增迁移
+## 全新 Supabase 项目
 
-1. 在 `docs/migrations/` 新增按日期命名的 `.sql` 文件。
-2. 把文件按升序登记到 `docs/migrations/manifest.json`。
-3. 本地执行测试和类型检查，然后提交 SQL 与清单。
-4. 合并到生产分支后，Vercel 自动执行尚未执行的文件。
-
-自动迁移必须能在 PostgreSQL 事务内运行。`CREATE INDEX CONCURRENTLY` 等不能在事务内
-执行的操作，需要拆成专门的人工运维步骤，不得直接登记到自动迁移清单。
-
-## 环境变量
-
-Vercel Production 环境至少需要 `DATABASE_URL`。建议额外配置
-`MIGRATION_DATABASE_URL`，使用数据库直连或 session pooler 连接；迁移执行器会优先使用它。
-该变量只用于构建期迁移，不会暴露给浏览器。
-
-## 命令
+项目必须使用空的 `public` schema。先生成两个不同的强密码，并配置：
 
 ```bash
-# 本地/运维环境执行全部待处理迁移
-DATABASE_URL=... bun db:migrate
-
-# Vercel 构建入口；非 production 环境会跳过迁移
-VERCEL_ENV=production DATABASE_URL=... bun vercel-build
+SUPABASE_ADMIN_DATABASE_URL=postgres://postgres:...@...:5432/postgres
+PETRICHOR_MIGRATOR_PASSWORD=至少32位随机密码
+PETRICHOR_RUNTIME_PASSWORD=另一个至少32位随机密码
 ```
+
+执行一次：
+
+```bash
+bun db:provision
+```
+
+该命令会：
+
+- 启用 `pg_trgm` 与 `vector`；
+- 创建 `petrichor_migrator` 与 `petrichor_runtime`；
+- 限制角色权限、连接 search path 与查询超时；
+- 拒绝在已有 public 表或已有同名角色的项目中运行。
+
+完成后移除管理员连接和两个明文角色密码。根据 Supabase Connect 页面生成：
+
+- `MIGRATION_DATABASE_URL`：`petrichor_migrator` + Session Pooler 5432；
+- `DATABASE_URL`：`petrichor_runtime` + Transaction Pooler 6543。
+
+密码中的特殊字符必须进行 URL percent-encode。
+
+## 首次 bootstrap
+
+```bash
+MIGRATION_DATABASE_URL=... bun db:bootstrap
+```
+
+bootstrap 在同一个数据库事务中：
+
+1. 校验当前角色、schema 和必需扩展；
+2. 拒绝任何已有 Petrichor 表的数据库；
+3. 创建完整基础结构；
+4. 执行 `docs/migrations/manifest.json` 中尚未登记的迁移；
+5. 创建 `petrichor_schema_migration` ledger；
+6. 为应用表启用 RLS，仅向 `petrichor_runtime` 授权；
+7. 撤销 `PUBLIC`、`anon`、`authenticated`、`service_role` 权限。
+
+再次运行 bootstrap 会被明确拒绝，避免误把初始化当作普通迁移。
+
+## 后续迁移
+
+```bash
+MIGRATION_DATABASE_URL=... bun db:migrate
+```
+
+- `manifest.json` 是唯一执行清单，必须按文件名升序；
+- `petrichor_schema_migration` 保存文件名、SHA-256 和耗时；
+- 已执行迁移的 checksum 发生变化时会阻止发布；
+- 所有待执行迁移与 RLS 加固位于同一个事务；
+- `CREATE INDEX CONCURRENTLY` 等不能在事务内运行的操作必须单独走人工运维步骤。
+
+新增迁移时创建新的 `.sql` 文件并登记到 manifest，禁止修改已执行文件。
+
+## Vercel
+
+`bun vercel-build` 只执行应用构建，不连接数据库，也不执行迁移。Production 环境不要配置：
+
+- `MIGRATION_DATABASE_URL`
+- `SUPABASE_ADMIN_DATABASE_URL`
+- `PETRICHOR_MIGRATOR_PASSWORD`
+- `PETRICHOR_RUNTIME_PASSWORD`
+
+这些值只用于初始化或本地迁移，完成后应从当前 shell 和临时文件中清除。

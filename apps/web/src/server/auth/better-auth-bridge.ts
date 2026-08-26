@@ -5,7 +5,6 @@ import { getDb } from "@/server/db/client"
 import { betterAuthAccounts, betterAuthUsers, users } from "@/server/db/schema"
 import type { BetterAuthUserRecord, UserRecord } from "@/server/db/schema"
 import { badRequest, unauthorized } from "@/server/http/response"
-import { resolveRegisterDefaultSystemRole } from "./register-policy"
 
 type DbClient = Pick<ReturnType<typeof getDb>, "select">
 
@@ -15,21 +14,6 @@ export async function hasExistingSuperAdmin(db: DbClient = getDb()): Promise<boo
         .from(users)
         .where(eq(users.systemRole, "SUPER_ADMIN"))
     return (row?.value ?? 0) > 0
-}
-
-/**
- * 决定新注册用户的系统角色：
- * - 若系统中尚无任何 SUPER_ADMIN，则首个注册账号自动成为 SUPER_ADMIN（引导首位管理员）。
- * - 否则沿用请求角色（默认取自 PETRICHOR_REGISTER_DEFAULT_SYSTEM_ROLE）。
- */
-export async function resolveSystemRoleForNewUser(
-    requestedRole: "USER" | "SUPER_ADMIN" = resolveRegisterDefaultSystemRole(),
-    db: DbClient = getDb(),
-): Promise<"USER" | "SUPER_ADMIN"> {
-    if (requestedRole === "SUPER_ADMIN") {
-        return "SUPER_ADMIN"
-    }
-    return (await hasExistingSuperAdmin(db)) ? "USER" : "SUPER_ADMIN"
 }
 
 export interface BetterAuthUserLike {
@@ -112,7 +96,7 @@ export async function ensurePetrichorUserForBetterAuthUser(
             authUserId: authUser.id,
             email: normalizedEmail,
             passwordHash: options.passwordHash ?? "",
-            systemRole: options.systemRole ?? (await resolveSystemRoleForNewUser(undefined, db)),
+            systemRole: options.systemRole ?? "USER",
             userType: options.userType ?? "LOCAL",
             username: displayName,
             nickname: displayName,
@@ -237,12 +221,11 @@ export async function createLocalUserWithBetterAuth(input: {
             userId: authUserId,
             password: passwordHash,
         })
-        const systemRole = await resolveSystemRoleForNewUser(input.systemRole, tx)
         return await tx.insert(users).values({
             authUserId,
             email: normalizedEmail,
             passwordHash,
-            systemRole,
+            systemRole: input.systemRole,
             userType: "LOCAL",
             username: username || null,
             nickname: input.name || null,

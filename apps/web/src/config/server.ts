@@ -38,6 +38,23 @@ const optionalTrimmedStringFromEnv = () =>
             return raw || null
         })
 
+const registrationModeFromEnv = () =>
+    z
+        .string()
+        .optional()
+        .transform((value, ctx) => {
+            const raw = value?.trim().toLowerCase() || "disabled"
+            if (raw === "disabled" || raw === "open") {
+                return raw
+            }
+
+            ctx.addIssue({
+                code: "custom",
+                message: "PETRICHOR_REGISTRATION_MODE 只支持 disabled 或 open",
+            })
+            return z.NEVER
+        })
+
 const trimmedStringFromEnv = (fallback: string) =>
     z
         .string()
@@ -90,6 +107,12 @@ const s3EnvShape = {
 const serverEnvSchema = z.object({
     DATABASE_URL: z.string().trim().min(1, "DATABASE_URL 不能为空"),
     ...s3EnvShape,
+    PETRICHOR_ENCRYPT_KEY: z.string().trim().min(32, "PETRICHOR_ENCRYPT_KEY 至少需要 32 个字符"),
+    PETRICHOR_ENCRYPT_SALT: z.string().trim().regex(
+        /^[0-9a-fA-F]{16}$/,
+        "PETRICHOR_ENCRYPT_SALT 必须是 16 位十六进制字符串",
+    ),
+    PETRICHOR_REGISTRATION_MODE: registrationModeFromEnv(),
     PETRICHOR_STORAGE_DIR: optionalTrimmedStringFromEnv(),
     PETRICHOR_SESSION_EXPIRE_SECONDS: positiveIntegerFromEnv(
         "PETRICHOR_SESSION_EXPIRE_SECONDS",
@@ -107,8 +130,15 @@ const formatConfigIssues = (issues: Array<{ message: string; path: PropertyKey[]
         .join("; ")
 
 export interface ServerConfig {
+    apiEncryption: {
+        key: string
+        salt: string
+    }
     databaseUrl: string
     localStorageDir: string | null
+    registration: {
+        mode: "disabled" | "open"
+    }
     s3: S3Config | null
     session: {
         expiresInSeconds: number
@@ -155,8 +185,15 @@ export function loadServerConfigFromEnv(env: EnvSource = process.env): ServerCon
     }
 
     return {
+        apiEncryption: {
+            key: parsed.data.PETRICHOR_ENCRYPT_KEY,
+            salt: parsed.data.PETRICHOR_ENCRYPT_SALT.toLowerCase(),
+        },
         databaseUrl: parsed.data.DATABASE_URL,
         localStorageDir: parsed.data.PETRICHOR_STORAGE_DIR,
+        registration: {
+            mode: parsed.data.PETRICHOR_REGISTRATION_MODE,
+        },
         s3: toS3Config(parsed.data),
         session: {
             expiresInSeconds: parsed.data.PETRICHOR_SESSION_EXPIRE_SECONDS,

@@ -1,0 +1,5 @@
+process.env.DATABASE_URL ??= "file:/tmp/petrichor-vitest.sqlite"
+process.env.SESSION_SECRET ??= "01234567890123456789012345678901"
+process.env.PETRICHOR_ENCRYPT_KEY ??= "petrichor-vitest-encryption-key-32"
+process.env.PETRICHOR_ENCRYPT_SALT ??= "0123456789abcdef"
+process.env.PETRICHOR_REGISTRATION_MODE ??= "disabled"

@@ -4,6 +4,7 @@
  */
 
 import { badRequest } from "@/server/http/response"
+import { getServerConfig } from "@/config/server"
 import type {
     AiBindingRecord,
     AiCredentialRecord,
@@ -34,9 +35,6 @@ export const PURPOSE_MODEL_KIND: Record<AiPurpose, ProviderModelKind> = {
     DOC_QA: "LANGUAGE",
     EMBEDDING: "EMBEDDING",
 }
-
-const defaultEncryptKey = "Ek4EhsOIVMQZ2gMAuJXJzUPjCZOjyKIt"
-const defaultEncryptSalt = "57da7a247bba15d0"
 
 // ===== 加解密 =====
 
@@ -83,10 +81,7 @@ export function maskApiKey(apiKey: string) {
 }
 
 function getApiKeyCryptoSettings() {
-    return {
-        key: process.env.PETRICHOR_ENCRYPT_KEY?.trim() || process.env.AI_CONFIG_ENCRYPT_KEY?.trim() || defaultEncryptKey,
-        salt: process.env.PETRICHOR_ENCRYPT_SALT?.trim() || process.env.AI_CONFIG_ENCRYPT_SALT?.trim() || defaultEncryptSalt,
-    }
+    return getServerConfig().apiEncryption
 }
 
 // ===== 通用解析 =====

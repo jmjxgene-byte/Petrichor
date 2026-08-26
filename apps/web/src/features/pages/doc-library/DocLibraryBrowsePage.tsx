@@ -35,7 +35,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { FileUpload } from "@/components/extend/ui/file-upload"
 import { DocViewerPanel, type DocViewerHighlight } from "@/features/pages/doc-library/DocViewerPanel"
-import { detectFileType, parseDocument } from "@/features/pages/doc-library/lib/parse"
+import {
+  detectFileType,
+  DOC_LIBRARY_MAX_BATCH_FILES,
+  DOC_LIBRARY_MAX_FILE_BYTES,
+  parseDocument,
+} from "@/features/pages/doc-library/lib/parse"
 import {
   docLibraryApi,
   uploadApi,
@@ -47,7 +52,7 @@ import {
 } from "@/lib/api"
 import { dashboardRoutes } from "@/lib/dashboard-routes"
 
-const ACCEPT = ".pdf,.docx,.xlsx,.xls,.csv,.tsv"
+const ACCEPT = ".pdf,.docx,.csv,.tsv"
 const TREE_NODE_INDENT_PX = 20
 
 type DocTreeNode =
@@ -470,7 +475,11 @@ export function DocLibraryBrowsePage() {
     if (!libraryId) return
     const fileType = detectFileType(file)
     if (!fileType) {
-      toast.error(`不支持的文件类型：${file.name}（仅支持 PDF / docx / xlsx / csv）`)
+      toast.error(`不支持的文件类型：${file.name}（仅支持 PDF / DOCX / CSV）`)
+      return
+    }
+    if (file.size <= 0 || file.size > DOC_LIBRARY_MAX_FILE_BYTES) {
+      toast.error(`文件大小必须在 1 B 到 25 MB 之间：${file.name}`)
       return
     }
 
@@ -503,9 +512,13 @@ export function DocLibraryBrowsePage() {
 
   const handleFilesAccepted = React.useCallback(async (files: File[]) => {
     if (files.length === 0) return
+    const acceptedFiles = files.slice(0, DOC_LIBRARY_MAX_BATCH_FILES)
+    if (files.length > acceptedFiles.length) {
+      toast.error(`一次最多处理 ${DOC_LIBRARY_MAX_BATCH_FILES} 个文件，已忽略多余文件`)
+    }
     setUploading(true)
     let success = 0
-    for (const file of files) {
+    for (const file of acceptedFiles) {
       try {
         await uploadOne(file)
         success += 1
@@ -964,7 +977,7 @@ export function DocLibraryBrowsePage() {
             multiple
             showFileList={false}
             title="拖拽文件到此处，或点击选择"
-            description="支持 PDF / Word / Excel / CSV"
+            description="支持 PDF / Word / CSV；暂不支持 Excel"
             onFilesAccepted={handleFilesAccepted}
           />
         )}

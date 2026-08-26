@@ -1,25 +1,19 @@
 import fs from "node:fs"
 import path from "node:path"
 import postgres from "postgres"
+import { splitSqlStatements } from "../src/server/db/migration-utils"
 
 const file = process.argv[2]
 if (!file) {
     throw new Error("用法：bun scripts/run-sql-file.ts <path-to-sql>")
 }
-const url = process.env.DATABASE_URL
+const url = process.env.MIGRATION_DATABASE_URL
 if (!url) {
-    throw new Error("DATABASE_URL 未设置")
+    throw new Error("MIGRATION_DATABASE_URL 未设置")
 }
 
 const raw = fs.readFileSync(path.resolve(file), "utf8")
-// 去掉整行注释后按分号切分，逐条执行（Supabase 连的是事务池，多语句一次发容易出问题）
-const statements = raw
-    .split("\n")
-    .filter((line) => !line.trim().startsWith("--"))
-    .join("\n")
-    .split(";")
-    .map((piece) => piece.trim())
-    .filter((piece) => piece.length > 0)
+const statements = splitSqlStatements(raw)
 
 const sql = postgres(url, { max: 1, prepare: false })
 

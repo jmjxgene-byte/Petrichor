@@ -6,6 +6,7 @@ import {
     parseMigrationManifest,
     splitSqlStatements,
 } from "./migration-utils"
+import { buildInitialMigrationSql } from "./full-migration"
 
 describe("数据库迁移清单", () => {
     it("读取按顺序登记的 SQL 文件", () => {
@@ -83,5 +84,15 @@ describe("迁移文件校验和", () => {
     it("对相同内容生成稳定校验和", () => {
         expect(migrationChecksum("select 1")).toBe(migrationChecksum("select 1"))
         expect(migrationChecksum("select 1")).not.toBe(migrationChecksum("select 2"))
+    })
+})
+
+describe("全新数据库初始化 SQL", () => {
+    it("扩展由专用 provision 阶段创建，初始化 SQL 只负责应用结构", () => {
+        const sql = buildInitialMigrationSql()
+
+        expect(sql).not.toContain("create extension")
+        expect(sql).toContain("create table if not exists petrichor_user")
+        expect(sql).toContain("create table if not exists better_auth_user")
     })
 })

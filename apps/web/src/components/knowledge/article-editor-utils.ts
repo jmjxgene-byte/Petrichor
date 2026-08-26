@@ -2,7 +2,7 @@ import type { ArticleDetailResponse } from "@/lib/api"
 
 export const MARKDOWN_IMPORT_MAX_FILE_BYTES = 2 * 1024 * 1024
 export const DOCX_IMPORT_MAX_FILE_BYTES = 25 * 1024 * 1024
-export const DOCUMENT_IMPORT_MAX_FILE_BYTES = 100 * 1024 * 1024
+export const DOCUMENT_IMPORT_MAX_FILE_BYTES = 25 * 1024 * 1024
 
 export type ArticleEditorSnapshot = {
   title: string
@@ -69,7 +69,7 @@ export function validateDocumentImportFile(file: { name: string; size: number })
     return "请选择 .pdf 格式的文档"
   }
   if (file.size > DOCUMENT_IMPORT_MAX_FILE_BYTES) {
-    return "文档过大，单个文件不能超过 100 MB"
+    return "文档过大，单个文件不能超过 25 MB"
   }
   if (file.size === 0) {
     return "文档为空，无法导入"
@@ -116,7 +116,7 @@ export function validateMarkdownImportText(markdown: string): string | null {
 }
 
 /** 批量导入一次允许选择的最大文件数量 */
-export const BATCH_IMPORT_MAX_FILES = 50
+export const BATCH_IMPORT_MAX_FILES = 10
 
 export interface ImportFileIdentity {
   name: string

@@ -77,18 +77,17 @@ StopPolicy / LoopDetection / Trace / Budget。
 ## 数据库迁移
 
 新增表与 BM25 索引列在 `docs/migrations/2026-08-18-agent-runtime-v2.sql`，
-并已登记到 `docs/migrations/manifest.json`。Vercel production 部署会在构建前自动执行；
-本地或紧急情况下也可以手动执行：
+并已登记到 `docs/migrations/manifest.json`。数据库迁移与 Vercel 构建分离，发布前执行：
 
 ```bash
-DATABASE_URL=... bun db:run-sql docs/migrations/2026-08-18-agent-runtime-v2.sql
+MIGRATION_DATABASE_URL=... bun db:migrate
 ```
 
 未执行时 Runtime 仍能正常回答（持久化层读写都 fail-open），但会失去：
 Trace/Evidence 落库、刷新恢复执行面板、Debug 页面数据。
 日志会带 `code: 42P01` 与该跑哪个迁移的提示。
 
-全新安装走 `bun db:sql` 生成的初始化 SQL，其中已包含这些表与列。
+全新安装先执行 `bun db:provision`，再执行 `bun db:bootstrap`；初始化结构已包含这些表与列。
 
 ## Feature Flag
 

@@ -5,15 +5,11 @@
  */
 
 import type { AppRequest } from "@/server/http/request"
+import type { RouteHandler } from "@/server/bun/types"
 import { checkRateLimit, type RateLimitConfig } from "@/lib/rate-limit"
 import { createLogger } from "@/lib/logger"
 
 const logger = createLogger("api-rate-limit")
-
-type RouteHandler = (
-    req: AppRequest,
-    context?: { params: Record<string, string> }
-) => Promise<Response> | Response
 
 /**
  * 从请求中提取客户端标识符（IP 地址）
@@ -79,7 +75,7 @@ export function withRateLimit(
     handler: RouteHandler,
     config?: RateLimitConfig
 ): RouteHandler {
-    return async (req, context) => {
+    return async (req: AppRequest, context) => {
         const identifier = getClientIdentifier(req)
         const { allowed, remaining, resetAt, limit } = checkRateLimit(identifier, config)
 
@@ -129,7 +125,7 @@ export function withUserRateLimit(
     handler: RouteHandler,
     config?: RateLimitConfig
 ): RouteHandler {
-    return async (req, context) => {
+    return async (req: AppRequest, context) => {
         // 这里需要根据你的认证系统获取用户 ID
         // 示例：从 session 或 JWT 中提取
         const userId = req.headers.get("x-user-id") || getClientIdentifier(req)

@@ -87,6 +87,11 @@ describe("SQLite 迁移", () => {
         }
     })
 
+    it("文章分享表包含当前公开路由依赖的兼容列", () => {
+        expect(sql).toContain("internal_url text")
+        expect(sql).toContain("pin_order integer")
+    })
+
     it("词元列存在（alter table 被跳过，只能靠 create table 带出来）", () => {
         for (const column of BM25_COLUMNS) {
             expect(sql, column).toContain(column)

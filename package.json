@@ -12,12 +12,14 @@
     "dev": "bun run --cwd apps/web dev",
     "build": "bun run --cwd apps/web build",
     "start": "bun run --cwd apps/web start",
-    "vercel-build": "bun run db:migrate:vercel && bun run build",
+    "vercel-build": "bun run build",
     "db:backfill-public-article-metadata": "bun run --cwd apps/web db:backfill-public-article-metadata",
     "db:sql": "bun run --silent --cwd apps/web db:sql",
     "db:run-sql": "bun run --cwd apps/web db:run-sql",
+    "db:provision": "bun run --cwd apps/web db:provision",
+    "db:bootstrap": "bun run --cwd apps/web db:bootstrap",
     "db:migrate": "bun run --cwd apps/web db:migrate",
-    "db:migrate:vercel": "bun run --cwd apps/web db:migrate:vercel",
+    "user:create-admin": "bun run --cwd apps/web user:create-admin",
     "lint": "bun run --cwd apps/web lint",
     "test": "bun run --cwd apps/web test",
     "typecheck": "bun run --cwd apps/web typecheck"
@@ -28,9 +30,25 @@
   "trustedDependencies": [
     "esbuild",
     "msgpackr-extract",
-    "sharp",
     "unrs-resolver"
   ],
+  "overrides": {
+    "@excalidraw/excalidraw": "0.18.1",
+    "@hono/node-server": "2.1.1",
+    "brace-expansion": "1.1.18",
+    "dompurify": "3.4.14",
+    "fast-uri": "3.1.5",
+    "hono": "4.13.4",
+    "immutable": "4.3.9",
+    "ip-address": "10.5.0",
+    "js-yaml": "4.3.1",
+    "lodash-es": "4.18.1",
+    "mermaid": "11.16.1",
+    "nanoid": "5.1.16",
+    "next": "16.2.11",
+    "postcss": "8.5.26",
+    "sharp": "0.35.3"
+  },
   "patchedDependencies": {
     "@lobehub/ui@5.15.17": "patches/@lobehub__ui@5.15.17.patch"
   }

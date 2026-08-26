@@ -2,20 +2,29 @@ import { describe, expect, it } from "vitest"
 import { loadServerConfigFromEnv } from "./server"
 
 describe("loadServerConfigFromEnv", () => {
-    it("服务端运行只要求数据库连接和 Session 密钥", () => {
+    const requiredSecrets = {
+        PETRICHOR_ENCRYPT_KEY: "k".repeat(32),
+        PETRICHOR_ENCRYPT_SALT: "0123456789abcdef",
+    }
+
+    it("服务端运行要求数据库、Session 和稳定加密密钥", () => {
         const config = loadServerConfigFromEnv({
             DATABASE_URL: "postgres://user:pass@example.supabase.co:5432/postgres",
             SESSION_SECRET: "x".repeat(32),
+            ...requiredSecrets,
         })
 
         expect(config.databaseUrl).toBe("postgres://user:pass@example.supabase.co:5432/postgres")
         expect(config.s3).toBeNull()
         expect(config.session.expiresInSeconds).toBe(60 * 60 * 24 * 2)
+        expect(config.registration.mode).toBe("disabled")
+        expect(config.apiEncryption.salt).toBe("0123456789abcdef")
     })
 
     it("读取 Session 与 S3 配置", () => {
         const config = loadServerConfigFromEnv({
             DATABASE_URL: "postgres://user:pass@example.supabase.co:5432/postgres",
+            ...requiredSecrets,
             PETRICHOR_SESSION_EXPIRE_SECONDS: "604800",
             SESSION_SECRET: "x".repeat(32),
             S3_ACCESS_KEY_ID: "ak",
@@ -44,9 +53,40 @@ describe("loadServerConfigFromEnv", () => {
         expect(() =>
             loadServerConfigFromEnv({
                 DATABASE_URL: "postgres://user:pass@example.supabase.co:5432/postgres",
+                ...requiredSecrets,
                 PETRICHOR_SESSION_EXPIRE_SECONDS: "0",
                 SESSION_SECRET: "x".repeat(32),
             }),
         ).toThrow("PETRICHOR_SESSION_EXPIRE_SECONDS")
+    })
+
+    it("拒绝缺失或非法的凭证加密配置", () => {
+        expect(() => loadServerConfigFromEnv({
+            DATABASE_URL: "postgres://user:pass@example.supabase.co:5432/postgres",
+            SESSION_SECRET: "x".repeat(32),
+        })).toThrow("PETRICHOR_ENCRYPT_KEY")
+
+        expect(() => loadServerConfigFromEnv({
+            DATABASE_URL: "postgres://user:pass@example.supabase.co:5432/postgres",
+            SESSION_SECRET: "x".repeat(32),
+            PETRICHOR_ENCRYPT_KEY: "k".repeat(32),
+            PETRICHOR_ENCRYPT_SALT: "not-hex",
+        })).toThrow("PETRICHOR_ENCRYPT_SALT")
+    })
+
+    it("注册模式默认关闭且只接受显式开放", () => {
+        expect(loadServerConfigFromEnv({
+            DATABASE_URL: "postgres://user:pass@example.supabase.co:5432/postgres",
+            SESSION_SECRET: "x".repeat(32),
+            ...requiredSecrets,
+            PETRICHOR_REGISTRATION_MODE: " open ",
+        }).registration.mode).toBe("open")
+
+        expect(() => loadServerConfigFromEnv({
+            DATABASE_URL: "postgres://user:pass@example.supabase.co:5432/postgres",
+            SESSION_SECRET: "x".repeat(32),
+            ...requiredSecrets,
+            PETRICHOR_REGISTRATION_MODE: "bootstrap",
+        })).toThrow("PETRICHOR_REGISTRATION_MODE")
     })
 })

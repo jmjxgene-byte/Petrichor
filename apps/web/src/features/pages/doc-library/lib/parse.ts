@@ -6,12 +6,12 @@
  * - blocks：PDF 的版面文本块（OcrBlock[]），喂给右侧 Layout Blocks 面板
  * - pageCount：页数（PDF）
  *
- * 仅支持双层 PDF（带文本层）/ docx / xlsx / csv。
+ * 仅支持双层 PDF（带文本层）/ docx / csv。
  */
 
 import type { OcrBlock } from "@/components/extend/ui/layout-blocks"
 
-export type DocFileType = "pdf" | "docx" | "xlsx" | "csv"
+export type DocFileType = "pdf" | "docx" | "csv"
 
 export interface ParsedChunk {
     text: string
@@ -26,12 +26,16 @@ export interface ParsedDocument {
 }
 
 const CHUNK_TARGET_CHARS = 700
+export const DOC_LIBRARY_MAX_FILE_BYTES = 25 * 1024 * 1024
+export const DOC_LIBRARY_MAX_BATCH_FILES = 10
+const CSV_MAX_ROWS = 100_000
+const CSV_MAX_COLUMNS = 256
+const CSV_MAX_CELL_CHARS = 10_000
 
 export function detectFileType(file: File): DocFileType | null {
     const name = file.name.toLowerCase()
     if (name.endsWith(".pdf")) return "pdf"
     if (name.endsWith(".docx")) return "docx"
-    if (name.endsWith(".xlsx") || name.endsWith(".xls")) return "xlsx"
     if (name.endsWith(".csv") || name.endsWith(".tsv")) return "csv"
     return null
 }
@@ -42,8 +46,6 @@ export async function parseDocument(file: File, fileType: DocFileType): Promise<
             return await parsePdf(file)
         case "docx":
             return await parseDocx(file)
-        case "xlsx":
-            return await parseXlsx(file)
         case "csv":
             return await parseCsv(file)
         default:
@@ -68,7 +70,12 @@ async function parsePdf(file: File): Promise<ParsedDocument> {
     pdfjs.GlobalWorkerOptions.workerSrc = workerUrl.toString()
 
     const data = await file.arrayBuffer()
-    const loadingTask = pdfjs.getDocument({ data })
+    const loadingTask = pdfjs.getDocument({
+        data,
+        enableXfa: false,
+        maxImageSize: 40_000_000,
+        stopAtErrors: true,
+    })
     const pdf = await loadingTask.promise
     const blocks: OcrBlock[] = []
     const chunks: ParsedChunk[] = []
@@ -218,54 +225,99 @@ async function parseDocx(file: File): Promise<ParsedDocument> {
     }
 }
 
-// ---------- XLSX / CSV ----------
-
-async function parseXlsx(file: File): Promise<ParsedDocument> {
-    const XLSX = await import("xlsx")
-    const data = await file.arrayBuffer()
-    const workbook = XLSX.read(data, { type: "array" })
-    return workbookToParsed(XLSX, workbook)
-}
+// ---------- CSV / TSV ----------
 
 async function parseCsv(file: File): Promise<ParsedDocument> {
-    const XLSX = await import("xlsx")
     const text = await file.text()
-    const workbook = XLSX.read(text, { type: "string" })
-    return workbookToParsed(XLSX, workbook)
-}
+    const delimiter = file.name.toLowerCase().endsWith(".tsv") ? "\t" : ","
+    const rows = parseDelimitedRows(text, delimiter)
+    const header = rows[0]?.map((cell) => cell.trim()) ?? []
+    const lines: string[] = []
 
-function workbookToParsed(
-    XLSX: typeof import("xlsx"),
-    workbook: import("xlsx").WorkBook,
-): ParsedDocument {
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+        const row = rows[rowIndex] ?? []
+        const cells = row.map((cell, columnIndex) => {
+            const value = cell.replace(/\s+/g, " ").trim()
+            if (!value) return ""
+            const key = rowIndex > 0 && header[columnIndex] ? `${header[columnIndex]}: ` : ""
+            return `${key}${value}`
+        }).filter(Boolean)
+        if (cells.length > 0) lines.push(cells.join(" | "))
+    }
+
     const chunks: ParsedChunk[] = []
-    for (const sheetName of workbook.SheetNames) {
-        const sheet = workbook.Sheets[sheetName]
-        if (!sheet) continue
-        const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false, defval: "" })
-        const header = Array.isArray(rows[0]) ? (rows[0] as unknown[]).map((c) => String(c ?? "").trim()) : []
-        const lines: string[] = []
-        for (let i = 0; i < rows.length; i += 1) {
-            const row = rows[i] as unknown[]
-            if (!Array.isArray(row)) continue
-            const cells = row.map((cell, index) => {
-                const value = String(cell ?? "").replace(/\s+/g, " ").trim()
-                if (!value) return ""
-                const key = i > 0 && header[index] ? `${header[index]}: ` : ""
-                return `${key}${value}`
-            }).filter(Boolean)
-            if (cells.length > 0) lines.push(cells.join(" | "))
-        }
-        // 每 ~40 行成一个 chunk，定位用工作表名
-        const batchSize = 40
-        for (let i = 0; i < lines.length; i += batchSize) {
-            const text = lines.slice(i, i + batchSize).join("\n")
-            for (const piece of splitIntoChunks(text)) {
-                chunks.push({ text: piece, page: null, locator: sheetName })
-            }
+    const batchSize = 40
+    for (let index = 0; index < lines.length; index += batchSize) {
+        for (const piece of splitIntoChunks(lines.slice(index, index + batchSize).join("\n"))) {
+            chunks.push({ text: piece, page: null, locator: file.name })
         }
     }
+
     return { pageCount: null, chunks, blocks: [] }
+}
+
+export function parseDelimitedRows(source: string, delimiter: "," | "\t"): string[][] {
+    const rows: string[][] = []
+    let row: string[] = []
+    let cell = ""
+    let quoted = false
+
+    const pushCell = () => {
+        if (cell.length > CSV_MAX_CELL_CHARS) {
+            throw new Error(`CSV 单元格过长，不能超过 ${CSV_MAX_CELL_CHARS} 个字符`)
+        }
+        row.push(cell)
+        cell = ""
+        if (row.length > CSV_MAX_COLUMNS) {
+            throw new Error(`CSV 列数过多，不能超过 ${CSV_MAX_COLUMNS} 列`)
+        }
+    }
+
+    const pushRow = () => {
+        pushCell()
+        rows.push(row)
+        row = []
+        if (rows.length > CSV_MAX_ROWS) {
+            throw new Error(`CSV 行数过多，不能超过 ${CSV_MAX_ROWS} 行`)
+        }
+    }
+
+    for (let index = 0; index < source.length; index += 1) {
+        const char = source[index]
+        const next = source[index + 1]
+        if (quoted) {
+            if (char === '"' && next === '"') {
+                cell += '"'
+                index += 1
+            } else if (char === '"') {
+                quoted = false
+            } else {
+                cell += char
+            }
+            continue
+        }
+
+        if (char === '"' && cell.length === 0) {
+            quoted = true
+        } else if (char === delimiter) {
+            pushCell()
+        } else if (char === "\n") {
+            pushRow()
+        } else if (char === "\r") {
+            if (next === "\n") index += 1
+            pushRow()
+        } else {
+            cell += char
+        }
+    }
+
+    if (quoted) {
+        throw new Error("CSV 存在未闭合的引号")
+    }
+    if (cell.length > 0 || row.length > 0) {
+        pushRow()
+    }
+    return rows
 }
 
 // ---------- 共用 ----------

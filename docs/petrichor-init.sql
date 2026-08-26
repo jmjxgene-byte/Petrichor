@@ -1,6 +1,3 @@
-create extension if not exists pg_trgm;
-create extension if not exists vector;
-
 create table if not exists petrichor_user (
     id bigint generated always as identity primary key,
     auth_user_id text,

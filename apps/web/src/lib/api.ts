@@ -2353,7 +2353,7 @@ export const dashboardApi = {
 
 // ===== 文档库（Document Library） =====
 
-export type DocLibraryFileType = "pdf" | "docx" | "xlsx" | "csv"
+export type DocLibraryFileType = "pdf" | "docx" | "csv"
 
 export interface DocLibrary {
   id: string

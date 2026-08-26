@@ -16,7 +16,6 @@ import {
     type OcrBlock,
 } from "@/components/extend/ui/layout-blocks"
 import { DocxViewerPreview } from "@/components/extend/ui/docx-viewer"
-import { XlsxViewerPreview } from "@/components/extend/ui/xlsx-viewer"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { uploadApi, type DocDocumentDetail } from "@/lib/api"
@@ -198,16 +197,11 @@ function OriginalFilePreview({
         )
     }
 
-    // xlsx / csv
+    // CSV 的解析内容在「文本」标签展示，避免把非工作簿交给表格运行时。
     return (
-        <XlsxViewerPreview
-            className="h-full"
-            src={url}
-            fileName={document.fileName}
-            isDark={isDark}
-            onIsDarkChange={onIsDarkChange}
-            showUpload={false}
-        />
+        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            CSV 请切换到「文本」标签查看解析内容
+        </div>
     )
 }
 

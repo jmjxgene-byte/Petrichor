@@ -77,7 +77,12 @@ export async function rasterizePdfPages(
     pdfjs.GlobalWorkerOptions.workerSrc = workerUrl.toString()
 
     const data = await file.arrayBuffer()
-    const loadingTask = pdfjs.getDocument({ data })
+    const loadingTask = pdfjs.getDocument({
+        data,
+        enableXfa: false,
+        maxImageSize: 40_000_000,
+        stopAtErrors: true,
+    })
     const pdf = await loadingTask.promise
     try {
         const total = targets.length

@@ -30,11 +30,12 @@ export const optionalIdSchema = z.union([z.string(), z.number(), z.null()]).opti
     return Number(raw)
 })
 
-export const FILE_TYPES = ["pdf", "docx", "xlsx", "csv"] as const
+export const FILE_TYPES = ["pdf", "docx", "csv"] as const
 export type DocFileType = (typeof FILE_TYPES)[number]
 
 const MAX_CHUNKS = 4000
 const MAX_CHUNK_CHARS = 4000
+const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 
 // ===== 文档库缓存键（按用户隔离） =====
 
@@ -76,7 +77,7 @@ export const documentRegisterSchema = z.object({
     fileType: z.enum(FILE_TYPES),
     contentType: z.string().trim().max(160).optional().nullable(),
     objectKey: z.string().trim().min(1).max(512),
-    sizeBytes: z.number().int().nonnegative().optional().nullable(),
+    sizeBytes: z.number().int().positive().max(MAX_DOCUMENT_BYTES).optional().nullable(),
     pageCount: z.number().int().nonnegative().optional().nullable(),
     blocks: z.array(z.unknown()).optional(),
     chunks: z.array(z.object({
@@ -624,7 +625,7 @@ function parseJsonArray(value: string | null | undefined): unknown[] {
 export function assertFileType(value: unknown): DocFileType {
     const v = String(value ?? "").toLowerCase()
     if ((FILE_TYPES as readonly string[]).includes(v)) return v as DocFileType
-    throw badRequest("仅支持 PDF / docx / xlsx / csv")
+    throw badRequest("仅支持 PDF / DOCX / CSV")
 }
 
 function decrementDocumentCountSql() {

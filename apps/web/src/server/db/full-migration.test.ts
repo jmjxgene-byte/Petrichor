@@ -54,7 +54,7 @@ describe("buildInitialMigrationSql", () => {
         expect(sql).toContain("public_content_hash text")
         expect(sql).toContain("ai_summary text")
         expect(sql).toContain("add column if not exists ai_summary text")
-        expect(sql).toContain("create extension if not exists pg_trgm")
+        expect(sql).not.toContain("create extension")
         expect(sql).toContain("idx_petrichor_kb_article_title_trgm")
         expect(sql).toContain("idx_petrichor_kb_article_public_excerpt_trgm")
         expect(sql).toContain("idx_petrichor_kb_article_content_md_trgm")

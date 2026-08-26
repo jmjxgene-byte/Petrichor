@@ -2,7 +2,7 @@
 
 React + Vite + TypeScript 全栈应用，包管理、本地服务与生产服务端运行时统一使用 **Bun 1.3.14**，目标部署环境为 **Vercel**，数据层使用 **Supabase PostgreSQL**。
 
-> 📖 完整的简介、功能特性、Vercel 一键部署、环境变量速查表请看仓库根目录的 [`README.md`](../../README.md)。
+> 📖 完整的简介、安全部署、环境变量速查表请看仓库根目录的 [`README.md`](../../README.md)。
 
 ## 本地开发
 
@@ -30,10 +30,13 @@ cp apps/web/.env.example apps/web/.env.local
 ## 初始化数据库
 
 ```bash
-bun --silent run db:sql > petrichor-init.sql
+bun db:provision   # 全新空 Supabase，仅执行一次
+bun db:bootstrap   # 创建结构并登记当前迁移，仅执行一次
+bun db:migrate     # 后续发布前执行
 ```
 
-将输出 SQL 放到 Supabase SQL Editor 执行。SQL 会创建 Better Auth 认证表和业务表。
+管理员 URL和迁移 URL只存在于受控本地环境，禁止配置到 Vercel。完整步骤见
+[`docs/database-migrations.md`](../../docs/database-migrations.md)。
 
 认证使用 Better Auth + Drizzle，浏览器端通过 httpOnly Cookie 保持登录状态，不再依赖 `localStorage` token。
 

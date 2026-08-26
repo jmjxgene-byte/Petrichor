@@ -1,19 +1,27 @@
-import { badRequest } from "@/server/http/response"
+import { badRequest, forbidden } from "@/server/http/response"
 
-export type RegisterDefaultSystemRole = "USER" | "SUPER_ADMIN"
+export type RegistrationMode = "disabled" | "open"
 
-export const REGISTER_DEFAULT_SYSTEM_ROLE_ENV = "PETRICHOR_REGISTER_DEFAULT_SYSTEM_ROLE"
+export const REGISTRATION_MODE_ENV = "PETRICHOR_REGISTRATION_MODE"
 
-export function resolveRegisterDefaultSystemRole(
+export function resolveRegistrationMode(
     env: Record<string, string | undefined> = process.env,
-): RegisterDefaultSystemRole {
-    const raw = env[REGISTER_DEFAULT_SYSTEM_ROLE_ENV]?.trim().toUpperCase()
+): RegistrationMode {
+    const raw = env[REGISTRATION_MODE_ENV]?.trim().toLowerCase()
     if (!raw) {
-        return "USER"
+        return "disabled"
     }
-    if (raw === "USER" || raw === "SUPER_ADMIN") {
+    if (raw === "disabled" || raw === "open") {
         return raw
     }
 
-    throw badRequest(`${REGISTER_DEFAULT_SYSTEM_ROLE_ENV} 只支持 USER 或 SUPER_ADMIN`)
+    throw badRequest(`${REGISTRATION_MODE_ENV} 只支持 disabled 或 open`)
+}
+
+export function requirePublicRegistrationEnabled(
+    env: Record<string, string | undefined> = process.env,
+) {
+    if (resolveRegistrationMode(env) !== "open") {
+        throw forbidden("公开注册已关闭")
+    }
 }
