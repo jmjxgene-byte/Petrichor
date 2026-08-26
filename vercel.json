@@ -6,7 +6,7 @@
     "buildCommand": "bun run vercel-build",
     "functions": {
         "server.ts": {
-            "includeFiles": "{apps/web/dist/**,apps/web/node_modules/drizzle-orm/**}",
+            "includeFiles": "apps/web/dist/**",
             "maxDuration": 300
         }
     },
