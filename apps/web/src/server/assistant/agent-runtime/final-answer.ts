@@ -96,7 +96,8 @@ export const WIKI_FINAL_ANSWER_PROMPT = `
  * 同一主题下、内部与外部来源同时出现且含否定/版本差异词，提示模型重点核对。
  */
 export function detectConflictHints(evidence: AgentEvidence[]): string[] {
-    const internal = evidence.filter((item) => item.source === "knowledge" || item.source === "graph")
+    const internal = evidence.filter((item) =>
+        item.source === "knowledge" || item.source === "graph" || item.source === "geneops")
     const external = evidence.filter((item) => item.source === "web")
     if (internal.length === 0 || external.length === 0) return []
 

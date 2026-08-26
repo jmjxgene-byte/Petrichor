@@ -9,6 +9,7 @@ import { buildLegacyAgentTools } from "./legacy"
 import { memoryTools } from "./memory"
 import { writerTools } from "./writer"
 import { researchTools } from "./research"
+import { geneOpsTools } from "./geneops"
 import type { AgentToolDefinition } from "../types"
 
 /**
@@ -27,6 +28,7 @@ export function buildAllAgentTools(): AgentToolDefinition[] {
         ...wikiQaTools,
         ...graphTools,
         ...researchTools,
+        ...geneOpsTools,
         ...writerTools,
         ...memoryTools,
         ...documentExportTools,

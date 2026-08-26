@@ -2513,6 +2513,40 @@ export const docLibraryApi = {
   deleteDocument: (id: string) => api.post<DocDeleteResponse>("/doc-library/document/delete", { id }),
 }
 
+// ===== 外部实时数据源 =====
+
+export interface ExternalSourceResponse {
+  id: string
+  name: string
+  sourceType: "GENEOPS_SUPABASE"
+  enabled: boolean
+  globalShared: boolean
+  projectRef: string
+  region: string
+  host: string | null
+  port: number | null
+  username: string | null
+  configured: boolean
+  capabilities: Record<string, unknown> | null
+  contractVersion: number | null
+  lastCheckedAt: string | null
+  lastCheckStatus: string | null
+  lastCheckMessage: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export const externalSourceApi = {
+  list: () => api.post<{ featureEnabled: boolean; items: ExternalSourceResponse[] }>("/external-source/list", {}),
+  create: (data: { name: string; password: string }) =>
+    api.post<ExternalSourceResponse>("/external-source/create", data),
+  update: (data: { id: string; name?: string; password?: string; enabled?: boolean }) =>
+    api.post<ExternalSourceResponse>("/external-source/update", data),
+  test: (id: string) =>
+    api.post<{ status: "OK"; message: string; capabilities: Record<string, unknown> }>("/external-source/test", { id }),
+  delete: (id: string) => api.post<void>("/external-source/delete", { id }),
+}
+
 // 站内 Assistant（chat-first 壳）：形状对齐 src/server/assistant/thread-handlers.ts
 export interface AssistantFocus {
   knowledgeBaseId?: string | null

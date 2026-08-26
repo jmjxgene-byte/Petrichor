@@ -2,6 +2,7 @@ import {
     ADMIN_SKILL_PROMPT,
     DOCUMENTS_SKILL_PROMPT,
     GRAPH_SKILL_PROMPT,
+    GENEOPS_SKILL_PROMPT,
     KNOWLEDGE_SKILL_PROMPT,
     MEMORY_SKILL_PROMPT,
     RESEARCH_SKILL_PROMPT,
@@ -97,6 +98,20 @@ export const BUILTIN_SKILLS: AgentSkill[] = [
         instructions: RESEARCH_SKILL_PROMPT,
         toolIds: ["research.search", "research.fetch", "research.extract"],
         tags: ["external"],
+    },
+    {
+        id: "geneops",
+        name: "GeneOps 实时知识",
+        description: "实时检索 GeneOps 社区知识与知识图谱",
+        instructions: GENEOPS_SKILL_PROMPT,
+        toolIds: [
+            "geneops.search",
+            "geneops.read_chunks",
+            "geneops.graph_search",
+            "geneops.graph_expand",
+            "geneops.backlinks",
+        ],
+        tags: ["external", "retrieval"],
     },
     {
         id: "memory",

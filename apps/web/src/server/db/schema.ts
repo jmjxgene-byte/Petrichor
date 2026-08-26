@@ -1024,6 +1024,46 @@ export const docQaArtifacts = pgTable("petrichor_doc_qa_artifact", {
     index("idx_petrichor_doc_qa_artifact_thread").on(table.threadId, table.createdAt),
 ])
 
+// 外部实时数据源：首版仅支持 geneops-prod 的安全 knowledge_vault RPC。
+export const externalSources = pgTable("petrichor_external_source", {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    createdByUserId: bigint("created_by_user_id", { mode: "number" }).notNull(),
+    sourceType: text("source_type").notNull().default("GENEOPS_SUPABASE"),
+    name: text("name").notNull(),
+    enabled: boolean("enabled").notNull().default(false),
+    globalShared: boolean("global_shared").notNull().default(true),
+    connectionEnc: text("connection_enc").notNull(),
+    capabilitiesJson: text("capabilities_json"),
+    contractVersion: integer("contract_version"),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    lastCheckStatus: text("last_check_status"),
+    lastCheckMessage: text("last_check_message"),
+    ...timestamps,
+}, (table) => [
+    uniqueIndex("ux_petrichor_external_source_name").on(table.name),
+    index("idx_petrichor_external_source_enabled").on(table.enabled, table.updatedAt),
+])
+
+// 外部查询审计只保存元数据，不保存查询正文、结果内容或连接信息。
+export const externalQueryAudits = pgTable("petrichor_external_query_audit", {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    userId: bigint("user_id", { mode: "number" }).notNull(),
+    threadId: bigint("thread_id", { mode: "number" }),
+    runId: bigint("run_id", { mode: "number" }),
+    sourceId: bigint("source_id", { mode: "number" }).notNull(),
+    toolName: text("tool_name").notNull(),
+    queryType: text("query_type").notNull(),
+    parameterHash: text("parameter_hash").notNull(),
+    durationMs: integer("duration_ms").notNull().default(0),
+    resultCount: integer("result_count").notNull().default(0),
+    status: text("status").notNull(),
+    errorCode: text("error_code"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+    index("idx_petrichor_external_query_audit_user").on(table.userId, table.createdAt),
+    index("idx_petrichor_external_query_audit_source").on(table.sourceId, table.createdAt),
+])
+
 // 文档导入任务：PDF / Word 每页图片经多模态识别后合并为一篇文章
 export const knowledgeBaseImportJobs = pgTable("petrichor_kb_import_job", {
     id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),

@@ -10,5 +10,11 @@
             "maxDuration": 300
         }
     },
+    "crons": [
+        {
+            "path": "/api/external-source/cron-refresh",
+            "schedule": "17 3 * * *"
+        }
+    ],
     "regions": ["sin1"]
 }
