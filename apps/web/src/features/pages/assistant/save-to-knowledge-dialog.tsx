@@ -18,6 +18,7 @@ import {
 } from "@/lib/api"
 import { knowledgeBaseArticlePath } from "@/lib/dashboard-routes"
 import type { AgentRunViewModel } from "@/features/agent-runs/types"
+import { selectCitedEvidenceSources } from "@/features/agent-runs/selectors"
 
 export function SaveToKnowledgeButton({ run }: { run: AgentRunViewModel }) {
   const navigate = useNavigate()
@@ -31,7 +32,8 @@ export function SaveToKnowledgeButton({ run }: { run: AgentRunViewModel }) {
   const [title, setTitle] = React.useState("")
   const [contentMd, setContentMd] = React.useState("")
 
-  const geneOpsEvidence = run.evidence.filter((item) => item.source === "geneops")
+  const geneOpsEvidence = selectCitedEvidenceSources(run)
+    .filter((item) => item.source === "geneops")
   const canSave = run.status === "completed" && Boolean(run.answer.trim()) && geneOpsEvidence.length > 0
 
   const openDialog = async () => {
@@ -174,20 +176,25 @@ export function buildKnowledgeDraft(
   run: AgentRunViewModel,
   evidence: AgentRunViewModel["evidence"],
 ) {
-  const sources = evidence.map((item) => {
+  const seenSources = new Set<string>()
+  const sources = evidence.flatMap((item) => {
     const queriedAt = item.queriedAt ? ` · 查询于 ${new Date(item.queriedAt).toLocaleString("zh-CN")}` : ""
     const title = item.title.replace(/\s+/g, " ").replace(/[\\[\]]/g, "\\$&")
     const url = safeHttpUrl(item.url)
-    return url
+    const key = url ?? title
+    if (seenSources.has(key)) return []
+    seenSources.add(key)
+    return [url
       ? `- [${title}](<${url}>)${queriedAt}`
-      : `- ${title}${queriedAt}`
+      : `- ${title}${queriedAt}`]
   })
+  const answer = run.answer.trim().replace(/^#{1,6}\s+结论\s*\r?\n+/u, "").trim()
   return [
     "> 本文由 Petrichor 助手基于 GeneOps 实时只读查询生成；保存前请核验关键结论。",
     "",
     "## 结论",
     "",
-    run.answer.trim(),
+    answer,
     "",
     "## 来源",
     "",

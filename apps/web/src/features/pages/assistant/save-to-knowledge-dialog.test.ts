@@ -59,4 +59,38 @@ describe("GeneOps knowledge capture draft", () => {
         expect(markdown).toContain("恶意\\]标题")
         expect(markdown).not.toContain("javascript:")
     })
+
+    it("deduplicates source links and avoids a repeated leading conclusion heading", () => {
+        const run = {
+            id: "run-3",
+            status: "completed",
+            goal: "去重",
+            plan: [],
+            activities: [],
+            subagents: [],
+            loadedSkills: [],
+            answer: "## 结论\n\n最终结论。",
+            answerSegmentStart: 0,
+            evidence: [],
+            startedAt: 1,
+            lastSequence: 1,
+        } satisfies AgentRunViewModel
+        const evidence = [{
+            id: "e3",
+            source: "geneops" as const,
+            title: "同一来源",
+            url: "https://example.com/source",
+            citationIndex: 1,
+        }, {
+            id: "e4",
+            source: "geneops" as const,
+            title: "同一来源的另一分片",
+            url: "https://example.com/source",
+            citationIndex: 1,
+        }]
+
+        const markdown = buildKnowledgeDraft(run, evidence)
+        expect(markdown.match(/https:\/\/example\.com\/source/g)).toHaveLength(1)
+        expect(markdown.match(/^## 结论$/gm)).toHaveLength(1)
+    })
 })
