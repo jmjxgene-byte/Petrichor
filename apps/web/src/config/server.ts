@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto"
 import { z } from "zod"
 
 export const DEFAULT_S3_REGION = "us-east-1"
@@ -6,6 +7,32 @@ export const DEFAULT_S3_DOWNLOAD_EXPIRE_SECONDS = 3600
 export const DEFAULT_SESSION_EXPIRE_SECONDS = 60 * 60 * 24 * 2
 
 type EnvSource = Record<string, string | undefined>
+
+let previewRuntimeSecrets: { session: string; key: string; salt: string } | null = null
+
+function isolateVercelPreviewEnv(env: EnvSource): EnvSource {
+    if (env.VERCEL !== "1" || env.VERCEL_ENV !== "preview") return env
+    previewRuntimeSecrets ??= {
+        session: randomBytes(32).toString("hex"),
+        key: randomBytes(32).toString("hex"),
+        salt: randomBytes(8).toString("hex"),
+    }
+    return {
+        ...env,
+        DATABASE_URL: "file:/tmp/petrichor-preview.sqlite",
+        SESSION_SECRET: previewRuntimeSecrets.session,
+        PETRICHOR_ENCRYPT_KEY: previewRuntimeSecrets.key,
+        PETRICHOR_ENCRYPT_SALT: previewRuntimeSecrets.salt,
+        PETRICHOR_REGISTRATION_MODE: "disabled",
+        PETRICHOR_GENEOPS_CONNECTOR_ENABLED: "false",
+        PETRICHOR_STORAGE_DIR: "/tmp/petrichor-preview-storage",
+        CRON_SECRET: undefined,
+        S3_ACCESS_KEY_ID: undefined,
+        S3_BUCKET: undefined,
+        S3_ENDPOINT: undefined,
+        S3_SECRET_ACCESS_KEY: undefined,
+    }
+}
 
 const positiveIntegerFromEnv = (name: string, fallback: number) =>
     z
@@ -184,7 +211,7 @@ function toS3Config(data: z.infer<z.ZodObject<typeof s3EnvShape>>): S3Config | n
 }
 
 export function loadServerConfigFromEnv(env: EnvSource = process.env): ServerConfig {
-    const parsed = serverEnvSchema.safeParse(env)
+    const parsed = serverEnvSchema.safeParse(isolateVercelPreviewEnv(env))
 
     if (!parsed.success) {
         throw new Error(`服务端配置无效：${formatConfigIssues(parsed.error.issues)}`)

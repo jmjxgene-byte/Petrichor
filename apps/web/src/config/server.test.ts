@@ -89,4 +89,29 @@ describe("loadServerConfigFromEnv", () => {
             PETRICHOR_REGISTRATION_MODE: "bootstrap",
         })).toThrow("PETRICHOR_REGISTRATION_MODE")
     })
+
+    it("Vercel Preview 强制使用隔离 SQLite 且不继承生产外部凭据", () => {
+        const config = loadServerConfigFromEnv({
+            VERCEL: "1",
+            VERCEL_ENV: "preview",
+            DATABASE_URL: "postgres://production.example/postgres",
+            SESSION_SECRET: "production-session-secret".repeat(2),
+            ...requiredSecrets,
+            PETRICHOR_REGISTRATION_MODE: "open",
+            PETRICHOR_GENEOPS_CONNECTOR_ENABLED: "true",
+            CRON_SECRET: "production-cron-secret",
+            S3_ENDPOINT: "https://s3.example.com",
+            S3_BUCKET: "production-bucket",
+            S3_ACCESS_KEY_ID: "production-access-key",
+            S3_SECRET_ACCESS_KEY: "production-secret-key",
+        })
+
+        expect(config.databaseUrl).toBe("file:/tmp/petrichor-preview.sqlite")
+        expect(config.localStorageDir).toBe("/tmp/petrichor-preview-storage")
+        expect(config.registration.mode).toBe("disabled")
+        expect(config.geneOpsConnector).toEqual({ enabled: false, cronSecret: null })
+        expect(config.s3).toBeNull()
+        expect(config.sessionSecret).not.toContain("production")
+        expect(config.apiEncryption.key).not.toBe(requiredSecrets.PETRICHOR_ENCRYPT_KEY)
+    })
 })
