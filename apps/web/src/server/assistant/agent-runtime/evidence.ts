@@ -227,6 +227,7 @@ function mergeEvidence(existing: AgentEvidence, incoming: EvidenceInput): void {
  * 内部知识库 / 图谱视为高可信；官方域名与文档站高于普通博客。
  */
 export function scoreSourceQuality(input: EvidenceInput): number {
+    if (input.source === "geneops") return 0.9
     if (input.source === "knowledge" || input.source === "graph") return 0.85
     if (input.source === "memory") return 0.7
     if (input.source === "subagent" || input.source === "tool") return 0.6

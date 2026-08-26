@@ -1246,6 +1246,51 @@ create table if not exists petrichor_doc_qa_artifact (
 create index if not exists idx_petrichor_doc_qa_artifact_thread
     on petrichor_doc_qa_artifact(thread_id, created_at);
 
+create table if not exists petrichor_external_source (
+    id bigint generated always as identity primary key,
+    created_by_user_id bigint not null references petrichor_user(id) on delete restrict,
+    source_type text not null default 'GENEOPS_SUPABASE',
+    name text not null,
+    enabled boolean not null default false,
+    global_shared boolean not null default true,
+    connection_enc text not null,
+    capabilities_json text,
+    contract_version integer,
+    last_checked_at timestamptz,
+    last_check_status text,
+    last_check_message text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+create unique index if not exists ux_petrichor_external_source_name
+    on petrichor_external_source(name);
+
+create index if not exists idx_petrichor_external_source_enabled
+    on petrichor_external_source(enabled, updated_at);
+
+create table if not exists petrichor_external_query_audit (
+    id bigint generated always as identity primary key,
+    user_id bigint not null references petrichor_user(id) on delete cascade,
+    thread_id bigint,
+    run_id bigint,
+    source_id bigint not null references petrichor_external_source(id) on delete cascade,
+    tool_name text not null,
+    query_type text not null,
+    parameter_hash text not null,
+    duration_ms integer not null default 0,
+    result_count integer not null default 0,
+    status text not null,
+    error_code text,
+    created_at timestamptz not null default now()
+);
+
+create index if not exists idx_petrichor_external_query_audit_user
+    on petrichor_external_query_audit(user_id, created_at);
+
+create index if not exists idx_petrichor_external_query_audit_source
+    on petrichor_external_query_audit(source_id, created_at);
+
 create table if not exists petrichor_agent_memory (
     id bigint generated always as identity primary key,
     user_id bigint not null,

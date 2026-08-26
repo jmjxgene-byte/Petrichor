@@ -18,6 +18,9 @@
     },
     {
       "file": "2026-08-26-better-auth-two-factor-lockout.sql"
+    },
+    {
+      "file": "2026-08-27-geneops-connector.sql"
     }
   ]
 }

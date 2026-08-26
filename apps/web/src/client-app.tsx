@@ -35,6 +35,9 @@ const DocLibraryListPage = lazy(() =>
 const DocLibraryBrowsePage = lazy(() =>
   import('@/features/pages/doc-library/DocLibraryBrowsePage').then((module) => ({ default: module.DocLibraryBrowsePage }))
 )
+const ExternalSourcesPage = lazy(() =>
+  import('@/features/pages/doc-library/ExternalSourcesPage').then((module) => ({ default: module.ExternalSourcesPage }))
+)
 const KnowledgeBaseArticleMindMapPage = lazy(() =>
   import('@/features/pages/knowledge/KnowledgeBaseArticleMindMapPage').then((module) => ({ default: module.KnowledgeBaseArticleMindMapPage }))
 )
@@ -311,6 +314,7 @@ function AppThemeScope() {
                 <Route path="imports" element={<DocumentImportJobsPage />} />
                 <Route path="imports/:jobId" element={<DocumentImportJobDetailPage />} />
                 <Route path="doc-library" element={<DocLibraryListPage />} />
+                <Route path="doc-library/sources" element={<ExternalSourcesPage />} />
                 <Route path="doc-library/:libraryId" element={<DocLibraryBrowsePage />} />
                 <Route path="wiki" element={<Navigate to={dashboardRoutes.knowledge} replace />} />
                 <Route path="knowledge/:knowledgeBaseId/articles/:articleId" element={<KnowledgeBaseArticleEditorPage />} />

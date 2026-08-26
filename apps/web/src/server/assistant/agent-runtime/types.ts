@@ -73,6 +73,7 @@ export type AgentEvidenceSource =
     | "graph"
     | "tool"
     | "subagent"
+    | "geneops"
 
 /** 统一证据（§18/§20）。最终答案应尽量由 Evidence 构建。 */
 export type AgentEvidence = {
@@ -182,6 +183,7 @@ export type ToolNamespace =
     | "admin"
     | "system"
     | "agent"
+    | "geneops"
 
 export const TOOL_NAMESPACES: ToolNamespace[] = [
     "knowledge",
@@ -193,6 +195,7 @@ export const TOOL_NAMESPACES: ToolNamespace[] = [
     "admin",
     "system",
     "agent",
+    "geneops",
 ]
 
 export type ToolRiskLevel = "low" | "medium" | "high"

@@ -125,7 +125,7 @@ export async function persistTrace(trace: AgentTrace): Promise<void> {
             runKey: trace.runId,
             sequence: event.sequence,
             eventType: event.type,
-            payloadJson: JSON.stringify(event.payload),
+            payloadJson: JSON.stringify(sanitizeExternalTracePayload(event.payload)),
             toolId: typeof event.payload.toolId === "string" ? event.payload.toolId : null,
         }))).onConflictDoNothing()
 
@@ -135,7 +135,9 @@ export async function persistTrace(trace: AgentTrace): Promise<void> {
                 runKey: trace.runId,
                 sequence: trace.steps.length + index + 1,
                 eventType: call.ok ? "tool_result" : "error",
-                payloadJson: JSON.stringify(call),
+                payloadJson: JSON.stringify(call.toolId.startsWith("geneops.")
+                    ? { ...call, input: { redacted: true }, rawOutput: { redacted: true } }
+                    : call),
                 toolId: call.toolId,
             }))).onConflictDoNothing()
         }
@@ -145,9 +147,10 @@ export async function persistTrace(trace: AgentTrace): Promise<void> {
 }
 
 export async function persistEvidence(runKey: string, evidence: AgentEvidence[]): Promise<void> {
-    if (evidence.length === 0) return
+    const persistentEvidence = evidence.filter(shouldPersistEvidence)
+    if (persistentEvidence.length === 0) return
     try {
-        await getDb().insert(agentEvidence).values(evidence.map((item) => ({
+        await getDb().insert(agentEvidence).values(persistentEvidence.map((item) => ({
             runKey,
             evidenceKey: item.id,
             source: item.source,
@@ -162,6 +165,23 @@ export async function persistEvidence(runKey: string, evidence: AgentEvidence[])
         }))).onConflictDoNothing()
     } catch (error) {
         logStoreError("persistEvidence", error, { runKey })
+    }
+}
+
+export function shouldPersistEvidence(item: AgentEvidence) {
+    return item.source !== "geneops" && item.metadata?.ephemeral !== true
+}
+
+export function sanitizeExternalTracePayload(payload: Record<string, unknown>) {
+    const toolId = typeof payload.toolId === "string" ? payload.toolId : ""
+    const source = typeof payload.source === "string" ? payload.source : ""
+    if (!toolId.startsWith("geneops.") && !source.startsWith("geneops.")) return payload
+    return {
+        ...payload,
+        ...(payload.input !== undefined ? { input: { redacted: true } } : {}),
+        ...(payload.output !== undefined ? { output: { redacted: true } } : {}),
+        ...(payload.observation !== undefined ? { observation: { redacted: true } } : {}),
+        ...(payload.data !== undefined ? { data: { redacted: true } } : {}),
     }
 }
 

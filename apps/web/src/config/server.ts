@@ -113,6 +113,8 @@ const serverEnvSchema = z.object({
         "PETRICHOR_ENCRYPT_SALT 必须是 16 位十六进制字符串",
     ),
     PETRICHOR_REGISTRATION_MODE: registrationModeFromEnv(),
+    PETRICHOR_GENEOPS_CONNECTOR_ENABLED: booleanFromEnv("PETRICHOR_GENEOPS_CONNECTOR_ENABLED", false),
+    CRON_SECRET: optionalTrimmedStringFromEnv(),
     PETRICHOR_STORAGE_DIR: optionalTrimmedStringFromEnv(),
     PETRICHOR_SESSION_EXPIRE_SECONDS: positiveIntegerFromEnv(
         "PETRICHOR_SESSION_EXPIRE_SECONDS",
@@ -138,6 +140,10 @@ export interface ServerConfig {
     localStorageDir: string | null
     registration: {
         mode: "disabled" | "open"
+    }
+    geneOpsConnector: {
+        enabled: boolean
+        cronSecret: string | null
     }
     s3: S3Config | null
     session: {
@@ -193,6 +199,10 @@ export function loadServerConfigFromEnv(env: EnvSource = process.env): ServerCon
         localStorageDir: parsed.data.PETRICHOR_STORAGE_DIR,
         registration: {
             mode: parsed.data.PETRICHOR_REGISTRATION_MODE,
+        },
+        geneOpsConnector: {
+            enabled: parsed.data.PETRICHOR_GENEOPS_CONNECTOR_ENABLED,
+            cronSecret: parsed.data.CRON_SECRET,
         },
         s3: toS3Config(parsed.data),
         session: {

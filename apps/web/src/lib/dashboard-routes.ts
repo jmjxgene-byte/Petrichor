@@ -16,6 +16,7 @@ export const dashboardRoutes = {
     adminSiteGraph: `${DASHBOARD_ROOT}/admin/site-graph`,
     aiConfig: `${DASHBOARD_ROOT}/ai/config`,
     docLibrary: `${DASHBOARD_ROOT}/doc-library`,
+    externalSources: `${DASHBOARD_ROOT}/doc-library/sources`,
     agentKeys: `${DASHBOARD_ROOT}/agent/keys`,
     agentLogs: `${DASHBOARD_ROOT}/agent/logs`,
     agentMcp: `${DASHBOARD_ROOT}/agent/mcp`,

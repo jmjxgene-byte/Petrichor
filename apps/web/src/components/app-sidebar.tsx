@@ -17,6 +17,7 @@ import {
   IconSparkles,
   IconUserCircle,
   IconUsers,
+  Database,
 } from "@/components/iconimate"
 import { Link, useLocation } from "react-router-dom"
 
@@ -71,7 +72,11 @@ function matchImportJobs(pathname: string) {
 }
 
 function matchDocLibraryList(pathname: string) {
-  return isDashboardSectionPath(pathname, "doc-library")
+  return pathname === dashboardRoutes.docLibrary || /^\/dashboard\/doc-library\/\d+$/.test(pathname)
+}
+
+function matchExternalSources(pathname: string) {
+  return pathname === dashboardRoutes.externalSources
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -126,6 +131,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             url: dashboardRoutes.docLibrary,
             icon: IconFiles,
             match: matchDocLibraryList,
+          },
+          {
+            title: "外部数据源",
+            url: dashboardRoutes.externalSources,
+            icon: Database,
+            match: matchExternalSources,
           },
         ],
       },
