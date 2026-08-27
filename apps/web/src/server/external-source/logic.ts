@@ -17,6 +17,13 @@ export const GENEOPS_DATABASE = "postgres"
 export const GENEOPS_READER_ROLE = "petrichor_geneops_reader"
 export const GENEOPS_READER_USERNAME = `${GENEOPS_READER_ROLE}.${GENEOPS_PROJECT_REF}`
 export const GENEOPS_CONTRACT_VERSION = 1
+export const GENEOPS_PREFERRED_CONTRACT_VERSION = 2
+export const GENEOPS_SUPPORTED_CONTRACT_VERSIONS = [
+    GENEOPS_CONTRACT_VERSION,
+    GENEOPS_PREFERRED_CONTRACT_VERSION,
+] as const
+
+export type GeneOpsQualityCapability = "wiki" | "graph"
 
 const connectionSchema = z.object({
     host: z.literal(GENEOPS_POOLER_HOST),
@@ -41,6 +48,22 @@ export const sourceUpdateSchema = z.object({
 
 export type GeneOpsConnection = z.infer<typeof connectionSchema>
 export type ExternalSourceRecord = typeof externalSources.$inferSelect
+
+export function isSupportedGeneOpsContractVersion(value: unknown): value is 1 | 2 {
+    return typeof value === "number"
+        && GENEOPS_SUPPORTED_CONTRACT_VERSIONS.includes(value as 1 | 2)
+}
+
+export function geneOpsQualityCapabilityReady(
+    contractVersion: number | null,
+    capabilitiesJson: string | null,
+    capability: GeneOpsQualityCapability,
+) {
+    if (contractVersion !== GENEOPS_PREFERRED_CONTRACT_VERSION) return false
+    const capabilities = parseJsonRecord(capabilitiesJson)
+    const quality = asRecord(capabilities?.quality_status)
+    return quality?.[`${capability}_ready`] === true && quality.stale !== true
+}
 
 export function assertSuperAdmin(user: { id: number; systemRole?: string | null }) {
     if (!isSuperAdmin(user.systemRole, user.id)) throw forbidden("仅超级管理员可以管理外部数据源")
@@ -138,14 +161,12 @@ export async function testSourceConnection(source: ExternalSourceRecord) {
         if (identity.canSelectPublicDocuments || identity.canInsertPublicDocuments) {
             throw new Error("连接角色拥有不允许的 public 表权限")
         }
-        const [capability] = await client<Array<Record<string, unknown>>>`
-            select * from knowledge_vault.capabilities_v1()
-        `
-        const contractVersion = Number(capability?.contract_version ?? capability?.contractVersion ?? 0)
-        if (contractVersion !== GENEOPS_CONTRACT_VERSION) {
+        const contract = await readGeneOpsContract(client)
+        if (!isSupportedGeneOpsContractVersion(contract.contractVersion)) {
+            const contractVersion = contract.contractVersion
             throw new Error(`GeneOps RPC contract 不兼容：${contractVersion || "unknown"}`)
         }
-        return { identity, capability, contractVersion }
+        return { identity, ...contract }
     } finally {
         await client.end({ timeout: 5 })
     }
@@ -174,6 +195,7 @@ export async function executeGeneOpsRpc<T>(
         toolName: string
         queryType: string
         parameters: unknown
+        requiredCapability?: GeneOpsQualityCapability
     },
     query: (client: ReturnType<typeof postgres>) => Promise<T>,
 ): Promise<T> {
@@ -183,6 +205,16 @@ export async function executeGeneOpsRpc<T>(
     let errorCode: string | null = null
     let resultCount = 0
     try {
+        if (
+            input.requiredCapability
+            && !geneOpsQualityCapabilityReady(
+                source.contractVersion,
+                source.capabilitiesJson,
+                input.requiredCapability,
+            )
+        ) {
+            throw new Error(`QUALITY_NOT_READY:${input.requiredCapability}`)
+        }
         const client = createSourceClient(decodeConnection(source.connectionEnc))
         try {
             const result = await query(client)
@@ -239,6 +271,59 @@ function parseJsonRecord(value: string | null): Record<string, unknown> | null {
     }
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+    return value != null && typeof value === "object" && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : null
+}
+
+async function readGeneOpsContract(client: ReturnType<typeof postgres>) {
+    try {
+        const [capability] = await client<Array<Record<string, unknown>>>`
+            select * from knowledge_vault.capabilities_v2()
+        `
+        const [qualityStatus] = await client<Array<Record<string, unknown>>>`
+            select * from knowledge_vault.quality_status_v1()
+        `
+        const contractVersion = Number(capability?.contract_version ?? 0)
+        if (!capability || !qualityStatus) {
+            throw new Error("GeneOps v2 quality contract 未返回状态")
+        }
+        return {
+            capability: {
+                ...capability,
+                quality_status: qualityStatus,
+            },
+            contractVersion,
+            qualityStatus,
+            message: qualityStatus.stale === true
+                ? "连接与 v2 RPC 通过；质量快照已过期，仅保留受限检索能力"
+                : "连接、只读权限、v2 RPC 与质量状态验证通过",
+        }
+    } catch (error) {
+        if (!isUndefinedFunctionError(error)) throw error
+    }
+
+    const [capability] = await client<Array<Record<string, unknown>>>`
+        select * from knowledge_vault.capabilities_v1()
+    `
+    return {
+        capability,
+        contractVersion: Number(capability?.contract_version ?? 0),
+        qualityStatus: null,
+        message: "连接与 v1 RPC 通过；Wiki/Graph 在质量契约升级前保持关闭",
+    }
+}
+
+function isUndefinedFunctionError(error: unknown) {
+    if (error && typeof error === "object" && "code" in error) {
+        if (String((error as { code?: unknown }).code) === "42883") return true
+    }
+    const message = error instanceof Error ? error.message : String(error)
+    return /capabilities_v2|quality_status_v1/i.test(message)
+        && /does not exist|undefined function|不存在/i.test(message)
+}
+
 function hashParameters(value: unknown) {
     return createHash("sha256").update(JSON.stringify(value)).digest("hex")
 }
@@ -248,6 +333,7 @@ function normalizeExternalErrorCode(error: unknown) {
     if (message.includes("timeout")) return "TIMEOUT"
     if (message.includes("permission") || message.includes("denied")) return "PERMISSION_DENIED"
     if (message.includes("connect") || message.includes("network")) return "CONNECTION_FAILED"
+    if (message.includes("quality_not_ready")) return "QUALITY_NOT_READY"
     return "QUERY_FAILED"
 }
 
@@ -255,6 +341,7 @@ function externalUserMessage(code: string) {
     if (code === "TIMEOUT") return "GeneOps 实时查询超时，请缩小问题范围后重试"
     if (code === "PERMISSION_DENIED") return "GeneOps 数据源拒绝了该查询"
     if (code === "CONNECTION_FAILED") return "GeneOps 数据源暂时不可用"
+    if (code === "QUALITY_NOT_READY") return "GeneOps 该能力尚未通过质量验收"
     return "GeneOps 实时查询失败"
 }
 

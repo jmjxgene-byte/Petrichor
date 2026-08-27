@@ -3,10 +3,13 @@ import {
     decodeConnection,
     encodeConnection,
     GENEOPS_DATABASE,
+    GENEOPS_PREFERRED_CONTRACT_VERSION,
     GENEOPS_POOLER_HOST,
     GENEOPS_POOLER_PORT,
     GENEOPS_READER_ROLE,
     GENEOPS_READER_USERNAME,
+    geneOpsQualityCapabilityReady,
+    isSupportedGeneOpsContractVersion,
     sourceCreateSchema,
     toSourceResponse,
 } from "./logic"
@@ -15,6 +18,34 @@ describe("GeneOps 外部连接配置", () => {
     it("区分 Supavisor 登录用户名和数据库当前角色", () => {
         expect(GENEOPS_READER_ROLE).toBe("petrichor_geneops_reader")
         expect(GENEOPS_READER_USERNAME).toBe(`${GENEOPS_READER_ROLE}.snsvqlqwnpyzcftubeab`)
+    })
+
+    it("兼容 v1/v2，但质量能力只接受非过期 v2 状态", () => {
+        expect(isSupportedGeneOpsContractVersion(1)).toBe(true)
+        expect(isSupportedGeneOpsContractVersion(GENEOPS_PREFERRED_CONTRACT_VERSION)).toBe(true)
+        expect(isSupportedGeneOpsContractVersion(3)).toBe(false)
+
+        const ready = JSON.stringify({
+            graph_enabled: true,
+            quality_status: {
+                stale: false,
+                wiki_ready: true,
+                graph_ready: true,
+            },
+        })
+        expect(geneOpsQualityCapabilityReady(1, ready, "graph")).toBe(false)
+        expect(geneOpsQualityCapabilityReady(2, ready, "graph")).toBe(true)
+        expect(geneOpsQualityCapabilityReady(2, ready, "wiki")).toBe(true)
+
+        const stale = JSON.stringify({
+            quality_status: {
+                stale: true,
+                wiki_ready: true,
+                graph_ready: true,
+            },
+        })
+        expect(geneOpsQualityCapabilityReady(2, stale, "graph")).toBe(false)
+        expect(geneOpsQualityCapabilityReady(2, null, "wiki")).toBe(false)
     })
 
     it("连接密码加密后可回读，且响应不泄露密码", () => {

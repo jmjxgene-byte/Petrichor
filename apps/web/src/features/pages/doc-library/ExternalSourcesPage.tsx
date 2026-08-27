@@ -51,7 +51,7 @@ export function ExternalSourcesPage() {
   const activeSource = featureEnabled
     ? items.find((item) => item.enabled
       && item.lastCheckStatus === "OK"
-      && item.contractVersion === 1
+      && (item.contractVersion === 1 || item.contractVersion === 2)
       && item.lastCheckedAt != null
       && Date.now() - new Date(item.lastCheckedAt).getTime() <= 48 * 60 * 60 * 1_000) ?? null
     : null
@@ -123,8 +123,8 @@ export function ExternalSourcesPage() {
   const test = async (source: ExternalSourceResponse) => {
     setBusyId(source.id)
     try {
-      await externalSourceApi.test(source.id)
-      toast.success("连接、只读权限与 RPC contract 验证通过")
+      const response = await externalSourceApi.test(source.id)
+      toast.success(response.data.message)
       await refresh()
     } catch (error) {
       toast.error(errorMessage(error, "连接测试失败"))
@@ -191,7 +191,8 @@ export function ExternalSourcesPage() {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <SourceFact label="运行状态" value={items[0].enabled ? items[0].lastCheckStatus ?? "未测试" : "已停用"} />
           <SourceFact label="内容来源" value={(items[0].capabilities?.allowed_sources as string[] | undefined)?.join(" / ") ?? "WeAreSellers / 微信公众号"} />
-          <SourceFact label="检索能力" value="Exact / Fuzzy / Graph" />
+          <SourceFact label="检索能力" value={sourceCapabilityLabel(items[0])} />
+          <SourceFact label="数据截至" value={sourceCutoffLabel(items[0])} />
           <SourceFact label="最近检查" value={items[0].lastCheckedAt ? new Date(items[0].lastCheckedAt).toLocaleString("zh-CN") : "未检查"} />
         </div>
       ) : null}
@@ -243,7 +244,7 @@ export function ExternalSourcesPage() {
               <TableRow key={source.id}>
                 <TableCell className="font-medium"><span className="inline-flex items-center gap-2"><Database className="size-4" />{source.name}</span></TableCell>
                 <TableCell className="font-mono text-xs">{source.projectRef}<div className="text-muted-foreground">{source.region}</div></TableCell>
-                <TableCell className="text-sm">Exact / Fuzzy / Graph</TableCell>
+                <TableCell className="text-sm">{sourceCapabilityLabel(source)}</TableCell>
                 <TableCell className="text-sm">{source.lastCheckedAt ? new Date(source.lastCheckedAt).toLocaleString("zh-CN") : "未检查"}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
@@ -311,4 +312,33 @@ function SourceFact({ label, value }: { label: string; value: string }) {
       <div className="mt-1 truncate text-sm font-medium" title={value}>{value}</div>
     </div>
   )
+}
+
+function sourceCapabilityLabel(source: ExternalSourceResponse) {
+  const searchModes = Array.isArray(source.capabilities?.search_modes)
+    ? source.capabilities.search_modes.filter((item): item is string => typeof item === "string")
+    : ["exact", "fuzzy"]
+  const quality = readRecord(source.capabilities?.quality_status)
+  const capabilities = searchModes.map((item) => item[0]?.toUpperCase() + item.slice(1))
+  if (quality?.wiki_ready === true && quality.stale !== true) capabilities.push("Wiki")
+  if (quality?.graph_ready === true && quality.stale !== true) capabilities.push("Graph")
+  return capabilities.join(" / ")
+}
+
+function sourceCutoffLabel(source: ExternalSourceResponse) {
+  const quality = readRecord(source.capabilities?.quality_status)
+  const cutoffs = readRecord(quality?.source_cutoffs)
+  const values = Object.values(cutoffs ?? {}).filter((item): item is string => typeof item === "string")
+  if (values.length === 0) return source.contractVersion === 1 ? "质量契约待升级" : "暂无快照"
+  const earliest = values
+    .map((item) => new Date(item))
+    .filter((item) => !Number.isNaN(item.getTime()))
+    .sort((left, right) => left.getTime() - right.getTime())[0]
+  return earliest ? earliest.toLocaleString("zh-CN") : "暂无快照"
+}
+
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return value != null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
 }
