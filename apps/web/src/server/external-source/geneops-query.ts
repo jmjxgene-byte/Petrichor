@@ -88,7 +88,7 @@ export async function readGeneOpsChunks(actor: GeneOpsAuditActor, raw: unknown) 
 export async function searchGeneOpsGraph(actor: GeneOpsAuditActor, raw: unknown) {
     const input = geneOpsGraphSearchSchema.parse(raw)
     return await executeGeneOpsRpc(
-        audit(actor, "geneops.graph_search", "graph_search", input),
+        audit(actor, "geneops.graph_search", "graph_search", input, "graph"),
         async (client) => await client<Record<string, unknown>[]>`
             select * from knowledge_vault.graph_search_v1(
                 ${input.query}, ${input.nodeTypes ?? null}, ${input.limit}
@@ -100,7 +100,7 @@ export async function searchGeneOpsGraph(actor: GeneOpsAuditActor, raw: unknown)
 export async function expandGeneOpsGraph(actor: GeneOpsAuditActor, raw: unknown) {
     const input = geneOpsGraphExpandSchema.parse(raw)
     return await executeGeneOpsRpc(
-        audit(actor, "geneops.graph_expand", "graph_expand", input),
+        audit(actor, "geneops.graph_expand", "graph_expand", input, "graph"),
         async (client) => {
             const [row] = await client<Array<{ result: unknown }>>`
                 select knowledge_vault.graph_neighborhood_v1(
@@ -115,14 +115,20 @@ export async function expandGeneOpsGraph(actor: GeneOpsAuditActor, raw: unknown)
 export async function getGeneOpsBacklinks(actor: GeneOpsAuditActor, raw: unknown) {
     const input = geneOpsBacklinksSchema.parse(raw)
     return await executeGeneOpsRpc(
-        audit(actor, "geneops.backlinks", "backlinks", input),
+        audit(actor, "geneops.backlinks", "backlinks", input, "wiki"),
         async (client) => await client<Record<string, unknown>[]>`
             select * from knowledge_vault.backlinks_v1(${input.pageId}, ${input.limit})
         `,
     )
 }
 
-function audit(actor: GeneOpsAuditActor, toolName: string, queryType: string, parameters: unknown) {
+function audit(
+    actor: GeneOpsAuditActor,
+    toolName: string,
+    queryType: string,
+    parameters: unknown,
+    requiredCapability?: "wiki" | "graph",
+) {
     return {
         userId: actor.userId,
         ...(actor.sourceId != null ? { sourceId: actor.sourceId } : {}),
@@ -131,5 +137,6 @@ function audit(actor: GeneOpsAuditActor, toolName: string, queryType: string, pa
         toolName,
         queryType,
         parameters,
+        ...(requiredCapability ? { requiredCapability } : {}),
     }
 }

@@ -47,7 +47,15 @@ export interface AssistantSourceCatalogItem {
     sourceType?: string
     allowedSources?: string[]
     searchModes?: string[]
+    wikiReady?: boolean
     graphEnabled?: boolean
+    graphReady?: boolean
+    qualityStale?: boolean
+    sourceCutoffs?: Record<string, string | null>
+    searchHashCoverage?: number
+    embeddingCoverage?: number
+    semanticReplyCoverage?: number
+    semanticCharCoverage?: number
     contractVersion?: number
     lastCheckedAt?: string | null
   } | null

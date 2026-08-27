@@ -10,6 +10,7 @@ import {
     encodeConnection,
     getExternalSource,
     listExternalSources,
+    isSupportedGeneOpsContractVersion,
     parseSourceId,
     sourceCreateSchema,
     sourceUpdateSchema,
@@ -82,7 +83,10 @@ export async function updateSource(request: AppRequest) {
             if (!getServerConfig().geneOpsConnector.enabled) {
                 throw badRequest("生产功能开关尚未开启")
             }
-            if (existing.lastCheckStatus !== "OK" || existing.contractVersion !== 1) {
+            if (
+                existing.lastCheckStatus !== "OK"
+                || !isSupportedGeneOpsContractVersion(existing.contractVersion)
+            ) {
                 throw badRequest("请先通过连接测试再启用")
             }
         }
@@ -113,11 +117,11 @@ export async function testSource(request: AppRequest) {
             const capabilities = result.capability as Record<string, unknown>
             await updateSourceCheck(source.id, {
                 status: "OK",
-                message: "连接、只读权限与 RPC contract 验证通过",
+                message: result.message,
                 capabilities,
                 contractVersion: result.contractVersion,
             })
-            return ok({ status: "OK", message: "连接验证通过", capabilities })
+            return ok({ status: "OK", message: result.message, capabilities })
         } catch (error) {
             const message = error instanceof Error ? error.message : "连接验证失败"
             await updateSourceCheck(source.id, { status: "ERROR", message })
@@ -150,7 +154,7 @@ export async function cronRefreshSources(request: AppRequest) {
                 const result = await testSourceConnection(source)
                 await updateSourceCheck(source.id, {
                     status: "OK",
-                    message: "每日连接与 RPC contract 检查通过",
+                    message: result.message,
                     capabilities: result.capability as Record<string, unknown>,
                     contractVersion: result.contractVersion,
                 })
