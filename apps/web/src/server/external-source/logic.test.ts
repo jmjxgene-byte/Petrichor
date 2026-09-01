@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+    assertGeneOpsQualityCapabilityReady,
     decodeConnection,
     encodeConnection,
     GENEOPS_DATABASE,
@@ -46,6 +47,29 @@ describe("GeneOps 外部连接配置", () => {
         })
         expect(geneOpsQualityCapabilityReady(2, stale, "graph")).toBe(false)
         expect(geneOpsQualityCapabilityReady(2, null, "wiki")).toBe(false)
+    })
+
+    it("服务端执行层对 v1、缺失、过期和未就绪能力保持 fail-closed", () => {
+        const ready = JSON.stringify({
+            quality_status: { stale: false, wiki_ready: true, graph_ready: true },
+        })
+        const stale = JSON.stringify({
+            quality_status: { stale: true, wiki_ready: true, graph_ready: true },
+        })
+        const graphDisabled = JSON.stringify({
+            quality_status: { stale: false, wiki_ready: true, graph_ready: false },
+        })
+
+        expect(() => assertGeneOpsQualityCapabilityReady({ contractVersion: 1, capabilitiesJson: ready }, "graph"))
+            .toThrow("QUALITY_NOT_READY:graph")
+        expect(() => assertGeneOpsQualityCapabilityReady({ contractVersion: 2, capabilitiesJson: null }, "wiki"))
+            .toThrow("QUALITY_NOT_READY:wiki")
+        expect(() => assertGeneOpsQualityCapabilityReady({ contractVersion: 2, capabilitiesJson: stale }, "graph"))
+            .toThrow("QUALITY_NOT_READY:graph")
+        expect(() => assertGeneOpsQualityCapabilityReady({ contractVersion: 2, capabilitiesJson: graphDisabled }, "graph"))
+            .toThrow("QUALITY_NOT_READY:graph")
+        expect(() => assertGeneOpsQualityCapabilityReady({ contractVersion: 2, capabilitiesJson: ready }, "wiki"))
+            .not.toThrow()
     })
 
     it("连接密码加密后可回读，且响应不泄露密码", () => {

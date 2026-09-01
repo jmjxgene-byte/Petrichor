@@ -65,6 +65,15 @@ export function geneOpsQualityCapabilityReady(
     return quality?.[`${capability}_ready`] === true && quality.stale !== true
 }
 
+export function assertGeneOpsQualityCapabilityReady(
+    source: Pick<ExternalSourceRecord, "contractVersion" | "capabilitiesJson">,
+    capability: GeneOpsQualityCapability,
+) {
+    if (!geneOpsQualityCapabilityReady(source.contractVersion, source.capabilitiesJson, capability)) {
+        throw new Error(`QUALITY_NOT_READY:${capability}`)
+    }
+}
+
 export function assertSuperAdmin(user: { id: number; systemRole?: string | null }) {
     if (!isSuperAdmin(user.systemRole, user.id)) throw forbidden("仅超级管理员可以管理外部数据源")
 }
@@ -205,15 +214,8 @@ export async function executeGeneOpsRpc<T>(
     let errorCode: string | null = null
     let resultCount = 0
     try {
-        if (
-            input.requiredCapability
-            && !geneOpsQualityCapabilityReady(
-                source.contractVersion,
-                source.capabilitiesJson,
-                input.requiredCapability,
-            )
-        ) {
-            throw new Error(`QUALITY_NOT_READY:${input.requiredCapability}`)
+        if (input.requiredCapability) {
+            assertGeneOpsQualityCapabilityReady(source, input.requiredCapability)
         }
         const client = createSourceClient(decodeConnection(source.connectionEnc))
         try {
