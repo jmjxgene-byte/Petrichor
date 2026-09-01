@@ -15,6 +15,7 @@ describe("loadServerConfigFromEnv", () => {
         })
 
         expect(config.databaseUrl).toBe("postgres://user:pass@example.supabase.co:5432/postgres")
+        expect(config.databaseMaxConnections).toBe(1)
         expect(config.s3).toBeNull()
         expect(config.session.expiresInSeconds).toBe(60 * 60 * 24 * 2)
         expect(config.registration.mode).toBe("disabled")
@@ -58,6 +59,23 @@ describe("loadServerConfigFromEnv", () => {
                 SESSION_SECRET: "x".repeat(32),
             }),
         ).toThrow("PETRICHOR_SESSION_EXPIRE_SECONDS")
+    })
+
+    it("读取并校验数据库连接池上限", () => {
+        const config = loadServerConfigFromEnv({
+            DATABASE_URL: "postgres://user:pass@example.supabase.co:5432/postgres",
+            PETRICHOR_DB_MAX_CONNECTIONS: "5",
+            SESSION_SECRET: "x".repeat(32),
+            ...requiredSecrets,
+        })
+        expect(config.databaseMaxConnections).toBe(5)
+
+        expect(() => loadServerConfigFromEnv({
+            DATABASE_URL: "postgres://user:pass@example.supabase.co:5432/postgres",
+            PETRICHOR_DB_MAX_CONNECTIONS: "0",
+            SESSION_SECRET: "x".repeat(32),
+            ...requiredSecrets,
+        })).toThrow("PETRICHOR_DB_MAX_CONNECTIONS")
     })
 
     it("拒绝缺失或非法的凭证加密配置", () => {

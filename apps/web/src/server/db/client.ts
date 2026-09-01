@@ -46,8 +46,9 @@ function sqlitePathFromUrl(databaseUrl: string) {
 }
 
 function createPgDb(): Db {
-    const client = postgres(getServerConfig().databaseUrl, {
-        max: 1,
+    const config = getServerConfig()
+    const client = postgres(config.databaseUrl, {
+        max: config.databaseMaxConnections,
         prepare: false,
     })
     return drizzlePostgres(client, { schema })
@@ -62,8 +63,9 @@ export function getSqlClient() {
     if (isSqliteDatabase()) {
         throw new Error("当前运行在 SQLite 模式，getSqlClient 仅用于 PostgreSQL")
     }
-    return postgres(getServerConfig().databaseUrl, {
-        max: 1,
+    const config = getServerConfig()
+    return postgres(config.databaseUrl, {
+        max: config.databaseMaxConnections,
         prepare: false,
     })
 }

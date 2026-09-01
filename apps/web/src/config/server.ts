@@ -133,6 +133,7 @@ const s3EnvShape = {
 
 const serverEnvSchema = z.object({
     DATABASE_URL: z.string().trim().min(1, "DATABASE_URL 不能为空"),
+    PETRICHOR_DB_MAX_CONNECTIONS: positiveIntegerFromEnv("PETRICHOR_DB_MAX_CONNECTIONS", 1),
     ...s3EnvShape,
     PETRICHOR_ENCRYPT_KEY: z.string().trim().min(32, "PETRICHOR_ENCRYPT_KEY 至少需要 32 个字符"),
     PETRICHOR_ENCRYPT_SALT: z.string().trim().regex(
@@ -164,6 +165,7 @@ export interface ServerConfig {
         salt: string
     }
     databaseUrl: string
+    databaseMaxConnections: number
     localStorageDir: string | null
     registration: {
         mode: "disabled" | "open"
@@ -223,6 +225,7 @@ export function loadServerConfigFromEnv(env: EnvSource = process.env): ServerCon
             salt: parsed.data.PETRICHOR_ENCRYPT_SALT.toLowerCase(),
         },
         databaseUrl: parsed.data.DATABASE_URL,
+        databaseMaxConnections: parsed.data.PETRICHOR_DB_MAX_CONNECTIONS,
         localStorageDir: parsed.data.PETRICHOR_STORAGE_DIR,
         registration: {
             mode: parsed.data.PETRICHOR_REGISTRATION_MODE,
