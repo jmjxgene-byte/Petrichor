@@ -14,9 +14,11 @@ describe("deep research pipeline", () => {
         expect(DEEP_RESEARCH_MODEL_OUTPUT_LIMITS).toEqual({
             planner: 384,
             synthesis: 1_200,
+            maxRetriesPerCall: 0,
         })
-        expect(Object.values(DEEP_RESEARCH_MODEL_OUTPUT_LIMITS).reduce((sum, value) => sum + value, 0))
+        expect(DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.planner + DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.synthesis)
             .toBe(1_584)
+        expect(DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.maxRetriesPerCall).toBe(0)
     })
 
     it("多 query/mode 候选去重后深读并综合", async () => {

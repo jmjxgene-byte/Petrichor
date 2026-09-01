@@ -43,6 +43,7 @@ export async function callChatCompletion(input: {
     purpose?: AiPurpose
     modelRefId?: number | null
     maxOutputTokens?: number
+    maxRetries?: number
     systemPrompt?: string | null
     message?: string
     messages?: ChatCompletionMessage[]
@@ -69,6 +70,7 @@ export async function callChatCompletion(input: {
             ...(system ? { system } : {}),
             messages,
             ...(maxOutputTokens == null ? {} : { maxOutputTokens }),
+            ...(input.maxRetries == null ? {} : { maxRetries: input.maxRetries }),
             ...(resolved.options.temperature == null ? {} : { temperature: resolved.options.temperature }),
             ...(input.signal ? { abortSignal: input.signal } : {}),
         })

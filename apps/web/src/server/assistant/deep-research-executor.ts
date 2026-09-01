@@ -96,6 +96,7 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
         const planner = await callModelOrThrow({
             userId: job.userId,
             maxOutputTokens: DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.planner,
+            maxRetries: DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.maxRetriesPerCall,
             systemPrompt: [
                 "把用户问题拆成最多 5 个互补检索式。",
                 "只输出 JSON 字符串数组，不要解释，不要包含敏感信息。",
@@ -147,6 +148,7 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
                 const completion = await callModelOrThrow({
                     userId: job.userId,
                     maxOutputTokens: DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.synthesis,
+                    maxRetries: DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.maxRetriesPerCall,
                     systemPrompt: [
                         "你负责生成一条明确标记为深度检索补充的中文回答。",
                         "只使用下方当前运行证据；冲突时说明差异与时间，不得编造。",

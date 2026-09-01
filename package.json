@@ -37,6 +37,7 @@
     "@excalidraw/excalidraw": "0.18.1",
     "@hono/node-server": "2.1.1",
     "brace-expansion": "1.1.18",
+    "browserslist": "4.28.8",
     "dompurify": "3.4.14",
     "fast-uri": "3.1.5",
     "hono": "4.13.4",
