@@ -5,10 +5,20 @@ import {
     runDeepResearchPipeline,
     type DeepResearchCandidate,
 } from "./deep-research-pipeline"
+import { DEEP_RESEARCH_MODEL_OUTPUT_LIMITS } from "./deep-research-limits"
 
 const signal = new AbortController().signal
 
 describe("deep research pipeline", () => {
+    it("为两次模型调用设置固定输出上限", () => {
+        expect(DEEP_RESEARCH_MODEL_OUTPUT_LIMITS).toEqual({
+            planner: 384,
+            synthesis: 1_200,
+        })
+        expect(Object.values(DEEP_RESEARCH_MODEL_OUTPUT_LIMITS).reduce((sum, value) => sum + value, 0))
+            .toBe(1_584)
+    })
+
     it("多 query/mode 候选去重后深读并综合", async () => {
         const searches: string[] = []
         const candidate = (key: string, score: number): DeepResearchCandidate => ({

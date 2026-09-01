@@ -42,6 +42,7 @@ export async function callChatCompletion(input: {
     userId: number
     purpose?: AiPurpose
     modelRefId?: number | null
+    maxOutputTokens?: number
     systemPrompt?: string | null
     message?: string
     messages?: ChatCompletionMessage[]
@@ -59,11 +60,15 @@ export async function callChatCompletion(input: {
         modelName = resolved.model.modelId
 
         const { system, messages } = buildPrompt(input)
+        const maxOutputTokens = resolveMaxOutputTokens(
+            resolved.options.maxTokens,
+            input.maxOutputTokens,
+        )
         const result = await generateText({
             model,
             ...(system ? { system } : {}),
             messages,
-            ...(resolved.options.maxTokens == null ? {} : { maxOutputTokens: resolved.options.maxTokens }),
+            ...(maxOutputTokens == null ? {} : { maxOutputTokens }),
             ...(resolved.options.temperature == null ? {} : { temperature: resolved.options.temperature }),
             ...(input.signal ? { abortSignal: input.signal } : {}),
         })
@@ -97,6 +102,21 @@ export async function callChatCompletion(input: {
         }, "语言模型调用失败")
         throw error
     }
+}
+
+export function resolveMaxOutputTokens(
+    configured: number | null | undefined,
+    requested: number | undefined,
+): number | undefined {
+    if (requested !== undefined && (!Number.isSafeInteger(requested) || requested <= 0)) {
+        throw new Error("maxOutputTokens 必须是正整数")
+    }
+    const normalizedConfigured = configured != null && Number.isSafeInteger(configured) && configured > 0
+        ? configured
+        : undefined
+    if (requested === undefined) return normalizedConfigured
+    if (normalizedConfigured === undefined) return requested
+    return Math.min(normalizedConfigured, requested)
 }
 
 /**
