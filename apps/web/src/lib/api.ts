@@ -2720,6 +2720,39 @@ export const agentRunApi = {
     }>("/assistant/agent-run/trace", { runId }),
 }
 
+export interface DeepResearchJobResponse {
+  runKey: string
+  status: "queued" | "running" | "retry_wait" | "cancel_requested" | "cancelled" | "succeeded" | "failed"
+  fastRunKey: string | null
+  attemptCount: number
+  maxAttempts: number
+  errorCode: string | null
+  resultMessageId: string | null
+  capabilitySnapshot: {
+    contractVersion: number | null
+    sourceCutoffs: Record<string, string | null>
+    allowedModes: Array<"exact" | "fuzzy" | "hybrid">
+    wikiReady: boolean
+    graphReady: boolean
+    qualityStale: boolean
+    capturedAt: string
+  }
+  createdAt: string
+  updatedAt: string
+  startedAt: string | null
+  completedAt: string | null
+  cancelledAt: string | null
+}
+
+export const deepResearchApi = {
+  start: (data: { threadId: string; questionMessageId: string; fastRunKey?: string | null }) =>
+    api.post<DeepResearchJobResponse>("/assistant/deep-research/start", data),
+  status: (runKey: string) =>
+    api.post<DeepResearchJobResponse>("/assistant/deep-research/status", { runKey }),
+  cancel: (runKey: string) =>
+    api.post<DeepResearchJobResponse>("/assistant/deep-research/cancel", { runKey }),
+}
+
 export const assistantApi = {
   threadList: (params: { cursor?: number; limit?: number; q?: string } = {}) =>
     api.post<AssistantThreadListResponse>("/assistant/thread/list", params),

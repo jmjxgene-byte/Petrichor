@@ -25,6 +25,12 @@ function isolateVercelPreviewEnv(env: EnvSource): EnvSource {
         PETRICHOR_ENCRYPT_SALT: previewRuntimeSecrets.salt,
         PETRICHOR_REGISTRATION_MODE: "disabled",
         PETRICHOR_GENEOPS_CONNECTOR_ENABLED: "false",
+        PETRICHOR_DEEP_RESEARCH_ENABLED: "false",
+        PETRICHOR_DEEP_RESEARCH_AUTO_START: "false",
+        PETRICHOR_DEEP_RESEARCH_WORKER_ENABLED: "false",
+        PETRICHOR_GENEOPS_HYBRID_ENABLED: "false",
+        PETRICHOR_GENEOPS_WIKI_ENABLED: "false",
+        PETRICHOR_GENEOPS_GRAPH_V2_ENABLED: "false",
         PETRICHOR_STORAGE_DIR: "/tmp/petrichor-preview-storage",
         CRON_SECRET: undefined,
         S3_ACCESS_KEY_ID: undefined,
@@ -142,6 +148,12 @@ const serverEnvSchema = z.object({
     ),
     PETRICHOR_REGISTRATION_MODE: registrationModeFromEnv(),
     PETRICHOR_GENEOPS_CONNECTOR_ENABLED: booleanFromEnv("PETRICHOR_GENEOPS_CONNECTOR_ENABLED", false),
+    PETRICHOR_DEEP_RESEARCH_ENABLED: booleanFromEnv("PETRICHOR_DEEP_RESEARCH_ENABLED", false),
+    PETRICHOR_DEEP_RESEARCH_AUTO_START: booleanFromEnv("PETRICHOR_DEEP_RESEARCH_AUTO_START", false),
+    PETRICHOR_DEEP_RESEARCH_WORKER_ENABLED: booleanFromEnv("PETRICHOR_DEEP_RESEARCH_WORKER_ENABLED", false),
+    PETRICHOR_GENEOPS_HYBRID_ENABLED: booleanFromEnv("PETRICHOR_GENEOPS_HYBRID_ENABLED", false),
+    PETRICHOR_GENEOPS_WIKI_ENABLED: booleanFromEnv("PETRICHOR_GENEOPS_WIKI_ENABLED", false),
+    PETRICHOR_GENEOPS_GRAPH_V2_ENABLED: booleanFromEnv("PETRICHOR_GENEOPS_GRAPH_V2_ENABLED", false),
     CRON_SECRET: optionalTrimmedStringFromEnv(),
     PETRICHOR_STORAGE_DIR: optionalTrimmedStringFromEnv(),
     PETRICHOR_SESSION_EXPIRE_SECONDS: positiveIntegerFromEnv(
@@ -173,6 +185,14 @@ export interface ServerConfig {
     geneOpsConnector: {
         enabled: boolean
         cronSecret: string | null
+    }
+    deepResearch: {
+        enabled: boolean
+        autoStart: boolean
+        workerEnabled: boolean
+        hybridEnabled: boolean
+        wikiEnabled: boolean
+        graphV2Enabled: boolean
     }
     s3: S3Config | null
     session: {
@@ -233,6 +253,14 @@ export function loadServerConfigFromEnv(env: EnvSource = process.env): ServerCon
         geneOpsConnector: {
             enabled: parsed.data.PETRICHOR_GENEOPS_CONNECTOR_ENABLED,
             cronSecret: parsed.data.CRON_SECRET,
+        },
+        deepResearch: {
+            enabled: parsed.data.PETRICHOR_DEEP_RESEARCH_ENABLED,
+            autoStart: parsed.data.PETRICHOR_DEEP_RESEARCH_AUTO_START,
+            workerEnabled: parsed.data.PETRICHOR_DEEP_RESEARCH_WORKER_ENABLED,
+            hybridEnabled: parsed.data.PETRICHOR_GENEOPS_HYBRID_ENABLED,
+            wikiEnabled: parsed.data.PETRICHOR_GENEOPS_WIKI_ENABLED,
+            graphV2Enabled: parsed.data.PETRICHOR_GENEOPS_GRAPH_V2_ENABLED,
         },
         s3: toS3Config(parsed.data),
         session: {

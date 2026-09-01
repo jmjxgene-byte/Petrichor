@@ -36,6 +36,10 @@
 
 把 `deploy/selfhost/cron-refresh.sh` 安装为 root-only 可执行文件，通过 1Panel 或系统定时任务每日 `03:17` 运行。任务环境只提供 `CRON_SECRET`，可选设置 `PETRICHOR_CRON_BASE_URL`；失败必须进入 1Panel 告警，禁止把 Secret 打印到日志。
 
+## Deep Research Worker
+
+Worker 默认不启动，`PETRICHOR_DEEP_RESEARCH_ENABLED`、`PETRICHOR_DEEP_RESEARCH_WORKER_ENABLED` 及 Hybrid/Wiki/Graph flags 均保持 false。只有 expand-only Job 迁移已在 staging 执行、Postgres claim/lease/heartbeat/exactly-once 验收通过后，才可同时开启前两个 flags，并用 `docker compose --profile worker --env-file .env.production up -d web worker` 启动。Worker 只持久化 ID、hash、capability snapshot、租约、错误码和最终回答/安全引用；查询副本、chunk、snippet 和 RPC 结果不得进入 Job、Trace 或日志。
+
 ## 切换与回滚
 
 Staging 验收通过后，将 Cloudflare DNS TTL 调整为 300 秒，再切换 `petrichor.genejm.one`。保留 Vercel Production 和原 Secret 48–72 小时；出现登录、S3、流式、GeneOps 或连接池异常时立即将 DNS 指回 Vercel，停止自托管容器，不执行数据库 down migration。

@@ -19,6 +19,14 @@ describe("loadServerConfigFromEnv", () => {
         expect(config.s3).toBeNull()
         expect(config.session.expiresInSeconds).toBe(60 * 60 * 24 * 2)
         expect(config.registration.mode).toBe("disabled")
+        expect(config.deepResearch).toEqual({
+            enabled: false,
+            autoStart: false,
+            workerEnabled: false,
+            hybridEnabled: false,
+            wikiEnabled: false,
+            graphV2Enabled: false,
+        })
         expect(config.apiEncryption.salt).toBe("0123456789abcdef")
     })
 
@@ -128,6 +136,14 @@ describe("loadServerConfigFromEnv", () => {
         expect(config.localStorageDir).toBe("/tmp/petrichor-preview-storage")
         expect(config.registration.mode).toBe("disabled")
         expect(config.geneOpsConnector).toEqual({ enabled: false, cronSecret: null })
+        expect(config.deepResearch).toEqual({
+            enabled: false,
+            autoStart: false,
+            workerEnabled: false,
+            hybridEnabled: false,
+            wikiEnabled: false,
+            graphV2Enabled: false,
+        })
         expect(config.s3).toBeNull()
         expect(config.sessionSecret).not.toContain("production")
         expect(config.apiEncryption.key).not.toBe(requiredSecrets.PETRICHOR_ENCRYPT_KEY)

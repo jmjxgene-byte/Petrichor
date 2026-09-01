@@ -33,6 +33,25 @@ services:
     networks:
       - app
 
+  worker:
+    profiles: ["worker"]
+    image: petrichor-web:${PETRICHOR_IMAGE_TAG:-local}
+    command: ["bun", "deep-research-worker.ts"]
+    env_file:
+      - ${PETRICHOR_ENV_FILE:-./.env.production}
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,uid=1000,gid=1000
+    restart: unless-stopped
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - app
+
 networks:
   app:
     driver: bridge

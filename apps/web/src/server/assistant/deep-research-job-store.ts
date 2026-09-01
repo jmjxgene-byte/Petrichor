@@ -331,6 +331,29 @@ export async function requestDeepResearchJobCancellation(runKey: string, userId:
     return requested ?? await getDeepResearchJob(runKey, userId)
 }
 
+export async function acknowledgeDeepResearchJobCancellation(input: {
+    jobId: number
+    workerId: string
+    now?: Date
+}) {
+    const now = input.now ?? new Date()
+    const [job] = await getDb().update(deepResearchJobs).set({
+        status: "cancelled",
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        heartbeatAt: null,
+        errorCode: "cancelled",
+        cancelledAt: now,
+        completedAt: now,
+        updatedAt: now,
+    }).where(and(
+        eq(deepResearchJobs.id, input.jobId),
+        eq(deepResearchJobs.status, "cancel_requested"),
+        eq(deepResearchJobs.leaseOwner, input.workerId),
+    )).returning()
+    return job ?? null
+}
+
 export function toDeepResearchJobResponse(job: DeepResearchJobRecord) {
     const snapshot = deepResearchCapabilitySnapshotSchema.parse(JSON.parse(job.capabilitySnapshotJson))
     return {
