@@ -122,4 +122,75 @@ describe.runIf(hasSqlite)("deep research job store", () => {
             rawChunks: ["forbidden"],
         })).toThrow()
     })
+
+    it("heartbeat、失败退避和 exactly-once 完成事务保持租约所有权", async () => {
+        const { user, thread, message } = await createQuestion()
+        const first = await store.createDeepResearchJob({
+            runKey: "deep_runtime_state_1",
+            idempotencyKey: "idem_runtime_state_1",
+            threadId: thread.id,
+            userId: user.id,
+            questionMessageId: message.id,
+            sourceScopeHash: "scope_hash_runtime_state_1",
+            capabilitySnapshot,
+        })
+        await dbModule.getDb().update(schema.deepResearchJobs).set({
+            status: "running",
+            attemptCount: 1,
+            leaseOwner: "worker-1",
+            leaseExpiresAt: new Date(Date.now() + 60_000),
+        }).where(eq(schema.deepResearchJobs.id, first.id))
+        expect(await store.heartbeatDeepResearchJob({ jobId: first.id, workerId: "other-worker" })).toBeNull()
+        expect(await store.heartbeatDeepResearchJob({ jobId: first.id, workerId: "worker-1" })).not.toBeNull()
+        expect((await store.failDeepResearchJob({
+            jobId: first.id,
+            workerId: "worker-1",
+            errorCode: "timeout",
+        }))?.status).toBe("retry_wait")
+
+        const second = await store.createDeepResearchJob({
+            runKey: "deep_runtime_complete_1",
+            idempotencyKey: "idem_runtime_complete_1",
+            threadId: thread.id,
+            userId: user.id,
+            questionMessageId: message.id,
+            fastRunKey: "fast_runtime_1",
+            sourceScopeHash: "scope_hash_runtime_complete_1",
+            capabilitySnapshot,
+        })
+        await dbModule.getDb().update(schema.deepResearchJobs).set({
+            status: "running",
+            attemptCount: 1,
+            leaseOwner: "worker-2",
+            leaseExpiresAt: new Date(Date.now() + 60_000),
+        }).where(eq(schema.deepResearchJobs.id, second.id))
+        const finalMessage = {
+            parts: [{ type: "text" as const, text: "深度检索补充" }],
+            agentRunId: "agent_runtime_1",
+            deepResearch: {
+                runKey: second.runKey,
+                fastRunKey: second.fastRunKey,
+                references: [{
+                    title: "安全来源",
+                    url: "https://example.com/source",
+                    source: "geneops",
+                    queriedAt: "2026-09-01T00:00:00.000Z",
+                }],
+            },
+        }
+        const completed = await store.completeDeepResearchJob({
+            jobId: second.id,
+            workerId: "worker-2",
+            message: finalMessage,
+        })
+        const repeated = await store.completeDeepResearchJob({
+            jobId: second.id,
+            workerId: "worker-2",
+            message: finalMessage,
+        })
+        expect(completed?.job.status).toBe("succeeded")
+        expect(repeated?.message.id).toBe(completed?.message.id)
+        const messages = await dbModule.getDb().select().from(schema.assistantMessages)
+        expect(messages.filter((item) => item.id === completed?.message.id)).toHaveLength(1)
+    })
 })

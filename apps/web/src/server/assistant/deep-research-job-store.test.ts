@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest"
 import type { DeepResearchJobRecord } from "@/server/db/schema"
 import {
     DEEP_RESEARCH_JOB_STATUSES,
+    deepResearchErrorCodeSchema,
+    deepResearchFinalMessageSchema,
+    deepResearchRetryPlan,
     deepResearchCapabilitySnapshotSchema,
     toDeepResearchJobResponse,
 } from "./deep-research-job-store"
@@ -26,6 +29,35 @@ describe("deep research job metadata contract", () => {
             graphReady: false,
             qualityStale: false,
             capturedAt: "2026-09-01T00:00:00.000Z",
+            rawChunks: ["forbidden"],
+        })).toThrow()
+    })
+
+    it("重试退避与错误码保持有限集合", () => {
+        expect(deepResearchRetryPlan(1, 3)).toEqual({ status: "retry_wait", delaySeconds: 10 })
+        expect(deepResearchRetryPlan(2, 3)).toEqual({ status: "retry_wait", delaySeconds: 30 })
+        expect(deepResearchRetryPlan(3, 3)).toEqual({ status: "failed", delaySeconds: 0 })
+        expect(deepResearchErrorCodeSchema.safeParse("raw-database-error").success).toBe(false)
+    })
+
+    it("最终消息只允许文本答案与安全引用元数据", () => {
+        const valid = {
+            parts: [{ type: "text", text: "深度检索补充结论" }],
+            agentRunId: "agent_deep_1",
+            deepResearch: {
+                runKey: "deep_1",
+                fastRunKey: "fast_1",
+                references: [{
+                    title: "来源标题",
+                    url: "https://example.com/source",
+                    source: "geneops",
+                    queriedAt: "2026-09-01T00:00:00.000Z",
+                }],
+            },
+        }
+        expect(deepResearchFinalMessageSchema.parse(valid)).toEqual(valid)
+        expect(() => deepResearchFinalMessageSchema.parse({
+            ...valid,
             rawChunks: ["forbidden"],
         })).toThrow()
     })
