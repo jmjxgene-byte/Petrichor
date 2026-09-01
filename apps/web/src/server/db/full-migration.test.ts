@@ -32,6 +32,8 @@ describe("buildInitialMigrationSql", () => {
         expect(sql).toContain("insert into better_auth_user")
         expect(sql).toContain("provider_id, user_id, password")
         expect(sql).toContain("create table if not exists petrichor_auth_session")
+        expect(sql).toContain("create table if not exists petrichor_deep_research_job")
+        expect(sql).toContain("ux_petrichor_deep_research_job_idempotency")
         expect(sql).toContain("create table if not exists petrichor_notification")
         expect(sql).toContain("payload_json text")
         expect(sql).toContain("create table if not exists petrichor_kb_article_share")

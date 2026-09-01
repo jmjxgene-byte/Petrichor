@@ -1182,6 +1182,36 @@ export const assistantMessages = pgTable("petrichor_assistant_message", {
     index("petrichor_assistant_message_thread_order_idx").on(table.threadId, table.createdAt, table.id),
 ])
 
+export const deepResearchJobs = pgTable("petrichor_deep_research_job", {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    runKey: text("run_key").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    threadId: bigint("thread_id", { mode: "number" }).notNull(),
+    userId: bigint("user_id", { mode: "number" }).notNull(),
+    questionMessageId: bigint("question_message_id", { mode: "number" }).notNull(),
+    fastRunKey: text("fast_run_key"),
+    sourceScopeHash: text("source_scope_hash").notNull(),
+    capabilitySnapshotJson: text("capability_snapshot_json").notNull(),
+    status: text("status").notNull().default("queued"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(3),
+    availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }),
+    errorCode: text("error_code"),
+    resultMessageId: bigint("result_message_id", { mode: "number" }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    ...timestamps,
+}, (table) => [
+    uniqueIndex("ux_petrichor_deep_research_job_run_key").on(table.runKey),
+    uniqueIndex("ux_petrichor_deep_research_job_idempotency").on(table.idempotencyKey),
+    index("petrichor_deep_research_job_claim_idx").on(table.status, table.availableAt, table.leaseExpiresAt),
+    index("petrichor_deep_research_job_thread_idx").on(table.threadId, table.createdAt),
+])
+
 export const assistantRuns = pgTable("petrichor_assistant_run", {
     id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
     threadId: bigint("thread_id", { mode: "number" }).notNull(),
@@ -1383,6 +1413,7 @@ export type AgentMemoryRecord = typeof agentMemories.$inferSelect
 export type AgentMemoryStateRecord = typeof agentMemoryStates.$inferSelect
 export type AssistantThreadRecord = typeof assistantThreads.$inferSelect
 export type AssistantMessageRecord = typeof assistantMessages.$inferSelect
+export type DeepResearchJobRecord = typeof deepResearchJobs.$inferSelect
 export type AssistantRunRecord = typeof assistantRuns.$inferSelect
 export type AssistantStepRecord = typeof assistantSteps.$inferSelect
 export type AssistantArtifactRecord = typeof assistantArtifacts.$inferSelect
