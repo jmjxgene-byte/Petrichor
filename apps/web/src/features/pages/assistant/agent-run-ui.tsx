@@ -17,6 +17,7 @@ import type { AgentRunViewModel } from "@/features/agent-runs/types"
 import { QaStreamingMarkdown } from "@/features/pages/knowledge/QaMarkdown"
 import { annotateNormalQaWikiMentions } from "@/lib/wiki-mentions"
 import { readPersistedAgentRunId } from "./assistant-message-utils"
+import { selectCitationRun } from "./citation-run"
 import { SaveToKnowledgeButton } from "./save-to-knowledge-dialog"
 import { usePersistedDeepResearchEvidence } from "./use-persisted-deep-research-evidence"
 
@@ -149,11 +150,10 @@ export function AgentStopButton() {
 export function AgentCitationBar() {
     const run = useCurrentAgentRun()
     const persistedEvidence = usePersistedDeepResearchEvidence()
-    const citationRun = useMemo(() => (
-        run && run.evidence.length === 0 && persistedEvidence.length > 0
-            ? { ...run, evidence: persistedEvidence }
-            : run
-    ), [persistedEvidence, run])
+    const citationRun = useMemo(
+        () => selectCitationRun(run, persistedEvidence),
+        [persistedEvidence, run],
+    )
     const cited = useMemo(() => {
         if (!citationRun) return []
         return selectCitedEvidenceSources(citationRun)
