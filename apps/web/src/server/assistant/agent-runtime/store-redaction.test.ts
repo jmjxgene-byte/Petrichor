@@ -31,6 +31,7 @@ describe("GeneOps Agent 持久化脱敏", () => {
                 sourceRef: "external-source:1",
                 sourceName: "GeneOps",
                 queriedAt: "2026-08-27T00:00:00.000Z",
+                citationIndex: 1,
                 author: "private",
             },
         }
@@ -43,6 +44,7 @@ describe("GeneOps Agent 持久化脱敏", () => {
                 sourceRef: "external-source:1",
                 sourceName: "GeneOps",
                 queriedAt: "2026-08-27T00:00:00.000Z",
+                citationIndex: 1,
                 persistedMetadataOnly: true,
             },
         })

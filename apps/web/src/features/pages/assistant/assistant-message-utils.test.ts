@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest"
 import {
     focusFromThread,
     focusToRequestBody,
+    extractPersistedMessageMetadata,
+    persistedDeepResearchEvidence,
+    readPersistedAgentRunId,
+    readPersistedDeepResearchReferences,
     readPersistedTiming,
     sourceScopesEqual,
+    toInitialMessages,
 } from "./assistant-message-utils"
 
 describe("assistant source scope messages", () => {
@@ -28,6 +33,79 @@ describe("assistant source scope messages", () => {
             { mode: "selected", refs: ["doc-library:1", "external-source:2"] },
             { mode: "selected", refs: ["doc-library:1", "external-source:2"] },
         )).toBe(true)
+    })
+})
+
+describe("deep research persisted message metadata", () => {
+    it("保留Run关联与安全引用，过滤非法URL和多余字段", () => {
+        const metadata = extractPersistedMessageMetadata({
+            agentRunId: "deep_run_1",
+            deepResearch: {
+                runKey: "deep_run_1",
+                references: [{
+                    title: "来源一",
+                    url: "https://example.com/source",
+                    source: "GeneOps",
+                    sourceKind: "geneops",
+                    queriedAt: "2026-09-01T00:00:00.000Z",
+                    snippet: "不得保留",
+                }, {
+                    title: "恶意链接",
+                    url: "javascript:alert(1)",
+                    source: "GeneOps",
+                    queriedAt: "2026-09-01T00:00:00.000Z",
+                }],
+            },
+        })
+
+        expect(metadata).toEqual({
+            custom: {
+                agentRunId: "deep_run_1",
+                deepResearch: {
+                    runKey: "deep_run_1",
+                    references: [{
+                        title: "来源一",
+                        url: "https://example.com/source",
+                        source: "GeneOps",
+                        sourceKind: "geneops",
+                        queriedAt: "2026-09-01T00:00:00.000Z",
+                    }],
+                },
+            },
+        })
+        expect(readPersistedDeepResearchReferences(metadata)).toHaveLength(1)
+        expect(readPersistedAgentRunId(metadata)).toBe("deep_run_1")
+        expect(persistedDeepResearchEvidence(metadata)).toEqual([{
+            id: "deep-reference-1",
+            source: "geneops",
+            title: "来源一",
+            url: "https://example.com/source",
+            sourceName: "GeneOps",
+            queriedAt: "2026-09-01T00:00:00.000Z",
+            citationIndex: 1,
+        }])
+        expect(JSON.stringify(metadata)).not.toContain("不得保留")
+    })
+
+    it("历史Deep消息重复标题归一为一个", () => {
+        const messages = toInitialMessages([{
+            id: "1",
+            role: "assistant",
+            content: {
+                parts: [{ type: "text", text: "## 深度检索补充\n\n# 深度检索补充\n\n结论 [1]" }],
+                agentRunId: "deep_run_1",
+                deepResearch: {
+                    references: [{
+                        title: "来源一",
+                        url: "https://example.com/source",
+                        source: "GeneOps",
+                        sourceKind: "geneops",
+                        queriedAt: "2026-09-01T00:00:00.000Z",
+                    }],
+                },
+            },
+        }])
+        expect(messages[0]?.parts).toEqual([{ type: "text", text: "## 深度检索补充\n\n结论 [1]" }])
     })
 })
 

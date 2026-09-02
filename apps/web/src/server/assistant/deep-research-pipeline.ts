@@ -5,6 +5,8 @@ const MAX_CANDIDATES = 12
 const MAX_EVIDENCE_ITEMS = 96
 const MAX_EVIDENCE_ITEM_CHARS = 4_000
 const MAX_EVIDENCE_TOTAL_CHARS = 240_000
+const MAX_CITABLE_REFERENCES = 40
+const MAX_CITABLE_SOURCE_CHARS = 8_000
 
 export type SearchMode = "exact" | "fuzzy"
 
@@ -18,11 +20,13 @@ export type DeepResearchCandidate = {
 }
 
 export type DeepResearchEvidence = {
+    referenceKey: string
     title: string
     content: string
     source: string
     url: string | null
     queriedAt: string
+    sourceName?: string
 }
 
 export type DeepResearchPipelineDeps = {
@@ -78,7 +82,51 @@ export async function runDeepResearchPipeline(input: {
         }
     }
     if (evidence.length === 0) throw new DeepResearchExecutionError("validation_failed", "候选没有可读证据")
-    const answer = (await deps.synthesize(input.question, evidence, input.signal)).trim()
+    const rawEvidenceCount = evidence.length
+    const citableEvidence = prepareCitableEvidence(evidence)
+    if (citableEvidence.length === 0) {
+        throw new DeepResearchExecutionError("validation_failed", "候选没有可引用证据")
+    }
+    const answer = (await deps.synthesize(input.question, citableEvidence, input.signal)).trim()
     if (!answer) throw new DeepResearchExecutionError("validation_failed", "深度综合没有生成答案")
-    return { queries, candidates, evidence, answer }
+    return { queries, candidates, evidence: citableEvidence, rawEvidenceCount, answer }
+}
+
+/**
+ * 综合前先形成唯一、稳定的引用源列表。
+ * 后续 prompt 编号、消息 references 与 Agent Evidence 必须复用这同一顺序。
+ */
+export function prepareCitableEvidence(evidence: DeepResearchEvidence[]): DeepResearchEvidence[] {
+    const byKey = new Map<string, DeepResearchEvidence>()
+    let totalChars = 0
+
+    for (const item of evidence) {
+        const key = item.referenceKey.trim()
+        const content = item.content.trim()
+        if (!key || !content) continue
+
+        const existing = byKey.get(key)
+        if (existing) {
+            if (existing.content.includes(content)) continue
+            const remainingForSource = MAX_CITABLE_SOURCE_CHARS - existing.content.length
+            const remainingTotal = MAX_EVIDENCE_TOTAL_CHARS - totalChars
+            const separator = "\n\n"
+            const take = Math.min(remainingForSource - separator.length, remainingTotal - separator.length)
+            if (take <= 0) continue
+            const appended = content.slice(0, take)
+            existing.content = `${existing.content}${separator}${appended}`
+            totalChars += separator.length + appended.length
+            continue
+        }
+
+        if (byKey.size >= MAX_CITABLE_REFERENCES) continue
+        const remainingTotal = MAX_EVIDENCE_TOTAL_CHARS - totalChars
+        const take = Math.min(MAX_CITABLE_SOURCE_CHARS, remainingTotal)
+        if (take <= 0) break
+        const normalizedContent = content.slice(0, take)
+        byKey.set(key, { ...item, content: normalizedContent })
+        totalChars += normalizedContent.length
+    }
+
+    return [...byKey.values()]
 }

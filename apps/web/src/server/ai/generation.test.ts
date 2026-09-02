@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { resolveMaxOutputTokens } from "./generation"
+import { normalizeChatCompletionUsage, resolveMaxOutputTokens } from "./generation"
 
 describe("resolveMaxOutputTokens", () => {
     it("用途绑定未配置上限时采用本次调用上限", () => {
@@ -19,5 +19,27 @@ describe("resolveMaxOutputTokens", () => {
     it("拒绝无效的本次调用上限", () => {
         expect(() => resolveMaxOutputTokens(null, 0)).toThrow("正整数")
         expect(() => resolveMaxOutputTokens(null, 1.5)).toThrow("正整数")
+    })
+})
+
+describe("normalizeChatCompletionUsage", () => {
+    it("保留text/reasoning和缓存token明细，未知字段使用null", () => {
+        expect(normalizeChatCompletionUsage({
+            inputTokens: 100,
+            outputTokens: 35,
+            totalTokens: 135,
+            inputTokenDetails: { noCacheTokens: 80, cacheReadTokens: 20 },
+            outputTokenDetails: { textTokens: 30, reasoningTokens: 5 },
+        })).toEqual({
+            inputTokens: 100,
+            outputTokens: 35,
+            totalTokens: 135,
+            inputTokenDetails: {
+                noCacheTokens: 80,
+                cacheReadTokens: 20,
+                cacheWriteTokens: null,
+            },
+            outputTokenDetails: { textTokens: 30, reasoningTokens: 5 },
+        })
     })
 })

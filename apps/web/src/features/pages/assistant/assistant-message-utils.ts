@@ -1,6 +1,7 @@
 import type { ToolCallMessagePartStatus } from "@assistant-ui/react"
 import type { ThreadTokenUsage, UseChatRuntimeOptions } from "@assistant-ui/react-ai-sdk"
 import type { AssistantFocus, AssistantThreadSummary } from "@/lib/api"
+import type { EvidenceViewModel } from "@/features/agent-runs/types"
 import {
   assistantSourceScopeFromFocus,
   assistantSourceScopeSchema,
@@ -10,6 +11,14 @@ import {
 export type AssistantUIMessage = NonNullable<UseChatRuntimeOptions["messages"]>[number]
 
 export type AssistantFocusSelection = AssistantSourceScope
+
+export type PersistedDeepResearchReference = {
+  title: string
+  url: string | null
+  source: string
+  sourceKind?: EvidenceViewModel["source"]
+  queriedAt: string
+}
 
 export function focusToRequestBody(focus: AssistantFocusSelection): AssistantFocus | null {
   const sourceScope = assistantSourceScopeSchema.parse(focus)
@@ -158,7 +167,10 @@ export function toInitialMessages(messages: Array<{ id: string; role: string; co
       const content = normalizeAssistantPersistedContent(message.content)
       const metadata = extractPersistedMessageMetadata(content)
       const savedParts = extractPersistedParts(content)
-      const parts = savedParts ?? [{ type: "text", text: extractTextFromContent(content) }]
+      const parts = normalizePersistedDeepResearchParts(
+        savedParts ?? [{ type: "text", text: extractTextFromContent(content) }],
+        asRecord(content)?.deepResearch != null,
+      )
       return {
         id: `persisted-${message.id}`,
         role: message.role,
@@ -166,6 +178,19 @@ export function toInitialMessages(messages: Array<{ id: string; role: string; co
         ...(metadata ? { metadata } : {}),
       }
     }) as AssistantUIMessage[]
+}
+
+function normalizePersistedDeepResearchParts(parts: Record<string, unknown>[], isDeepResearch: boolean) {
+  if (!isDeepResearch) return parts
+  let normalized = false
+  return parts.map((part) => {
+    if (normalized || part.type !== "text" || typeof part.text !== "string") return part
+    normalized = true
+    let answer = part.text.trim()
+    const leadingTitle = /^(?:#{1,6}\s*)?深度检索补充\s*(?:[:：-]\s*)?(?:\r?\n|$)/u
+    while (leadingTitle.test(answer)) answer = answer.replace(leadingTitle, "").trimStart()
+    return { ...part, text: `## 深度检索补充${answer ? `\n\n${answer.trim()}` : ""}` }
+  })
 }
 
 export function normalizeAssistantPersistedContent(content: unknown) {
@@ -252,6 +277,11 @@ export function extractPersistedMessageMetadata(content: unknown) {
   const record = asRecord(content)
   if (!record) return null
   const custom: Record<string, unknown> = {}
+  if (typeof record.agentRunId === "string" && record.agentRunId.trim()) {
+    custom.agentRunId = record.agentRunId.trim()
+  }
+  const deepResearch = normalizePersistedDeepResearch(record.deepResearch)
+  if (deepResearch) custom.deepResearch = deepResearch
   if (record.usage !== undefined) custom.usage = record.usage
   if (typeof record.modelId === "string") custom.modelId = record.modelId
   if (typeof record.modelName === "string") custom.modelName = record.modelName
@@ -261,6 +291,88 @@ export function extractPersistedMessageMetadata(content: unknown) {
   if (typeof record.tokensPerSecond === "number") custom.tokensPerSecond = record.tokensPerSecond
   if (record.subAgentUsage !== undefined) custom.subAgentUsage = record.subAgentUsage
   return Object.keys(custom).length > 0 ? { custom } : null
+}
+
+export function readPersistedDeepResearchReferences(metadata: unknown): PersistedDeepResearchReference[] {
+  const root = asRecord(metadata)
+  const custom = asRecord(root?.custom) ?? root
+  const deepResearch = asRecord(custom?.deepResearch)
+  return normalizePersistedReferences(deepResearch?.references)
+}
+
+export function readPersistedAgentRunId(metadata: unknown) {
+  const root = asRecord(metadata)
+  const custom = asRecord(root?.custom) ?? root
+  return typeof custom?.agentRunId === "string" && custom.agentRunId.trim()
+    ? custom.agentRunId.trim()
+    : null
+}
+
+export function persistedDeepResearchEvidence(metadata: unknown): EvidenceViewModel[] {
+  return readPersistedDeepResearchReferences(metadata).map((reference, index) => ({
+    id: `deep-reference-${index + 1}`,
+    source: reference.sourceKind ?? "geneops",
+    title: reference.title,
+    ...(reference.url ? { url: reference.url } : {}),
+    sourceName: reference.source,
+    queriedAt: reference.queriedAt,
+    citationIndex: index + 1,
+  }))
+}
+
+function normalizePersistedDeepResearch(value: unknown) {
+  const record = asRecord(value)
+  if (!record) return null
+  const references = normalizePersistedReferences(record.references)
+  if (references.length === 0) return null
+  return {
+    ...(typeof record.runKey === "string" && record.runKey.trim()
+      ? { runKey: record.runKey.trim() }
+      : {}),
+    references,
+  }
+}
+
+function normalizePersistedReferences(value: unknown): PersistedDeepResearchReference[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item): PersistedDeepResearchReference[] => {
+    const record = asRecord(item)
+    if (!record) return []
+    const title = typeof record.title === "string" ? record.title.trim() : ""
+    const source = typeof record.source === "string" ? record.source.trim() : ""
+    const sourceKind = normalizeEvidenceSource(record.sourceKind)
+    const queriedAt = typeof record.queriedAt === "string" ? record.queriedAt.trim() : ""
+    const url = record.url == null ? null : safeHttpUrl(record.url)
+    if (!title || !source || !queriedAt || (record.url != null && url == null)) return []
+    return [{ title, source, queriedAt, url, ...(sourceKind ? { sourceKind } : {}) }]
+  }).slice(0, 40)
+}
+
+function normalizeEvidenceSource(value: unknown): EvidenceViewModel["source"] | null {
+  switch (value) {
+    case "knowledge":
+    case "document":
+    case "wiki":
+    case "web":
+    case "graph":
+    case "memory":
+    case "subagent":
+    case "tool":
+    case "geneops":
+      return value
+    default:
+      return null
+  }
+}
+
+function safeHttpUrl(value: unknown) {
+  if (typeof value !== "string") return null
+  try {
+    const url = new URL(value)
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null
+  } catch {
+    return null
+  }
 }
 
 export function formatContextWindow(tokens: number | null | undefined): string | null {

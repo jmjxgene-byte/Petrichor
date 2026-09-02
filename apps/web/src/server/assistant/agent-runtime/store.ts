@@ -186,6 +186,11 @@ export function evidenceForPersistence(item: AgentEvidence): AgentEvidence | nul
             ...(typeof metadata?.sourceRef === "string" ? { sourceRef: metadata.sourceRef } : {}),
             ...(typeof metadata?.sourceName === "string" ? { sourceName: metadata.sourceName } : {}),
             ...(typeof metadata?.queriedAt === "string" ? { queriedAt: metadata.queriedAt } : {}),
+            ...(typeof metadata?.citationIndex === "number"
+                && Number.isInteger(metadata.citationIndex)
+                && metadata.citationIndex > 0
+                ? { citationIndex: metadata.citationIndex }
+                : {}),
             persistedMetadataOnly: true,
         },
     }
@@ -369,7 +374,13 @@ async function loadAgentRunViewUnsafe(runKey: string, userId: number): Promise<A
         metadata: parseJson<Record<string, unknown>>(row.metadataJson) ?? {},
         createdAt: new Date(row.createdAt).getTime(),
     }))
-    const restoredCitationIndices = citationIndicesForEvidence(restoredEvidence)
+    const inferredCitationIndices = citationIndicesForEvidence(restoredEvidence)
+    const restoredCitationIndices = restoredEvidence.map((item, index) => {
+        const explicit = item.metadata?.citationIndex
+        return typeof explicit === "number" && Number.isInteger(explicit) && explicit > 0
+            ? explicit
+            : inferredCitationIndices[index]
+    })
 
     return {
         id: run.runKey,

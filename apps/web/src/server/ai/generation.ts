@@ -32,6 +32,15 @@ export interface ChatCompletionResult {
         inputTokens: number
         outputTokens: number
         totalTokens: number
+        inputTokenDetails: {
+            noCacheTokens: number | null
+            cacheReadTokens: number | null
+            cacheWriteTokens: number | null
+        }
+        outputTokenDetails: {
+            textTokens: number | null
+            reasoningTokens: number | null
+        }
     }
 }
 
@@ -74,11 +83,7 @@ export async function callChatCompletion(input: {
             ...(resolved.options.temperature == null ? {} : { temperature: resolved.options.temperature }),
             ...(input.signal ? { abortSignal: input.signal } : {}),
         })
-        const usage = {
-            inputTokens: result.usage.inputTokens ?? 0,
-            outputTokens: result.usage.outputTokens ?? 0,
-            totalTokens: result.usage.totalTokens ?? 0,
-        }
+        const usage = normalizeChatCompletionUsage(result.usage)
         log.info({
             userId: input.userId,
             purpose,
@@ -104,6 +109,40 @@ export async function callChatCompletion(input: {
         }, "语言模型调用失败")
         throw error
     }
+}
+
+export function normalizeChatCompletionUsage(usage: {
+    inputTokens?: number
+    outputTokens?: number
+    totalTokens?: number
+    inputTokenDetails: {
+        noCacheTokens?: number
+        cacheReadTokens?: number
+        cacheWriteTokens?: number
+    }
+    outputTokenDetails: {
+        textTokens?: number
+        reasoningTokens?: number
+    }
+}): ChatCompletionResult["usage"] {
+    return {
+        inputTokens: usage.inputTokens ?? 0,
+        outputTokens: usage.outputTokens ?? 0,
+        totalTokens: usage.totalTokens ?? 0,
+        inputTokenDetails: {
+            noCacheTokens: tokenCountOrNull(usage.inputTokenDetails.noCacheTokens),
+            cacheReadTokens: tokenCountOrNull(usage.inputTokenDetails.cacheReadTokens),
+            cacheWriteTokens: tokenCountOrNull(usage.inputTokenDetails.cacheWriteTokens),
+        },
+        outputTokenDetails: {
+            textTokens: tokenCountOrNull(usage.outputTokenDetails.textTokens),
+            reasoningTokens: tokenCountOrNull(usage.outputTokenDetails.reasoningTokens),
+        },
+    }
+}
+
+function tokenCountOrNull(value: number | undefined) {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null
 }
 
 export function resolveMaxOutputTokens(

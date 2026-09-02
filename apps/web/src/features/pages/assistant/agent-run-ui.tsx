@@ -16,6 +16,7 @@ import { isAgentStreamEvent, shouldShowExecutionPanel } from "@/features/agent-r
 import type { AgentRunViewModel } from "@/features/agent-runs/types"
 import { QaStreamingMarkdown } from "@/features/pages/knowledge/QaMarkdown"
 import { annotateNormalQaWikiMentions } from "@/lib/wiki-mentions"
+import { persistedDeepResearchEvidence, readPersistedAgentRunId } from "./assistant-message-utils"
 import { SaveToKnowledgeButton } from "./save-to-knowledge-dialog"
 
 /**
@@ -45,8 +46,12 @@ function useMessageRunId(): string | null {
             if (part?.type !== "data") continue
             if (isAgentStreamEvent(part.data)) return part.data.runId
         }
-        return null
+        return readPersistedAgentRunId(state.message.metadata)
     })
+}
+
+function usePersistedDeepResearchEvidence() {
+    return useAuiState((state) => persistedDeepResearchEvidence(state.message.metadata))
 }
 
 export function useCurrentAgentRun(): AgentRunViewModel | null {
@@ -146,12 +151,18 @@ export function AgentStopButton() {
  */
 export function AgentCitationBar() {
     const run = useCurrentAgentRun()
+    const persistedEvidence = usePersistedDeepResearchEvidence()
+    const citationRun = useMemo(() => (
+        run && run.evidence.length === 0 && persistedEvidence.length > 0
+            ? { ...run, evidence: persistedEvidence }
+            : run
+    ), [persistedEvidence, run])
     const cited = useMemo(() => {
-        if (!run) return []
-        return selectCitedEvidenceSources(run)
-    }, [run])
+        if (!citationRun) return []
+        return selectCitedEvidenceSources(citationRun)
+    }, [citationRun])
 
-    if (!run || !shouldShowCitationSources(run) || cited.length === 0) return null
+    if (!citationRun || !shouldShowCitationSources(citationRun) || cited.length === 0) return null
 
     return (
         <div className="not-prose mt-2 flex flex-wrap items-center gap-1.5">
@@ -159,7 +170,7 @@ export function AgentCitationBar() {
             {cited.map((evidence) => (
                 <AgentCitation key={evidence.id} evidence={evidence} />
             ))}
-            <SaveToKnowledgeButton run={run} />
+            <SaveToKnowledgeButton run={citationRun} />
         </div>
     )
 }

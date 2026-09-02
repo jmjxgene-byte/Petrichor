@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm"
 
-import { callChatCompletion } from "@/server/ai/generation"
+import { callChatCompletion, type ChatCompletionResult } from "@/server/ai/generation"
 import { getDb } from "@/server/db/client"
 import { agentRuns, assistantMessages, assistantThreads, deepResearchJobs, users } from "@/server/db/schema"
 import { sourceTools } from "./agent-runtime/tools/sources"
@@ -14,10 +14,22 @@ import {
     heartbeatDeepResearchJob,
     type DeepResearchErrorCode,
 } from "./deep-research-job-store"
-import { createAgentRunRecord } from "./agent-runtime/store"
+import { createAgentRunRecord, persistEvidence } from "./agent-runtime/store"
 import { assistantFocusSchema } from "./thread-logic"
 import { buildDeepResearchSourceScopeHash } from "./deep-research-contract"
 import { DEEP_RESEARCH_MODEL_OUTPUT_LIMITS } from "./deep-research-limits"
+import {
+    estimateDeepResearchCost,
+    fetchDeepResearchPricingSnapshot,
+    type DeepResearchPricingSnapshot,
+} from "./deep-research-pricing"
+import {
+    buildDeepResearchReferenceKey,
+    normalizeDeepResearchAnswer,
+    normalizeDeepResearchUrl,
+    toDeepResearchReferences,
+    toMetadataOnlyAgentEvidence,
+} from "./deep-research-output"
 import {
     DeepResearchExecutionError,
     runDeepResearchPipeline,
@@ -91,22 +103,12 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
     let modelName = "unresolved"
     let inputTokens = 0
     let outputTokens = 0
+    let modelCallsStarted = 0
+    let plannerUsage: ChatCompletionResult["usage"] | null = null
+    let synthesisUsage: ChatCompletionResult["usage"] | null = null
+    let pricingSnapshot: DeepResearchPricingSnapshot | null = null
     const startedAt = Date.now()
     try {
-        const planner = await callModelOrThrow({
-            userId: job.userId,
-            maxOutputTokens: DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.planner,
-            maxRetries: DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.maxRetriesPerCall,
-            systemPrompt: [
-                "把用户问题拆成最多 5 个互补检索式。",
-                "只输出 JSON 字符串数组，不要解释，不要包含敏感信息。",
-            ].join("\n"),
-            message: question,
-            signal: controller.signal,
-        })
-        modelName = planner.modelName
-        inputTokens += planner.usage.inputTokens
-        outputTokens += planner.usage.outputTokens
         await createAgentRunRecord({
             runKey: job.runKey,
             conversationId: String(job.threadId),
@@ -116,6 +118,30 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
             goal: `[deep-research-message:${job.questionMessageId}]`,
             complexity: "complex",
             retryOfRunKey: job.fastRunKey,
+        })
+        modelCallsStarted += 1
+        const planner = await callModelOrThrow({
+            userId: job.userId,
+            maxOutputTokens: DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.planner,
+            maxRetries: DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.maxRetriesPerCall,
+            systemPrompt: [
+                "把用户问题拆成最多 5 个互补检索式。",
+                "只改写或拆分用户已经表达的意图，不得补入用户未提到的数字、站点、绩效状态或个案条件。",
+                "短缩写问题优先覆盖定义、组成与口径差异，不要擅自扩展成故障处置案例。",
+                "只输出 JSON 字符串数组，不要解释，不要包含敏感信息。",
+            ].join("\n"),
+            message: question,
+            signal: controller.signal,
+        })
+        modelName = planner.modelName
+        plannerUsage = planner.usage
+        inputTokens += planner.usage.inputTokens
+        outputTokens += planner.usage.outputTokens
+        await db.update(agentRuns).set({ model: modelName }).where(eq(agentRuns.runKey, job.runKey))
+        pricingSnapshot = await fetchDeepResearchPricingSnapshot({
+            providerKey: planner.resolved.provider.providerKey,
+            baseUrl: planner.resolved.provider.baseUrl,
+            modelId: planner.modelName,
         })
 
         const result = await runDeepResearchPipeline({ question, modes, signal: controller.signal }, {
@@ -133,42 +159,61 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
                 const normalized = readTool.normalize?.(output, candidate.read) as ToolNormalizerResult | undefined
                 return (normalized?.evidence ?? []).flatMap((item): DeepResearchEvidence[] => {
                     if (!item.content?.trim()) return []
+                    const metadata = item.metadata ?? {}
+                    const url = normalizeDeepResearchUrl(item.url ?? candidate.url)
+                    const title = item.title ?? candidate.title
                     return [{
-                        title: item.title ?? candidate.title,
+                        referenceKey: buildDeepResearchReferenceKey({
+                            source: item.source,
+                            title,
+                            url,
+                            fallbackKey: candidate.candidateKey,
+                        }),
+                        title,
                         content: item.content,
                         source: item.source,
-                        url: item.url ?? candidate.url,
-                        queriedAt: typeof item.metadata?.queriedAt === "string"
-                            ? item.metadata.queriedAt
+                        url,
+                        queriedAt: typeof metadata.queriedAt === "string"
+                            ? metadata.queriedAt
                             : new Date().toISOString(),
+                        ...(typeof metadata.sourceName === "string"
+                            ? { sourceName: metadata.sourceName }
+                            : {}),
                     }]
                 })
             },
             synthesize: async (goal, evidence, signal) => {
+                modelCallsStarted += 1
                 const completion = await callModelOrThrow({
                     userId: job.userId,
                     maxOutputTokens: DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.synthesis,
                     maxRetries: DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.maxRetriesPerCall,
                     systemPrompt: [
-                        "你负责生成一条明确标记为深度检索补充的中文回答。",
+                        "你负责生成中文深度检索补充，但不要输出标题，系统会统一添加标题。",
                         "只使用下方当前运行证据；冲突时说明差异与时间，不得编造。",
-                        "正文用 [1] 形式引用对应证据编号。",
+                        "只回答用户实际问题，不得把证据里的个案条件、数字或背景当成用户自身情况。",
+                        "问题很短时先给简洁定义；证据案例只能明确标为案例，不得喧宾夺主。",
+                        `正文只能用 [1] 到 [${evidence.length}] 引用下方同编号来源，不得引用范围外编号。`,
                     ].join("\n"),
                     message: renderSynthesisInput(goal, evidence),
                     signal,
                 })
                 modelName = completion.modelName
+                synthesisUsage = completion.usage
                 inputTokens += completion.usage.inputTokens
                 outputTokens += completion.usage.outputTokens
-                return completion.answer
+                return normalizeDeepResearchAnswer(completion.answer)
             },
         })
-        const references = safeReferences(result.evidence)
+        const answer = normalizeDeepResearchAnswer(result.answer)
+        if (!answer) throw new DeepResearchExecutionError("validation_failed", "深度综合没有生成正文")
+        const references = toDeepResearchReferences(result.evidence)
+        await persistEvidence(job.runKey, toMetadataOnlyAgentEvidence(result.evidence))
         const completed = await completeDeepResearchJob({
             jobId,
             workerId,
             message: {
-                parts: [{ type: "text", text: `## 深度检索补充\n\n${result.answer}` }],
+                parts: [{ type: "text", text: `## 深度检索补充\n\n${answer}` }],
                 agentRunId: job.runKey,
                 deepResearch: { runKey: job.runKey, fastRunKey: job.fastRunKey, references },
             },
@@ -176,11 +221,25 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
         if (!completed) throw new DeepResearchExecutionError("validation_failed", "任务租约已失效")
         await db.update(agentRuns).set({
             status: "completed",
-            answer: result.answer.slice(0, 100_000),
+            answer: answer.slice(0, 100_000),
             metricsJson: JSON.stringify({
                 queryCount: result.queries.length,
                 candidateCount: result.candidates.length,
                 evidenceCount: result.evidence.length,
+                rawEvidenceCount: result.rawEvidenceCount,
+                modelCalls: {
+                    started: modelCallsStarted,
+                    completed: countCompletedModelCalls(plannerUsage, synthesisUsage),
+                    planner: plannerUsage,
+                    synthesis: synthesisUsage,
+                },
+                pricingSnapshot,
+                costEstimate: pricingSnapshot == null ? null : estimateDeepResearchCost({
+                    snapshot: pricingSnapshot,
+                    inputTokens,
+                    outputTokens,
+                    modelCalls: modelCallsStarted,
+                }),
             }),
             inputTokens,
             outputTokens,
@@ -198,6 +257,24 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
         await db.update(agentRuns).set({
             status: "failed",
             stopReason: code,
+            metricsJson: JSON.stringify({
+                modelCalls: {
+                    started: modelCallsStarted,
+                    completed: countCompletedModelCalls(plannerUsage, synthesisUsage),
+                    planner: plannerUsage,
+                    synthesis: synthesisUsage,
+                },
+                pricingSnapshot,
+                costEstimate: pricingSnapshot == null ? null : estimateDeepResearchCost({
+                    snapshot: pricingSnapshot,
+                    inputTokens,
+                    outputTokens,
+                    modelCalls: modelCallsStarted,
+                }),
+            }),
+            inputTokens,
+            outputTokens,
+            totalTokens: inputTokens + outputTokens,
             durationMs: Date.now() - startedAt,
             completedAt: new Date(),
         }).where(eq(agentRuns.runKey, job.runKey))
@@ -206,6 +283,10 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
         clearTimeout(deadline)
         clearInterval(heartbeat)
     }
+}
+
+function countCompletedModelCalls(...usage: Array<ChatCompletionResult["usage"] | null>) {
+    return usage.filter((item) => item != null).length
 }
 
 function createToolContext(input: {
@@ -311,21 +392,6 @@ function renderSynthesisInput(question: string, evidence: DeepResearchEvidence[]
         item.content,
     ].filter(Boolean).join("\n"))
     return `问题：\n${question}\n\n当前运行证据：\n\n${blocks.join("\n\n")}`
-}
-
-function safeReferences(evidence: DeepResearchEvidence[]) {
-    const unique = new Map<string, DeepResearchEvidence>()
-    for (const item of evidence) {
-        if (!item.url) continue
-        const key = `${item.url}\n${item.title}`
-        if (!unique.has(key)) unique.set(key, item)
-    }
-    return [...unique.values()].slice(0, 40).map((item) => ({
-        title: item.title.slice(0, 500),
-        url: item.url!,
-        source: item.source.slice(0, 100),
-        queriedAt: item.queriedAt,
-    }))
 }
 
 function classifyExecutionError(error: unknown, input: { leaseLost: boolean; aborted: boolean }): DeepResearchErrorCode {

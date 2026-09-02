@@ -51,6 +51,13 @@ describe("deep research job metadata contract", () => {
                     title: "来源标题",
                     url: "https://example.com/source",
                     source: "geneops",
+                    sourceKind: "geneops" as const,
+                    queriedAt: "2026-09-01T00:00:00.000Z",
+                }, {
+                    title: "无外链的本地来源",
+                    url: null,
+                    source: "knowledge",
+                    sourceKind: "knowledge" as const,
                     queriedAt: "2026-09-01T00:00:00.000Z",
                 }],
             },

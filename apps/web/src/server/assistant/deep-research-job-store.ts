@@ -55,8 +55,12 @@ export const deepResearchFinalMessageSchema = z.object({
         fastRunKey: z.string().trim().min(1).max(64).nullable(),
         references: z.array(z.object({
             title: z.string().trim().min(1).max(500),
-            url: z.string().url().max(2_000),
+            url: z.string().url().max(2_000).nullable(),
             source: z.string().trim().min(1).max(100),
+            sourceKind: z.enum([
+                "knowledge", "document", "wiki", "web", "memory",
+                "graph", "tool", "subagent", "geneops",
+            ]).optional(),
             queriedAt: z.string().datetime(),
         }).strict()).max(40),
     }).strict(),
