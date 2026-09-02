@@ -6,6 +6,7 @@ import { useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import { authApi, type UserProfileResponse } from "@/lib/api"
+import { linuxDoUiEnabled, shouldShowLinuxDoAccount } from "@/lib/linuxdo-ui"
 import { PasswordFields } from "@/components/account/PasswordFields"
 import { validatePasswordStrength } from "@/components/account/password-utils"
 import { LoginSessionsSection } from "@/components/account/login-sessions-section"
@@ -440,28 +441,30 @@ export function AccountPage() {
                   <ProfileField label="更新时间" value={formatDateTime(profile.updatedAt)} />
                 </div>
 
-                <div className="rounded-lg border px-4 py-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0 space-y-1">
-                      <div className="text-sm font-medium">Linux.do 账号</div>
-                      <div className="break-all text-sm text-muted-foreground">
-                        {profile.linuxDoBound ? formatLinuxDoAccount(profile) : "未绑定"}
+                {shouldShowLinuxDoAccount(Boolean(profile.linuxDoBound)) ? (
+                  <div className="rounded-lg border px-4 py-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0 space-y-1">
+                        <div className="text-sm font-medium">Linux.do 账号</div>
+                        <div className="break-all text-sm text-muted-foreground">
+                          {profile.linuxDoBound ? formatLinuxDoAccount(profile) : "未绑定"}
+                        </div>
                       </div>
+                      {linuxDoUiEnabled && isLocalUser && !profile.linuxDoBound ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={startLinuxDoBinding}
+                          disabled={bindingLinuxDo}
+                        >
+                          <Link2 className="h-4 w-4 mr-2" />
+                          {bindingLinuxDo ? "跳转中..." : "绑定 Linux.do"}
+                        </Button>
+                      ) : null}
                     </div>
-                    {isLocalUser && !profile.linuxDoBound ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={startLinuxDoBinding}
-                        disabled={bindingLinuxDo}
-                      >
-                        <Link2 className="h-4 w-4 mr-2" />
-                        {bindingLinuxDo ? "跳转中..." : "绑定 Linux.do"}
-                      </Button>
-                    ) : null}
                   </div>
-                </div>
+                ) : null}
 
                 <TwoFactorSection profile={profile} onChanged={() => void fetchProfile()} />
 

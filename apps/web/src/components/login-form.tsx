@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { authApi, twoFactorApi } from "@/lib/api"
+import { linuxDoUiEnabled } from "@/lib/linuxdo-ui"
 import { cn } from "@/lib/utils"
 
 interface LoginFormProps extends React.ComponentProps<"div"> {
@@ -264,7 +265,7 @@ export function LoginForm({
                 : (currentMode === "login" ? "登录" : "注册")}
             </Button>
           </Field>
-          {currentMode === "login" ? (
+          {linuxDoUiEnabled && currentMode === "login" ? (
             <Field>
               <Button
                 type="button"

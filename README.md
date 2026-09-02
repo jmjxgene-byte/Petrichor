@@ -130,6 +130,7 @@ openssl rand -hex 8     # PETRICHOR_ENCRYPT_SALT
 - `S3_*`
 - `PETRICHOR_REGISTRATION_MODE=disabled`
 - `PETRICHOR_PUBLIC_REGISTER_ENABLED=false`
+- `PETRICHOR_PUBLIC_LINUXDO_ENABLED=false`
 
 不要向 Vercel 配置管理员 URL、迁移 URL或数据库角色明文密码。Vercel 构建只执行应用构建，不会修改数据库。
 
@@ -198,6 +199,7 @@ bun audit --audit-level=high
 | `APP_BASE_URL` | **公开站点完整 URL**（如 `https://yourdomain.com`、`https://你的项目.vercel.app`）。用于：文章分享链接、RSS/Atom 链接生成、OAuth 回调地址 fallback、SEO `og:url`。部署完成后**务必回填**为真实域名 |
 | `PETRICHOR_REGISTRATION_MODE` | 服务端权威注册模式，只允许 `disabled` / `open`，默认 `disabled`；Production 保持关闭 |
 | `PETRICHOR_PUBLIC_REGISTER_ENABLED` | 仅控制登录页是否显示注册入口；不能代替服务端注册模式校验 |
+| `PETRICHOR_PUBLIC_LINUXDO_ENABLED` | 构建时控制 LinuxDo 登录/绑定入口；未配置完整 OAuth 凭据时保持 `false` |
 | `PETRICHOR_SESSION_EXPIRE_SECONDS` | 登录态有效期（秒），默认 `172800`（2 天） |
 
 ### 🔗 LinuxDo OAuth（可选第三方登录）
@@ -421,6 +423,7 @@ Database migrations are never run during a Vercel build. See [database initializ
 | --- | --- |
 | `PETRICHOR_REGISTRATION_MODE` | Authoritative server mode: `disabled` or `open`; keep production disabled |
 | `PETRICHOR_PUBLIC_REGISTER_ENABLED` | UI-only visibility of the sign-up entry; it never replaces the server gate |
+| `PETRICHOR_PUBLIC_LINUXDO_ENABLED` | Build-time visibility for LinuxDo login/binding; keep `false` until OAuth is fully configured |
 | `PETRICHOR_SESSION_EXPIRE_SECONDS` | Session lifetime in seconds (default `172800`) |
 | `PETRICHOR_LINUXDO_CLIENT_ID` / `PETRICHOR_LINUXDO_CLIENT_SECRET` / `PETRICHOR_LINUXDO_REDIRECT_URI` | LinuxDo OAuth (optional third-party login) |
 
