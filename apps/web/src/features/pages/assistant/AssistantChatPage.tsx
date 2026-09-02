@@ -1107,6 +1107,9 @@ function QaChatPanel({
   const runtime = useChatRuntime({
     id: threadId ?? `assistant-${focusSelection.mode}-draft`,
     messages: initialMessages,
+    // 快速回答与异步 Deep 补充是两个独立持久化消息；禁止把相邻 assistant
+    // 消息拼成一条，否则后者的 runId 和安全来源 metadata 会被前者覆盖。
+    joinStrategy: "none",
     transport,
     suggestions,
     adapters: {
