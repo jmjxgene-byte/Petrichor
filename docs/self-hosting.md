@@ -40,6 +40,14 @@
 
 Worker 默认不启动，`PETRICHOR_DEEP_RESEARCH_ENABLED`、`PETRICHOR_DEEP_RESEARCH_WORKER_ENABLED` 及 Hybrid/Wiki/Graph flags 均保持 false。只有 expand-only Job 迁移已在 staging 执行、Postgres claim/lease/heartbeat/exactly-once 验收通过后，才可同时开启前两个 flags，并用 `docker compose --profile worker --env-file .env.production up -d web worker` 启动。Worker 只持久化 ID、hash、capability snapshot、租约、错误码和最终回答/安全引用；查询副本、chunk、snippet 和 RPC 结果不得进入 Job、Trace 或日志。
 
+### Deep 验收清理契约
+
+- 真实验收 Run 与可删除 fixture/proof 必须使用不同前缀；cleanup allowlist 只能包含本次事务创建且前缀为 `deep_fixture_` 的精确主键，禁止使用通配删除、时间范围删除或“恢复到基线数量”的删除方式。
+- Worker 到达终态后必须重新读取 Job；若状态为 `succeeded` 且存在结果消息，Job、Message、AgentRun、Evidence 与 metadata-only audit 全部转为保留对象，任何 trap、超时处理或后到的停止指令都不得删除。
+- cleanup 事务执行前再次锁定并核对 fixture 的 run key、idempotency key、状态与创建时间，要求精确匹配一行；同时核对保留 acceptance 仍为原终态。任一计数或摘要漂移均整事务回滚并停止。
+- cleanup 只负责停止 Worker、恢复 env、重建并验证 Web、删除锁/临时脚本及精确 fixture；验收结果是否保留不能由 cleanup 的“期望 Job 总数”反向推导。
+- 编排器在下发停止指令前必须先做一次权威数据库读取；一旦写入门已通过，不得沿用“Run 尚不存在”的旧快照。远端回传缺失时标记终态未知，禁止用补偿删除制造零写入状态。
+
 ## 切换与回滚
 
 Staging 验收通过后，将 Cloudflare DNS TTL 调整为 300 秒，再切换 `petrichor.genejm.one`。保留 Vercel Production 和原 Secret 48–72 小时；出现登录、S3、流式、GeneOps 或连接池异常时立即将 DNS 指回 Vercel，停止自托管容器，不执行数据库 down migration。
