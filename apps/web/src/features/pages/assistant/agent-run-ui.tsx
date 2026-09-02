@@ -16,8 +16,9 @@ import { isAgentStreamEvent, shouldShowExecutionPanel } from "@/features/agent-r
 import type { AgentRunViewModel } from "@/features/agent-runs/types"
 import { QaStreamingMarkdown } from "@/features/pages/knowledge/QaMarkdown"
 import { annotateNormalQaWikiMentions } from "@/lib/wiki-mentions"
-import { persistedDeepResearchEvidence, readPersistedAgentRunId } from "./assistant-message-utils"
+import { readPersistedAgentRunId } from "./assistant-message-utils"
 import { SaveToKnowledgeButton } from "./save-to-knowledge-dialog"
+import { usePersistedDeepResearchEvidence } from "./use-persisted-deep-research-evidence"
 
 /**
  * Agent 执行 UI 接线（§162.5/§162.50）。
@@ -48,10 +49,6 @@ function useMessageRunId(): string | null {
         }
         return readPersistedAgentRunId(state.message.metadata)
     })
-}
-
-function usePersistedDeepResearchEvidence() {
-    return useAuiState((state) => persistedDeepResearchEvidence(state.message.metadata))
 }
 
 export function useCurrentAgentRun(): AgentRunViewModel | null {
