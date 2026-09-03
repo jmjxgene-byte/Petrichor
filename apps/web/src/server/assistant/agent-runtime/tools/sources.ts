@@ -50,6 +50,8 @@ const geneOpsReadSchema = z.object({
     kind: z.literal("geneops"),
     sourceRef: assistantSourceRefSchema,
     documentId: z.string().trim().min(1).max(200),
+    replyId: z.string().trim().min(1).max(200).optional(),
+    anchorPosition: z.number().int().min(0).optional(),
 })
 
 const sourceReadSchema = z.union([knowledgeReadSchema, documentReadSchema, geneOpsReadSchema])
@@ -251,9 +253,12 @@ async function searchGeneOps(
         mode: input.geneOpsMode,
         limit: 8,
     }) as Array<Record<string, unknown>>
-    return rankFeed(rows.map((row) => {
+    return rows.map((row, index) => {
         const documentId = String(row.document_id)
         const resultKey = stringValue(row.result_key) ?? documentId
+        const combinedScore = numberValue(row.combined_score)
+        const replyId = stringValue(row.reply_id)
+        const anchorPosition = numberValue(row.anchor_position)
         return {
             candidateKey: `geneops:${resultKey}`,
             sourceRef: source.ref,
@@ -262,9 +267,16 @@ async function searchGeneOps(
             title: stringValue(row.title) ?? "GeneOps 实时内容",
             snippet: clip(stringValue(row.snippet) ?? "", 600),
             url: stringValue(row.source_url),
-            read: { kind: "geneops", sourceRef: source.ref, documentId },
+            score: combinedScore ?? Number((0.9 / (RRF_K + index + 1)).toFixed(8)),
+            read: {
+                kind: "geneops",
+                sourceRef: source.ref,
+                documentId,
+                ...(replyId ? { replyId } : {}),
+                ...(anchorPosition != null ? { anchorPosition } : {}),
+            },
         }
-    }), 0.9)
+    })
 }
 
 async function executeSourceSearch(
@@ -382,7 +394,15 @@ async function executeSourceRead(ctx: ToolExecutionContext, raw: unknown): Promi
         const tool = requireTool(geneOpsTools, "geneops.read_chunks")
         const output = await tool.execute(
             focusForSource(ctx, source),
-            { documentId: input.documentId, afterPosition: -1, limit: 8 },
+            {
+                documentId: input.documentId,
+                ...(input.replyId ? { anchorReplyId: input.replyId } : {}),
+                ...(input.anchorPosition != null ? { anchorPosition: input.anchorPosition } : {}),
+                beforeCount: 2,
+                afterCount: 5,
+                afterPosition: -1,
+                limit: 8,
+            },
         )
         return { normalized: annotateEvidence(tool.normalize?.(output, input), source) }
     }
@@ -489,6 +509,12 @@ function stringValue(value: unknown): string | null {
     if (value == null) return null
     const text = String(value).trim()
     return text || null
+}
+
+function numberValue(value: unknown): number | null {
+    if (value == null || value === "") return null
+    const number = Number(value)
+    return Number.isFinite(number) ? number : null
 }
 
 function clip(value: string, max: number) {

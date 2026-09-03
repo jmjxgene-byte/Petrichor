@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest"
 import { z } from "zod"
 import { resolveContextBudget } from "./config"
-import { buildFinalAnswerContext, ContextManager, estimateTokens, renderPlan } from "./context-manager"
+import {
+    buildFinalAnswerContext,
+    ContextManager,
+    estimateTokens,
+    renderEvidence,
+    renderPlan,
+} from "./context-manager"
 import { EvidenceStore } from "./evidence"
 import { createObservation, ObservationStore } from "./observation"
 import { AgentStateStore } from "./state"
@@ -17,6 +23,20 @@ const tools: AgentToolDefinition[] = [{
     sideEffect: false,
     execute: async () => ({}),
 }]
+
+it("GeneOps 未知时间在模型上下文中明确禁止时序推断", () => {
+    const rendered = renderEvidence({
+        id: "e1",
+        source: "geneops",
+        title: "历史经验",
+        content: "来源正文",
+        metadata: { publicationStatus: "legacy_missing" },
+        createdAt: 1,
+    }, 1)
+
+    expect(rendered).toContain("时间：来源未提供")
+    expect(rendered).toContain("不得据此判断最新、截至日期或事件先后")
+})
 
 function build(options?: { evidenceCount?: number; observationCount?: number; budgetTotal?: number }) {
     const state = new AgentStateStore({ conversationId: "c", userId: "1", goal: "我们的 Redis 怎么部署？" })

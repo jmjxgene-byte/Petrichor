@@ -248,7 +248,7 @@
     "brace-expansion": "1.1.18",
     "browserslist": "4.28.8",
     "dompurify": "3.4.14",
-    "fast-uri": "3.1.5",
+    "fast-uri": "3.1.6",
     "hono": "4.13.4",
     "immutable": "4.3.9",
     "ip-address": "10.5.0",
@@ -2181,7 +2181,7 @@
 
     "fast-png": ["fast-png@8.0.0", "", { "dependencies": { "fflate": "0.8.3", "iobuffer": "6.0.1" } }, "sha512-gCysNasJ8KEMgfdYIKd/wTDo6ENK1PWT0RJO7O+0pgmuHPw2O6tA1WvdxFRJoLf9V8yFYpG0FA1YgI8X97OhJA=="],
 
-    "fast-uri": ["fast-uri@3.1.5", "", {}, "sha512-gHwA1O9LDIcKunMKhObS/HimwtehO1nPUECKAu5TpKgaO19fcWEl4bliWe1jWxVFvIXztJjjQ4L8XQ1EU9f7Jw=="],
+    "fast-uri": ["fast-uri@3.1.6", "", {}, "sha512-7Ical1vFEMr0onbVzEDIreM22I4khW+fzyQPwvAFWBp1iwdshSZRsL4jjRvPG9JP1uiqMHRto+YU6R2/CzDz5Q=="],
 
     "fastq": ["fastq@1.20.1", "", { "dependencies": { "reusify": "1.1.0" } }, "sha512-GGToxJ/w1x32s/D2EKND7kTil4n8OVk/9mycTc4VDza13lOvpUZTGX3mFSCtV9ksdGBVzvsyAVLM6mHFThxXxw=="],
 

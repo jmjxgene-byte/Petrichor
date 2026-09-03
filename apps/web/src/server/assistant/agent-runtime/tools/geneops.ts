@@ -50,6 +50,11 @@ export const geneOpsTools: AgentToolDefinition[] = [
                         author: row.author,
                         url: row.source_url,
                         matchType: row.match_type,
+                        generationId: row.generation_id,
+                        publishedAt: row.published_at,
+                        publicationStatus: row.publication_status,
+                        sourcePositionStatus: row.source_position_status,
+                        timelineConfidence: row.timeline_confidence,
                     })),
                 },
                 suggestedActions: rows.length > 0 ? ["geneops.read_chunks"] : ["rewrite_query"],
@@ -82,13 +87,21 @@ export const geneOpsTools: AgentToolDefinition[] = [
                     content: row.content,
                     sourceId: `${row.document_id}:${row.chunk_position}`,
                     url: row.source_url,
-                    confidence: 0.9,
+                    confidence: timelineAdjustedConfidence(row.timeline_confidence),
                     metadata: {
                         ephemeral: true,
                         documentId: row.document_id,
                         chunkPosition: row.chunk_position,
                         chunkKind: row.chunk_kind,
                         author: row.author,
+                        ...(row.published_at ? { publishedAt: row.published_at } : {}),
+                        publicationStatus: row.publication_status ?? "legacy_missing",
+                        sourcePositionStatus: row.source_position_status ?? "legacy_missing",
+                        timelineConfidence: row.timeline_confidence ?? 0.2,
+                        generationId: row.generation_id ?? "legacy-answer-v1",
+                        ...(row.snapshot_id ? { snapshotId: row.snapshot_id } : {}),
+                        ...(row.anchor_reply_id ? { anchorReplyId: row.anchor_reply_id } : {}),
+                        ...(row.anchor_position != null ? { anchorPosition: row.anchor_position } : {}),
                         queriedAt: new Date().toISOString(),
                     },
                 })),
@@ -158,6 +171,11 @@ export const geneOpsTools: AgentToolDefinition[] = [
         },
     }),
 ]
+
+function timelineAdjustedConfidence(value: number | null | undefined) {
+    const timeline = Number.isFinite(value) ? Math.min(Math.max(Number(value), 0), 1) : 0.2
+    return Number((0.55 + timeline * 0.35).toFixed(3))
+}
 
 async function requireGeneOpsInScope(ctx: ToolExecutionContext) {
     const resolved = await resolveAssistantSources(

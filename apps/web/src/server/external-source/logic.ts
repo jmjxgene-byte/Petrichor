@@ -65,6 +65,17 @@ export function geneOpsQualityCapabilityReady(
     return quality?.[`${capability}_ready`] === true && quality.stale !== true
 }
 
+export function geneOpsRetrievalV2Ready(
+    source: Pick<ExternalSourceRecord, "contractVersion" | "capabilitiesJson">,
+) {
+    if (source.contractVersion !== GENEOPS_PREFERRED_CONTRACT_VERSION) return false
+    const capabilities = parseJsonRecord(source.capabilitiesJson)
+    const quality = asRecord(capabilities?.quality_status)
+    return quality?.contract_version === 2
+        && typeof quality.generation_id === "string"
+        && quality.generation_id.trim().length > 0
+}
+
 export function assertGeneOpsQualityCapabilityReady(
     source: Pick<ExternalSourceRecord, "contractVersion" | "capabilitiesJson">,
     capability: GeneOpsQualityCapability,
@@ -206,7 +217,10 @@ export async function executeGeneOpsRpc<T>(
         parameters: unknown
         requiredCapability?: GeneOpsQualityCapability
     },
-    query: (client: ReturnType<typeof postgres>) => Promise<T>,
+    query: (
+        client: ReturnType<typeof postgres>,
+        source: ExternalSourceRecord,
+    ) => Promise<T>,
 ): Promise<T> {
     const source = await getActiveGeneOpsSource(input.userId, input.sourceId)
     const startedAt = Date.now()
@@ -219,7 +233,7 @@ export async function executeGeneOpsRpc<T>(
         }
         const client = createSourceClient(decodeConnection(source.connectionEnc))
         try {
-            const result = await query(client)
+            const result = await query(client, source)
             resultCount = Array.isArray(result) ? result.length : result == null ? 0 : 1
             return result
         } finally {
@@ -284,9 +298,19 @@ async function readGeneOpsContract(client: ReturnType<typeof postgres>) {
         const [capability] = await client<Array<Record<string, unknown>>>`
             select * from knowledge_vault.capabilities_v2()
         `
-        const [qualityStatus] = await client<Array<Record<string, unknown>>>`
-            select * from knowledge_vault.quality_status_v1()
-        `
+        let qualityStatus: Record<string, unknown> | undefined
+        try {
+            [qualityStatus] = await client<Array<Record<string, unknown>>>`
+                select * from knowledge_vault.quality_status_v2()
+            `
+        } catch (error) {
+            if (!isUndefinedFunctionError(error)) {
+                throw error instanceof Error ? error : new Error(String(error))
+            }
+            [qualityStatus] = await client<Array<Record<string, unknown>>>`
+                select * from knowledge_vault.quality_status_v1()
+            `
+        }
         const contractVersion = Number(capability?.contract_version ?? 0)
         if (!capability || !qualityStatus) {
             throw new Error("GeneOps v2 quality contract 未返回状态")
@@ -322,7 +346,7 @@ function isUndefinedFunctionError(error: unknown) {
         if (String((error as { code?: unknown }).code) === "42883") return true
     }
     const message = error instanceof Error ? error.message : String(error)
-    return /capabilities_v2|quality_status_v1/i.test(message)
+    return /capabilities_v2|quality_status_v[12]/i.test(message)
         && /does not exist|undefined function|不存在/i.test(message)
 }
 

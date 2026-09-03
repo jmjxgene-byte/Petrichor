@@ -83,13 +83,15 @@ beforeEach(() => {
     mocks.searchGeneOps.mockResolvedValue([{
         result_key: "r1",
         document_id: "doc-1",
-        reply_id: null,
+        reply_id: "reply-9",
+        anchor_position: 7,
         chunk_kind: "post",
         title: "Amazon 退货标签经验",
         snippet: "候选摘要",
         author: "seller",
         source_url: "https://example.com/post/1",
         match_type: "exact",
+        combined_score: 0.031,
     }])
     mocks.readGeneOpsChunks.mockResolvedValue([{
         document_id: "doc-1",
@@ -99,6 +101,14 @@ beforeEach(() => {
         content: "正文证据",
         author: "seller",
         source_url: "https://example.com/post/1",
+        generation_id: "reply-sequence-v2-20",
+        snapshot_id: "snapshot-1",
+        anchor_reply_id: "reply-9",
+        anchor_position: 7,
+        published_at: "2025-01-02T03:04:05.000Z",
+        publication_status: "known",
+        source_position_status: "known",
+        timeline_confidence: 1,
     }])
 })
 
@@ -114,6 +124,14 @@ describe("unified source tools", () => {
             expect.objectContaining({ query: "Amazon 退货" }),
         )
         expect(mocks.readGeneOpsChunks).toHaveBeenCalledOnce()
+        expect(mocks.readGeneOpsChunks).toHaveBeenCalledWith(
+            expect.objectContaining({ userId: 1, sourceId: 1 }),
+            expect.objectContaining({
+                documentId: "doc-1",
+                anchorReplyId: "reply-9",
+                anchorPosition: 7,
+            }),
+        )
         expect(normalized.evidence).toHaveLength(1)
         expect(normalized.evidence?.[0]).toMatchObject({
             source: "geneops",
@@ -123,6 +141,9 @@ describe("unified source tools", () => {
             metadata: {
                 sourceRef: "external-source:1",
                 sourceName: "GeneOps 生产知识",
+                publishedAt: "2025-01-02T03:04:05.000Z",
+                timelineConfidence: 1,
+                generationId: "reply-sequence-v2-20",
             },
         })
     })

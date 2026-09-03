@@ -275,6 +275,9 @@ export function renderEvidence(evidence: AgentEvidence, index: number): string {
     const location = evidence.url ?? (evidence.metadata?.path as string[] | undefined)?.join(" / ")
     if (location) parts.push(`  来源：${location}`)
     if (evidence.metadata?.publishedAt) parts.push(`  时间：${String(evidence.metadata.publishedAt)}`)
+    if (evidence.source === "geneops" && !evidence.metadata?.publishedAt) {
+        parts.push("  时间：来源未提供；不得据此判断最新、截至日期或事件先后")
+    }
     // Wiki 页面证据直接给出可复制的内联引用格式，模型照抄即可
     const pageKey = evidence.metadata?.pageKey
     if (typeof pageKey === "string" && pageKey) {

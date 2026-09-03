@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { executeGeneOpsRpc } from "./logic"
+import { executeGeneOpsRpc, geneOpsRetrievalV2Ready } from "./logic"
 
 export const geneOpsSearchSchema = z.object({
     query: z.string().trim().min(1).max(500),
@@ -11,6 +11,10 @@ export const geneOpsSearchSchema = z.object({
 
 export const geneOpsReadSchema = z.object({
     documentId: z.string().trim().min(1).max(200),
+    anchorReplyId: z.string().trim().min(1).max(200).optional(),
+    anchorPosition: z.number().int().min(0).optional(),
+    beforeCount: z.number().int().min(0).max(6).default(2),
+    afterCount: z.number().int().min(0).max(12).default(5),
     afterPosition: z.number().int().min(-1).default(-1),
     limit: z.number().int().min(1).max(12).default(8),
 })
@@ -42,6 +46,21 @@ export type GeneOpsSearchRow = {
     author: string | null
     source_url: string
     match_type: string
+    exact_rank?: number | null
+    semantic_rank?: number | null
+    lexical_score?: number | null
+    semantic_similarity?: number | null
+    combined_score?: number | null
+    generation_id?: string | null
+    source_cutoff_at?: string | null
+    snapshot_id?: string | null
+    parent_reply_id?: string | null
+    anchor_position?: number | null
+    published_at?: string | null
+    publication_status?: string | null
+    source_position?: number | null
+    source_position_status?: string | null
+    timeline_confidence?: number | null
 }
 
 export type GeneOpsReadRow = {
@@ -52,6 +71,14 @@ export type GeneOpsReadRow = {
     content: string
     author: string | null
     source_url: string
+    generation_id?: string | null
+    snapshot_id?: string | null
+    anchor_reply_id?: string | null
+    anchor_position?: number | null
+    published_at?: string | null
+    publication_status?: string | null
+    source_position_status?: string | null
+    timeline_confidence?: number | null
 }
 
 export type GeneOpsAuditActor = {
@@ -65,11 +92,18 @@ export async function searchGeneOps(actor: GeneOpsAuditActor, raw: unknown) {
     const input = geneOpsSearchSchema.parse(raw)
     return await executeGeneOpsRpc(
         audit(actor, "geneops.search", "search", input),
-        async (client) => await client<GeneOpsSearchRow[]>`
-            select * from knowledge_vault.search_v1(
-                ${input.query}, ${input.source ?? null}, ${input.mode}, ${input.limit}
-            )
-        `,
+        async (client, source) => geneOpsRetrievalV2Ready(source)
+            ? await client<GeneOpsSearchRow[]>`
+                select * from knowledge_vault.search_v2(
+                    ${input.query}, ${input.source ?? null}, ${input.mode}, ${input.limit},
+                    null::extensions.vector, null::text
+                )
+            `
+            : await client<GeneOpsSearchRow[]>`
+                select * from knowledge_vault.search_v1(
+                    ${input.query}, ${input.source ?? null}, ${input.mode}, ${input.limit}
+                )
+            `,
     )
 }
 
@@ -77,11 +111,21 @@ export async function readGeneOpsChunks(actor: GeneOpsAuditActor, raw: unknown) 
     const input = geneOpsReadSchema.parse(raw)
     return await executeGeneOpsRpc(
         audit(actor, "geneops.read_chunks", "read", input),
-        async (client) => await client<GeneOpsReadRow[]>`
-            select * from knowledge_vault.read_chunks_v1(
-                ${input.documentId}, ${input.afterPosition}, ${input.limit}
-            )
-        `,
+        async (client, source) => geneOpsRetrievalV2Ready(source)
+            ? await client<GeneOpsReadRow[]>`
+                select * from knowledge_vault.read_chunks_v2(
+                    ${input.documentId},
+                    ${input.anchorReplyId ?? null},
+                    ${input.anchorPosition ?? null},
+                    ${input.beforeCount},
+                    ${input.afterCount}
+                )
+            `
+            : await client<GeneOpsReadRow[]>`
+                select * from knowledge_vault.read_chunks_v1(
+                    ${input.documentId}, ${input.afterPosition}, ${input.limit}
+                )
+            `,
     )
 }
 

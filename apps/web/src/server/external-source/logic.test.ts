@@ -10,6 +10,7 @@ import {
     GENEOPS_READER_ROLE,
     GENEOPS_READER_USERNAME,
     geneOpsQualityCapabilityReady,
+    geneOpsRetrievalV2Ready,
     isSupportedGeneOpsContractVersion,
     sourceCreateSchema,
     toSourceResponse,
@@ -70,6 +71,22 @@ describe("GeneOps 外部连接配置", () => {
             .toThrow("QUALITY_NOT_READY:graph")
         expect(() => assertGeneOpsQualityCapabilityReady({ contractVersion: 2, capabilitiesJson: ready }, "wiki"))
             .not.toThrow()
+    })
+
+    it("只有带 generation 的 v2 质量快照才启用 shared retrieval v2", () => {
+        const ready = JSON.stringify({
+            quality_status: {
+                contract_version: 2,
+                generation_id: "reply-sequence-v2-20",
+            },
+        })
+        expect(geneOpsRetrievalV2Ready({ contractVersion: 2, capabilitiesJson: ready }))
+            .toBe(true)
+        expect(geneOpsRetrievalV2Ready({ contractVersion: 2, capabilitiesJson: JSON.stringify({
+            quality_status: { contract_version: 1 },
+        }) })).toBe(false)
+        expect(geneOpsRetrievalV2Ready({ contractVersion: 1, capabilitiesJson: ready }))
+            .toBe(false)
     })
 
     it("连接密码加密后可回读，且响应不泄露密码", () => {

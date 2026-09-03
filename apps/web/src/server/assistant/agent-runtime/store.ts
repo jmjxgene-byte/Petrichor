@@ -186,6 +186,20 @@ export function evidenceForPersistence(item: AgentEvidence): AgentEvidence | nul
             ...(typeof metadata?.sourceRef === "string" ? { sourceRef: metadata.sourceRef } : {}),
             ...(typeof metadata?.sourceName === "string" ? { sourceName: metadata.sourceName } : {}),
             ...(typeof metadata?.queriedAt === "string" ? { queriedAt: metadata.queriedAt } : {}),
+            ...(typeof metadata?.publishedAt === "string" ? { publishedAt: metadata.publishedAt } : {}),
+            ...(typeof metadata?.publicationStatus === "string"
+                ? { publicationStatus: metadata.publicationStatus }
+                : {}),
+            ...(typeof metadata?.sourcePositionStatus === "string"
+                ? { sourcePositionStatus: metadata.sourcePositionStatus }
+                : {}),
+            ...(typeof metadata?.timelineConfidence === "number"
+                ? { timelineConfidence: metadata.timelineConfidence }
+                : {}),
+            ...(typeof metadata?.generationId === "string" ? { generationId: metadata.generationId } : {}),
+            ...(typeof metadata?.snapshotId === "string" ? { snapshotId: metadata.snapshotId } : {}),
+            ...(typeof metadata?.anchorReplyId === "string" ? { anchorReplyId: metadata.anchorReplyId } : {}),
+            ...(typeof metadata?.anchorPosition === "number" ? { anchorPosition: metadata.anchorPosition } : {}),
             ...(typeof metadata?.citationIndex === "number"
                 && Number.isInteger(metadata.citationIndex)
                 && metadata.citationIndex > 0
