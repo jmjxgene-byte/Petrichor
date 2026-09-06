@@ -25,9 +25,9 @@ export interface S3ObjectBytes {
  * 服务端按对象键下载 S3 文件，返回原始字节与 MIME。
  * 多模态识别与裁剪嵌入图共用这一份字节，避免重复下载。
  */
-export async function fetchS3ObjectBytes(objectKey: string): Promise<S3ObjectBytes> {
+export async function fetchS3ObjectBytes(objectKey: string, options?: { maxBytes: number; timeoutMs: number }): Promise<S3ObjectBytes> {
     if (getLocalStorageDirOrNull()) {
-        return readLocalObjectBytes(objectKey)
+        return readLocalObjectBytes(objectKey, options?.maxBytes)
     }
 
     const config = getServerConfig().s3
@@ -41,13 +41,41 @@ export async function fetchS3ObjectBytes(objectKey: string): Promise<S3ObjectByt
         method: "GET",
         objectKey: key,
     })
-    const response = await fetch(url)
+    const response = await fetch(url, options ? { signal: AbortSignal.timeout(options.timeoutMs), redirect: "error" } : undefined)
     if (!response.ok) {
         throw new HttpError(502, `下载页面图片失败：HTTP ${response.status}`)
     }
-    const arrayBuffer = await response.arrayBuffer()
+    let data: Buffer
+    if (options) {
+        data = await readBoundedObjectBody(response, options.maxBytes)
+    } else {
+        data = Buffer.from(await response.arrayBuffer())
+    }
     const mime = response.headers.get("content-type")?.split(";")[0]?.trim() || guessMimeFromKey(key)
-    return { data: Buffer.from(arrayBuffer), mime }
+    return { data, mime }
+}
+
+export async function readBoundedObjectBody(response: Response, maxBytes: number): Promise<Buffer> {
+    if (Number(response.headers.get("content-length")) > maxBytes) {
+        await response.body?.cancel()
+        throw new HttpError(413, "文件超过允许大小")
+    }
+    if (!response.body) throw new HttpError(400, "文件内容为空")
+    const reader = response.body.getReader()
+    const parts: Uint8Array[] = []
+    let size = 0
+    try {
+        while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            size += value.byteLength
+            if (size > maxBytes) throw new HttpError(413, "文件超过允许大小")
+            parts.push(value)
+        }
+        return Buffer.concat(parts, size)
+    } finally {
+        try { await reader.cancel() } finally { reader.releaseLock() }
+    }
 }
 
 /**

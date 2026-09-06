@@ -35,9 +35,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { FileUpload } from "@/components/extend/ui/file-upload"
 import { DocViewerPanel, type DocViewerHighlight } from "@/features/pages/doc-library/DocViewerPanel"
+import { runDocumentUploadQueue } from "@/features/pages/doc-library/lib/upload-batch"
 import {
   detectFileType,
-  DOC_LIBRARY_MAX_BATCH_FILES,
   DOC_LIBRARY_MAX_FILE_BYTES,
   DOC_LIBRARY_MAX_MARKDOWN_BYTES,
   DOC_LIBRARY_MAX_REGISTER_PAYLOAD_BYTES,
@@ -476,23 +476,23 @@ export function DocLibraryBrowsePage() {
   }, [])
 
   const uploadOne = React.useCallback(async (file: File) => {
-    if (!libraryId) return
+    if (!libraryId) throw new Error("请先选择文档库")
     const fileType = detectFileType(file)
     if (!fileType) {
-      toast.error(`不支持的文件类型：${file.name}（仅支持 PDF / DOCX / Markdown / CSV）`)
-      return
+      throw new Error(`不支持的文件类型：${file.name}（仅支持 PDF / DOCX / Markdown / CSV）`)
     }
     const maxFileBytes = fileType === "markdown"
       ? DOC_LIBRARY_MAX_MARKDOWN_BYTES
       : DOC_LIBRARY_MAX_FILE_BYTES
     if (file.size <= 0 || file.size > maxFileBytes) {
-      const maxSizeLabel = fileType === "markdown" ? "2 MiB" : "25 MiB"
-      toast.error(`文件大小必须在 1 B 到 ${maxSizeLabel} 之间：${file.name}`)
-      return
+      const maxSizeLabel = fileType === "markdown" ? "8 MiB" : "25 MiB"
+      throw new Error(`文件大小必须在 1 B 到 ${maxSizeLabel} 之间：${file.name}`)
     }
 
-    setUploadProgress(`正在解析 ${file.name}...`)
-    const parsed = await parseDocument(file, fileType)
+    setUploadProgress(`${fileType === "markdown" ? "正在准备" : "正在解析"} ${file.name}...`)
+    const parsed = fileType === "markdown"
+      ? { title: null, pageCount: null, blocks: [], chunks: [] }
+      : await parseDocument(file, fileType)
     const presign = await uploadApi.presignPut({ filename: file.name })
     const registerPayload = {
       libraryId,
@@ -506,6 +506,7 @@ export function DocLibraryBrowsePage() {
       pageCount: parsed.pageCount,
       blocks: parsed.blocks,
       chunks: parsed.chunks,
+      parseFromSource: fileType === "markdown",
     }
     if (jsonPayloadByteLength(registerPayload) > DOC_LIBRARY_MAX_REGISTER_PAYLOAD_BYTES) {
       throw new Error(`「${file.name}」解析内容过大，请拆分后再上传`)
@@ -521,32 +522,26 @@ export function DocLibraryBrowsePage() {
       throw new Error(`上传失败：HTTP ${putResponse.status}`)
     }
 
-    setUploadProgress(`正在登记 ${file.name}...`)
-    await docLibraryApi.registerDocument(registerPayload)
+    setUploadProgress(`${fileType === "markdown" ? "正在解析并登记" : "正在登记"} ${file.name}...`)
+    const registered = await docLibraryApi.registerDocument(registerPayload)
+    if (!registered.data?.id) throw new Error("文档登记响应异常，请刷新后核对文档列表")
   }, [libraryId, uploadParentId])
 
   const handleFilesAccepted = React.useCallback(async (files: File[]) => {
     if (files.length === 0) return
-    const acceptedFiles = files.slice(0, DOC_LIBRARY_MAX_BATCH_FILES)
-    if (files.length > acceptedFiles.length) {
-      toast.error(`一次最多处理 ${DOC_LIBRARY_MAX_BATCH_FILES} 个文件，已忽略多余文件`)
-    }
     setUploading(true)
-    let success = 0
-    for (const file of acceptedFiles) {
-      try {
-        await uploadOne(file)
-        success += 1
-      } catch (error) {
+    try {
+      const { success, failed } = await runDocumentUploadQueue(files, uploadOne, (file, error) => {
         toast.error(resolveApiErrorMessage(error, `「${file.name}」处理失败`))
+      })
+      if (success > 0) {
+        toast.success(`已上传并解析 ${success} 个文件${failed ? `，${failed} 个失败` : ""}`)
+        if (failed === 0) setUploadOpen(false)
+        await refreshAndKeepFolderOpen(uploadParentId)
       }
-    }
-    setUploading(false)
-    setUploadProgress(null)
-    if (success > 0) {
-      toast.success(`已上传并解析 ${success} 个文件`)
-      setUploadOpen(false)
-      await refreshAndKeepFolderOpen(uploadParentId)
+    } finally {
+      setUploading(false)
+      setUploadProgress(null)
     }
   }, [refreshAndKeepFolderOpen, uploadOne, uploadParentId])
 
@@ -1007,7 +1002,7 @@ export function DocLibraryBrowsePage() {
             multiple
             showFileList={false}
             title="拖拽文件到此处，或点击选择"
-            description="支持 PDF / Word / Markdown / CSV；暂不支持 Excel"
+            description="支持 PDF / Word / Markdown / CSV；Markdown 最大 8 MiB，多文件依次处理；暂不支持 Excel"
             onFilesAccepted={handleFilesAccepted}
           />
         )}

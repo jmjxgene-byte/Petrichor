@@ -5,6 +5,8 @@
 .vscode
 .cursor
 .codex
+.data
+.codex-worktrees
 
 node_modules
 **/node_modules
@@ -19,6 +21,8 @@ coverage
 
 .env
 .env.*
+**/.env
+**/.env.*
 !.env.example
 !apps/**/.env.example
 

@@ -10,11 +10,8 @@
  */
 
 import type { OcrBlock } from "@/components/extend/ui/layout-blocks"
-import {
-    extractMarkdownDocumentSource,
-    parseMarkdownSections,
-    splitMarkdownForKnowledgeBuild,
-} from "@/lib/markdown-structure"
+import { parseDocumentMarkdown } from "@/lib/document-markdown"
+export { DOC_LIBRARY_MAX_MARKDOWN_BYTES } from "@/lib/document-markdown"
 
 export type DocFileType = "pdf" | "docx" | "csv" | "markdown"
 
@@ -33,9 +30,7 @@ export interface ParsedDocument {
 
 const CHUNK_TARGET_CHARS = 700
 export const DOC_LIBRARY_MAX_FILE_BYTES = 25 * 1024 * 1024
-export const DOC_LIBRARY_MAX_MARKDOWN_BYTES = 2 * 1024 * 1024
 export const DOC_LIBRARY_MAX_REGISTER_PAYLOAD_BYTES = Math.floor(3.5 * 1024 * 1024)
-export const DOC_LIBRARY_MAX_BATCH_FILES = 10
 const CSV_MAX_ROWS = 100_000
 const CSV_MAX_COLUMNS = 256
 const CSV_MAX_CELL_CHARS = 10_000
@@ -243,24 +238,7 @@ async function parseDocx(file: File): Promise<ParsedDocument> {
 // ---------- Markdown ----------
 
 async function parseMarkdown(file: File): Promise<ParsedDocument> {
-    const source = extractMarkdownDocumentSource(await file.text())
-    const fallbackTitle = file.name.replace(/\.(?:md|markdown)$/i, "") || file.name
-    const sections = parseMarkdownSections(source.markdown, fallbackTitle)
-    const title = source.frontmatterTitle
-        ?? sections.find((section) => section.headingPath.length > 0)?.headingPath[0]
-        ?? fallbackTitle
-    const { chunks } = splitMarkdownForKnowledgeBuild(source.markdown, title, 3_200, 4_000)
-
-    return {
-        pageCount: null,
-        blocks: [],
-        title,
-        chunks: chunks.map((chunk) => ({
-            text: chunk.contentMd,
-            page: null,
-            locator: (chunk.headingPath.join(" > ") || chunk.heading).slice(0, 80),
-        })),
-    }
+    return parseDocumentMarkdown(await file.text(), file.name)
 }
 
 // ---------- CSV / TSV ----------

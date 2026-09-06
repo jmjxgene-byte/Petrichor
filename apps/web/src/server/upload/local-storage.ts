@@ -85,10 +85,26 @@ export async function writeLocalObjectBytes(input: {
     await fs.writeFile(filePath, input.data)
 }
 
-export async function readLocalObjectBytes(objectKey: string): Promise<LocalObjectBytes> {
+export async function readLocalObjectBytes(objectKey: string, maxBytes?: number): Promise<LocalObjectBytes> {
     const filePath = resolveLocalObjectPath(objectKey)
     try {
-        const data = await fs.readFile(filePath)
+        let data: Buffer
+        if (maxBytes !== undefined) {
+            const handle = await fs.open(filePath, "r")
+            try {
+                const buffer = Buffer.alloc(maxBytes + 1)
+                let size = 0
+                while (size < buffer.length) {
+                    const result = await handle.read(buffer, size, buffer.length - size, size)
+                    if (!result.bytesRead) break
+                    size += result.bytesRead
+                }
+                if (size > maxBytes) throw new HttpError(413, "文件超过允许大小")
+                data = buffer.subarray(0, size)
+            } finally { await handle.close() }
+        } else {
+            data = await fs.readFile(filePath)
+        }
         return { data, mime: guessMimeFromObjectKey(objectKey) }
     } catch (error) {
         if (isNodeError(error) && error.code === "ENOENT") {

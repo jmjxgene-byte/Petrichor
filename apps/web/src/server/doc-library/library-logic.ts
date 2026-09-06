@@ -13,6 +13,7 @@ import { badRequest, notFound } from "@/server/http/response"
 import { docLibraryDocumentPath } from "@/lib/dashboard-routes"
 import { deleteS3Objects, type S3DeleteFailure } from "@/server/upload/s3-delete"
 import { stripS4KeyPrefix } from "@/server/upload/s3-presign"
+import { readUploadedMarkdown } from "./markdown-source"
 
 export const idSchema = z.union([z.string(), z.number()]).transform((value, ctx) => {
     const raw = String(value).trim()
@@ -86,6 +87,7 @@ export const documentRegisterSchema = z.object({
         locator: z.string().max(80).optional().nullable(),
     })).max(MAX_CHUNKS).optional(),
     summary: z.string().max(2000).optional().nullable(),
+    parseFromSource: z.boolean().optional(),
 })
 
 // ===== 文档库 CRUD =====
@@ -252,9 +254,25 @@ export async function registerDocument(input: {
     blocks?: unknown[]
     chunks?: Array<{ text: string; page?: number | null; locator?: string | null }>
     summary?: string | null
+    parseFromSource?: boolean
 }) {
     const db = getDb()
     await getLibraryOrThrow(input.userId, input.libraryId)
+
+    if (input.parseFromSource) {
+        if (input.fileType !== "markdown" || input.chunks?.length || input.blocks?.length) {
+            throw badRequest("原文件解析仅支持不携带分片的 Markdown")
+        }
+        if (input.folderId != null) {
+            const [folder] = await db.select({ id: docFolders.id }).from(docFolders).where(and(
+                eq(docFolders.id, input.folderId), eq(docFolders.libraryId, input.libraryId),
+                eq(docFolders.userId, input.userId),
+            )).limit(1)
+            if (!folder) throw notFound("文件夹不存在")
+        }
+        const parsed = await readUploadedMarkdown(input.userId, input.objectKey, input.fileName)
+        input = { ...input, ...parsed }
+    }
 
     const cleanChunks = (input.chunks ?? [])
         .map((chunk) => ({

@@ -23,6 +23,7 @@ export async function POST(request: AppRequest) {
             blocks: input.blocks,
             chunks: input.chunks,
             summary: input.summary ?? null,
+            parseFromSource: input.parseFromSource,
         })
         return ok(result)
     } catch (error) {

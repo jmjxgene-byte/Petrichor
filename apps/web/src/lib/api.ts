@@ -2437,6 +2437,7 @@ export interface DocFolderSaveRequest {
 }
 
 export interface DocDocumentRegisterRequest {
+  parseFromSource?: boolean
   libraryId: string
   folderId?: string | null
   fileName: string
@@ -2521,7 +2522,9 @@ export const docLibraryApi = {
   deleteFolder: (id: string) => api.post<{ id: string }>("/doc-library/folder/delete", { id }),
 
   listDocuments: (libraryId: string) => api.post<{ documents: DocDocument[] }>("/doc-library/document/list", { libraryId }),
-  registerDocument: (data: DocDocumentRegisterRequest) => api.post<{ id: string }>("/doc-library/document/register", data),
+  registerDocument: (data: DocDocumentRegisterRequest) => api.post<{ id: string }>(
+    data.parseFromSource ? "/doc-library/document/register-markdown" : "/doc-library/document/register", data,
+  ),
   documentDetail: (id: string) => api.post<{ document: DocDocumentDetail }>("/doc-library/document/detail", { id }),
   deleteDocument: (id: string) => api.post<DocDeleteResponse>("/doc-library/document/delete", { id }),
 }
