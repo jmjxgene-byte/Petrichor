@@ -18,15 +18,15 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
 
-COPY --from=builder /app/package.json /app/bun.lock ./
-COPY --from=builder /app/server.ts ./server.ts
-COPY --from=builder /app/deep-research-worker.ts ./deep-research-worker.ts
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps/web/node_modules ./apps/web/node_modules
-COPY --from=builder /app/apps/web/package.json ./apps/web/package.json
-COPY --from=builder /app/apps/web/tsconfig.json ./apps/web/tsconfig.json
-COPY --from=builder /app/apps/web/src ./apps/web/src
-COPY --from=builder /app/apps/web/dist ./apps/web/dist
+COPY --from=builder --chown=bun:bun /app/package.json /app/bun.lock ./
+COPY --from=builder --chown=bun:bun /app/server.ts ./server.ts
+COPY --from=builder --chown=bun:bun /app/deep-research-worker.ts ./deep-research-worker.ts
+COPY --from=builder --chown=bun:bun /app/node_modules ./node_modules
+COPY --from=builder --chown=bun:bun /app/apps/web/node_modules ./apps/web/node_modules
+COPY --from=builder --chown=bun:bun /app/apps/web/package.json ./apps/web/package.json
+COPY --from=builder --chown=bun:bun /app/apps/web/tsconfig.json ./apps/web/tsconfig.json
+COPY --from=builder --chown=bun:bun /app/apps/web/src ./apps/web/src
+COPY --from=builder --chown=bun:bun /app/apps/web/dist ./apps/web/dist
 
 USER bun
 EXPOSE 3000
