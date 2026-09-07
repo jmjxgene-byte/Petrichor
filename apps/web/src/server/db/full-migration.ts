@@ -1,3 +1,5 @@
+import { DOC_INDEX_SCHEMA_SQL } from "./doc-index-schema"
+
 const BUSINESS_SCHEMA_SQL = `
 create table if not exists petrichor_user (
     id bigint generated always as identity primary key,
@@ -1657,5 +1659,5 @@ create index if not exists petrichor_kb_wiki_tree_node_search_idx
 `;
 
 export function buildInitialMigrationSql(): string {
-    return BUSINESS_SCHEMA_SQL.trim();
+    return `${BUSINESS_SCHEMA_SQL.trim()}\n\n${DOC_INDEX_SCHEMA_SQL.trim()}`;
 }

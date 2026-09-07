@@ -950,6 +950,78 @@ export const docChunks = pgTable("petrichor_doc_chunk", {
     index("idx_petrichor_doc_chunk_library").on(table.libraryId),
 ])
 
+/** 派生检索generation：完整验收后切current，不覆盖旧chunk。 */
+export const docIndexGenerations = pgTable("petrichor_doc_index_generation", {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    userId: bigint("user_id", { mode: "number" }).notNull(),
+    libraryId: bigint("library_id", { mode: "number" }).notNull(),
+    manifestHash: text("manifest_hash").notNull(),
+    manifestJson: text("manifest_json").notNull(),
+    embeddingProfileJson: text("embedding_profile_json").notNull(),
+    preprocessingVersion: integer("preprocessing_version").notNull(),
+    status: text("status").notNull().default("building"),
+    isCurrent: boolean("is_current").notNull().default(false),
+    expectedDocuments: integer("expected_documents").notNull(),
+    completedDocuments: integer("completed_documents").notNull().default(0),
+    passageCount: integer("passage_count").notNull().default(0),
+    errorCode: text("error_code"),
+    ...timestamps,
+}, (table) => [
+    uniqueIndex("ux_doc_index_current").on(table.libraryId).where(sql`${table.isCurrent} = true`),
+    index("idx_doc_index_owner").on(table.userId, table.libraryId, table.status),
+])
+
+/** 仅本地文档原文的派生片段；Postgres embedding/search_vector由SQL迁移维护。 */
+export const docPassages = pgTable("petrichor_doc_passage", {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    generationId: bigint("generation_id", { mode: "number" }).notNull(),
+    userId: bigint("user_id", { mode: "number" }).notNull(),
+    libraryId: bigint("library_id", { mode: "number" }).notNull(),
+    documentId: bigint("document_id", { mode: "number" }).notNull(),
+    passageIndex: integer("passage_index").notNull(),
+    sourceHash: text("source_hash").notNull(),
+    contentHash: text("content_hash").notNull(),
+    startOffset: integer("start_offset").notNull(),
+    endOffset: integer("end_offset").notNull(),
+    parentStartOffset: integer("parent_start_offset").notNull(),
+    parentEndOffset: integer("parent_end_offset").notNull(),
+    locator: text("locator"),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    text: text("text").notNull(),
+    searchTokens: text("search_tokens").notNull(),
+    embeddingStatus: text("embedding_status").notNull().default("pending"),
+    embeddingDimensions: integer("embedding_dimensions"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+    uniqueIndex("ux_doc_passage_position").on(table.generationId, table.documentId, table.passageIndex),
+    index("idx_doc_passage_scope").on(table.userId, table.libraryId, table.generationId, table.documentId),
+])
+
+export const docIndexJobs = pgTable("petrichor_doc_index_job", {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    generationId: bigint("generation_id", { mode: "number" }).notNull(),
+    userId: bigint("user_id", { mode: "number" }).notNull(),
+    libraryId: bigint("library_id", { mode: "number" }).notNull(),
+    documentId: bigint("document_id", { mode: "number" }).notNull(),
+    sourceHash: text("source_hash").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    status: text("status").notNull().default("queued"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }),
+    approvedBudgetJson: text("approved_budget_json").notNull(),
+    consumedInputTokens: bigint("consumed_input_tokens", { mode: "number" }).notNull().default(0),
+    consumedCostMicrousd: bigint("consumed_cost_microusd", { mode: "number" }).notNull().default(0),
+    errorCode: text("error_code"),
+    ...timestamps,
+}, (table) => [
+    uniqueIndex("ux_doc_index_job_idempotency").on(table.userId, table.idempotencyKey),
+    uniqueIndex("ux_doc_index_job_document").on(table.generationId, table.documentId),
+    index("idx_doc_index_job_claim").on(table.status, table.availableAt, table.leaseExpiresAt),
+])
+
 // 文档库问答：对话线程（libraryId 为空表示跨库）
 export const docQaThreads = pgTable("petrichor_doc_qa_thread", {
     id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),

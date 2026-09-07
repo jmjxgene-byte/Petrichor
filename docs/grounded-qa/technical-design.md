@@ -28,6 +28,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 3. 派生索引与迁移
 
+2026-09-08实现节点：新增docIndexGenerations/docPassages/docIndexJobs及2026-09-08-document-retrieval-index.sql，初始化和增量DDL镜像一致；复合FK约束用户/库/文档/代际，current仅允许ready且完成计数匹配，同库唯一current。用户明确删除文档/库时派生行级联清理，非回滚删除；旧chunk与对象保持原路径。必须通过现有bun db:migrate的migrator事务应用，其末尾启用RLS/撤销公开角色并授予runtime CRUD，不支持绕过runner直接执行SQL。12项内存SQLite约束已验证，Postgres/RLS/vector仍待离线实际验证；无索引任务或模型已运行。
+
 新增三类表：文档索引generation（library/manifest/current状态/模型档案）、passage（generation/document/锚点/父范围/正文/词元/向量/hash）、index job（document/generation/状态/进度/租约/错误码/安全预算）。具体DDL与manifest按项目迁移流程生成，离线验证后独立批准生产应用；既有migration不可修改，构建期不得迁移。
 
 一份原文件一个原documentId不变，从受限S3读取原文重建派生索引；保留旧docChunks与旧generation。parent目标≤4000字符，child目标768字符/重叠80，同时按provider token限制；尊重章节、可识别消息及代码块，不推断关系和时间。片段保存可复核原文范围和hash。新generation按固定输入manifest完成计数/hash/孤儿/向量档案验证后，事务切换current；输入变化停止切换，不覆盖旧版本。
