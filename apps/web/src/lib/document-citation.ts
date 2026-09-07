@@ -3,8 +3,8 @@ export type DocumentSourceAnchor = { sourceHash: string; contentHash: string; st
 export type DocumentCitationWindow = { title: string; content: string; anchorStart: number; anchorEnd: number; sourceAnchor?: DocumentSourceAnchor }
 
 /** 偏移是原文本UTF-16下标；只有整文与片段SHA都匹配才允许原文高亮。 */
-export async function verifyDocumentSourceAnchor(text: string, anchor: DocumentSourceAnchor): Promise<boolean> {
-    if (anchor.sourceFormat !== "raw_markdown" || !Number.isSafeInteger(anchor.startOffset) || !Number.isSafeInteger(anchor.endOffset)
+export async function verifyDocumentSourceAnchor(text: string, anchor: DocumentSourceAnchor, expectedFormat: DocumentSourceAnchor["sourceFormat"] = "raw_markdown"): Promise<boolean> {
+    if (anchor.sourceFormat !== expectedFormat || !Number.isSafeInteger(anchor.startOffset) || !Number.isSafeInteger(anchor.endOffset)
         || anchor.startOffset < 0 || anchor.endOffset <= anchor.startOffset || anchor.endOffset > text.length
         || !/^[a-f0-9]{64}$/.test(anchor.sourceHash) || !/^[a-f0-9]{64}$/.test(anchor.contentHash)) return false
     const digest = async (value: string) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))), (byte) => byte.toString(16).padStart(2, "0")).join("")

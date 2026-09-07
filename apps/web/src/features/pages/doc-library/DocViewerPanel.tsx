@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { uploadApi, type DocDocumentDetail } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { verifyDocumentSourceAnchor, type DocumentSourceAnchor } from "@/lib/document-citation"
+import { serializeDocumentExtractedSource } from "@/lib/document-extracted-source"
 
 type ViewerMode = "file" | "text"
 type FilePreviewState = {
@@ -95,6 +96,11 @@ export function DocViewerPanel({
         setModeState({ documentId, mode: "file" })
     }, [highlightSig, documentId])
 
+    const extractedCitationKey = sourceAnchor?.sourceFormat === "extracted_text_v1" ? `${sourceAnchor.sourceHash}:${sourceAnchor.startOffset}:${sourceAnchor.endOffset}` : null
+    React.useEffect(() => {
+        if (extractedCitationKey && documentId) setModeState({ documentId, mode: "text" })
+    }, [extractedCitationKey, documentId])
+
     if (!document) {
         return (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -103,7 +109,8 @@ export function DocViewerPanel({
         )
     }
 
-    const markdownText = buildDocumentMarkdown(document)
+    const extractedCitation = sourceAnchor?.sourceFormat === "extracted_text_v1"
+    const markdownText = extractedCitation ? serializeDocumentExtractedSource(document.chunks.slice().sort((a, b) => a.chunkIndex - b.chunkIndex)) : buildDocumentMarkdown(document)
     const hasText = markdownText.trim().length > 0
     const blocks = document.blocks.filter(isOcrBlock)
     const mode = modeState?.documentId === document.id ? modeState.mode : "file"
@@ -137,7 +144,7 @@ export function DocViewerPanel({
                 {originalPreview}
             </TabsContent>
             <TabsContent value="text" className="m-0 min-h-0">
-                <ParsedTextPreview text={markdownText} />
+                {extractedCitation ? <VerifiedSourcePreview text={markdownText} anchor={sourceAnchor} expectedFormat="extracted_text_v1" /> : <ParsedTextPreview text={markdownText} />}
             </TabsContent>
         </Tabs>
     )
@@ -257,21 +264,22 @@ function MarkdownFilePreview({ url, sourceAnchor }: { url: string; sourceAnchor?
         )
     }
 
-    return <VerifiedMarkdownPreview text={current.text} anchor={sourceAnchor} />
+    return <VerifiedSourcePreview text={current.text} anchor={sourceAnchor} />
 }
 
-function VerifiedMarkdownPreview({ text, anchor }: { text: string; anchor?: DocumentSourceAnchor }) {
-    const [verified, setVerified] = React.useState<{ text: string; anchor: DocumentSourceAnchor; valid: boolean } | null>(null)
+function VerifiedSourcePreview({ text, anchor, expectedFormat = "raw_markdown" }: { text: string; anchor?: DocumentSourceAnchor; expectedFormat?: DocumentSourceAnchor["sourceFormat"] }) {
+    const [verified, setVerified] = React.useState<{ text: string; anchor: DocumentSourceAnchor; format: DocumentSourceAnchor["sourceFormat"]; valid: boolean } | null>(null)
     React.useEffect(() => {
         if (!anchor) return
         let cancelled = false
-        verifyDocumentSourceAnchor(text, anchor).then((valid) => { if (!cancelled) setVerified({ text, anchor, valid }) })
-            .catch(() => { if (!cancelled) setVerified({ text, anchor, valid: false }) })
+        verifyDocumentSourceAnchor(text, anchor, expectedFormat).then((valid) => { if (!cancelled) setVerified({ text, anchor, format: expectedFormat, valid }) })
+            .catch(() => { if (!cancelled) setVerified({ text, anchor, format: expectedFormat, valid: false }) })
         return () => { cancelled = true }
-    }, [text, anchor])
-    const matched = verified?.text === text && verified?.anchor === anchor ? verified : null
+    }, [text, anchor, expectedFormat])
+    const matched = verified?.text === text && verified?.anchor === anchor && verified?.format === expectedFormat ? verified : null
     return <div className="flex h-full min-h-0 flex-col">
-        {anchor ? <p role="status" className="px-3 py-2 text-xs text-muted-foreground">{!matched ? "正在核验原文件版本…" : matched.valid ? "原文版本已核验 · 高亮命中所在段落" : "原文件版本或位置不匹配，未在原文中定位。"}</p> : null}
+        {expectedFormat === "extracted_text_v1" ? <p className="px-3 pt-2 text-xs text-muted-foreground">以下定位基于提取文本，不是原文件页面坐标。</p> : null}
+        {anchor ? <p role="status" className="px-3 py-2 text-xs text-muted-foreground">{!matched ? "正在核验文本版本…" : matched.valid ? "文本版本与引用位置已核验" : "文本版本或位置不匹配，未在文本中定位。"}</p> : null}
         <div className="min-h-0 flex-1"><ParsedTextPreview text={text} sourceRange={matched?.valid && anchor ? { start: anchor.startOffset, end: anchor.endOffset } : undefined} /></div>
     </div>
 }

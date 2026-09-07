@@ -2,6 +2,7 @@ import { and, asc, eq } from "drizzle-orm"
 import { docDocuments, docChunks } from "@/server/db/schema"
 import { withReadBudget } from "@/server/db/read-budget"
 import { fetchS3ObjectBytes } from "@/server/upload/s3-fetch"
+import { serializeDocumentExtractedSource } from "@/lib/document-extracted-source"
 
 /** Markdown offset指向原UTF-8文本；其他格式指向带原locator的版本化提取文本，不冒充PDF字节位置。 */
 export async function loadDocumentIndexSource(userId: number, libraryId: number, documentId: number, abortSignal?: AbortSignal) {
@@ -16,7 +17,7 @@ export async function loadDocumentIndexSource(userId: number, libraryId: number,
             .where(and(eq(docChunks.documentId, documentId), eq(docChunks.userId, userId), eq(docChunks.libraryId, libraryId)))
             .orderBy(asc(docChunks.chunkIndex)).limit(4_001)
         if (!chunks.length || chunks.length > 4_000) throw new Error("原始提取片段为空或超过上限")
-        const extracted = chunks.map((chunk) => `## ${chunk.locator ?? (chunk.page == null ? "正文" : `第${chunk.page}页`)}\n\n${chunk.text}`).join("\n\n")
+        const extracted = serializeDocumentExtractedSource(chunks)
         return { document, extracted }
     }, { abortSignal })
     let source: string

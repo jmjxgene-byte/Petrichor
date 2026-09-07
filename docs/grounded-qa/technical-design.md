@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08提取文本定位节点：索引与查看器共享serializeDocumentExtractedSource，严格保留extracted_text_v1的既有字节、重复locator和空白，不迁移或重写索引。PDF/DOCX/CSV引用自动切到文本页，按同一排序/序列化、整文hash与片段hash验证后高亮；显式提示不是原文件页面坐标。普通无引用预览保持旧格式，Markdown只接受raw_markdown，禁止跨格式套用偏移。合成DocViewerPanel测试覆盖三种格式、乱序输入、第二处重复文本、内容变化取消高亮；全量1315通过/40既有跳过，typecheck/lint/build通过。未进行真实文件浏览器/PG/生产验收，PDF原始页面坐标仍未实现。
+
 2026-09-08长文定位验收：demo文档改为300段合成前文和固定文末引用，原文/片段hash已离线重算；桌面浏览器原文滚动容器scrollTop=15326.5，命中矩形完整位于容器可视区，console无错误。citation-position组件测试覆盖末段滚动目标、切换到首段/取消引用后的当前DOM高亮清除、代码块和表格单元格定位。组件会替换DOM，测试检查当前容器而非脱离文档的旧节点。全量1311通过/40既有跳过，typecheck/lint/build通过；这里只验证合成Markdown，未扩展为其他格式或实际生产验收。
 
 2026-09-08Markdown原文定位节点：read-citation白名单增加sourceFormat/sourceHash/contentHash及UTF-16原文偏移；浏览器保持BOM/CRLF解码，验证整文和核心片段SHA后，才将范围交给MarkdownPreview。sanitize后的citation-position插件按解析器位置标记命中所在可渲染段落，保留GFM/代码结构、拒绝正文伪造标记，渲染后滚动至首个匹配块。重复文本不靠字符串搜索，内容/位置变化不高亮。新增hash/边界、BOM/CRLF/emoji、重复段落与HTML伪造测试，合成浏览器验证原文件段落高亮；长文滚动仍未实测。此能力仅用于raw_markdown，提取文本偏移不冒充PDF坐标；旧无锚点引用保持仅原文入口。实际PG/生产和原始文件均未修改。
