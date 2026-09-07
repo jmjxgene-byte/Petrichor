@@ -2513,6 +2513,7 @@ export interface DocQaThreadListParams {
 }
 
 export const docLibraryApi = {
+  readCitation: (libraryId: string, documentId: string, citation: import("./document-citation").DocumentCitation, signal?: AbortSignal) => api.post<import("./document-citation").DocumentCitationWindow>("/doc-library/index/read-citation", { libraryId, documentId, ...citation }, { signal, timeout: 10_000 }),
   indexStatus: (libraryId: string, signal?: AbortSignal) => api.post<import("./document-index-types").DocumentIndexStatus>("/doc-library/index/status", { libraryId }, { signal, timeout: 10_000 }),
   cancelIndex: (generationId: string) => api.post<{ generationId: string; status: string }>("/doc-library/index/cancel", { generationId }, { timeout: 10_000 }),
   quoteIndex: (libraryId: string, signal?: AbortSignal) => api.post<import("./document-index-types").DocumentIndexQuote>("/doc-library/index/quote", { libraryId }, { signal, timeout: 125_000 }),

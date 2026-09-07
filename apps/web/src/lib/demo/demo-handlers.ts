@@ -315,6 +315,11 @@ const handlers: Record<string, DemoHandler> = {
     "POST /doc-library/document/detail": () => ok({ document: demoIndexDocument }),
     "POST /upload/presign-get": (body) => str(body.objectKey) === demoIndexDocument.objectKey ? ok({ url: demoIndexSourceUrl() }) : notFound("演示对象不存在"),
     "POST /doc-library/index/status": () => ok(demoDocumentIndexStatus()),
+    "POST /doc-library/index/read-citation": (input) => {
+        if (String(input.libraryId) !== "700001" || String(input.documentId) !== "700101" || String(input.generationId) !== "700201" || String(input.passageId) !== "700301" || input.contentHash !== "0".repeat(64)) return notFound("引用不存在")
+        const content = "# 演示文档\n\n这是用于界面验证的合成文本，不是真实知识。\n"
+        return ok({ title: "演示文档", content, anchorStart: 8, anchorEnd: content.length - 1 })
+    },
     "POST /doc-library/index/quote": () => ok(demoDocumentIndexQuote()),
     "POST /doc-library/index/build": (body) => body.confirm === true && body.token === "demo-only-not-a-real-signature" ? ok(demoCompleteIndex()) : badRequest("请确认演示报价"),
     "POST /doc-library/index/activate": (body) => body.confirm === true ? ok(demoActivateIndex()) : badRequest("请确认演示启用"),

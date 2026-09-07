@@ -11,6 +11,7 @@ describe("命中优先证据窗口", () => {
         expect(result.content).toContain("真正命中的尾部回答")
         expect(result.content.length).toBeLessThanOrEqual(4_000)
         expect(result.indices).toContain(1000)
+        expect(result.content.slice(result.anchorStart, result.anchorEnd)).toBe("真正命中的尾部回答")
     })
     it("无论读取顺序如何，输出保持来源顺序", () => {
         expect(buildEvidenceWindow([

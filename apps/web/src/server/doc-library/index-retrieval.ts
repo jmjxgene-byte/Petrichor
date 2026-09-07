@@ -123,7 +123,8 @@ export async function readDocumentIndexPassage(input: ReadBudget & { userId: num
             const end = Math.min(item.endOffset, anchor.parentEndOffset, item.startOffset < anchor.startOffset ? anchor.startOffset : Infinity)
             return { chunkIndex: item.passageIndex, text: end > start ? item.text.slice(start - item.startOffset, end - item.startOffset) : "" }
         })
-        return { title: document.title, content: buildEvidenceWindow(chunks, anchor.passageIndex).content, anchor,
-            href: `${docLibraryDocumentPath(String(input.libraryId), String(input.documentId))}&generationId=${input.generationId}&passageId=${input.passageId}` }
+        const window = buildEvidenceWindow(chunks, anchor.passageIndex)
+        return { title: document.title, content: window.content, anchorStart: window.anchorStart, anchorEnd: window.anchorEnd, anchor,
+            href: `${docLibraryDocumentPath(String(input.libraryId), String(input.documentId))}&generationId=${input.generationId}&passageId=${input.passageId}&contentHash=${input.contentHash}` }
     }, input)
 }

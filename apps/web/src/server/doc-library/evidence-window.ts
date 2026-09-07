@@ -18,5 +18,7 @@ export function buildEvidenceWindow(chunks: EvidenceChunk[], anchorIndex: number
         remaining -= take + separator.length
     }
     selected.sort((a, b) => a.chunkIndex - b.chunkIndex)
-    return { content: selected.map((chunk) => chunk.text).join(separator), indices: selected.map((chunk) => chunk.chunkIndex) }
+    const preceding = selected.filter((chunk) => chunk.chunkIndex < anchorIndex)
+    const anchorStart = preceding.reduce((sum, chunk) => sum + chunk.text.length + separator.length, 0)
+    return { content: selected.map((chunk) => chunk.text).join(separator), indices: selected.map((chunk) => chunk.chunkIndex), anchorStart, anchorEnd: anchorStart + anchor.text.length }
 }

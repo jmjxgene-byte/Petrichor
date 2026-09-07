@@ -35,6 +35,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { FileUpload } from "@/components/extend/ui/file-upload"
 import { DocViewerPanel, type DocViewerHighlight } from "@/features/pages/doc-library/DocViewerPanel"
+import { DocumentCitationPanel } from "./DocumentCitationPanel"
 import { runDocumentUploadQueue } from "@/features/pages/doc-library/lib/upload-batch"
 import {
   detectFileType,
@@ -304,6 +305,7 @@ export function DocLibraryBrowsePage() {
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [deleteTarget, setDeleteTarget] = React.useState<DeleteTarget | null>(null)
   const [viewerDoc, setViewerDoc] = React.useState<DocDocumentDetail | null>(null)
+  const viewerRequest = React.useRef(0)
   const [viewerOpen, setViewerOpen] = React.useState(false)
   const [viewerLoading, setViewerLoading] = React.useState(false)
   const [viewerHighlight, setViewerHighlight] = React.useState<DocViewerHighlight | null>(null)
@@ -547,20 +549,26 @@ export function DocLibraryBrowsePage() {
   }, [refreshAndKeepFolderOpen, uploadOne, uploadParentId])
 
   const openViewer = React.useCallback(async (documentId: string, highlight: DocViewerHighlight | null = null) => {
+    const requestId = ++viewerRequest.current
     setViewerOpen(true)
     setViewerHighlight(highlight)
     setViewerLoading(true)
     setViewerDoc(null)
     try {
       const res = await docLibraryApi.documentDetail(documentId)
+      if (requestId !== viewerRequest.current) return
+      if (res.data.document.libraryId !== libraryId || res.data.document.id !== documentId) throw new Error("引用不属于当前文档库")
       setViewerDoc(res.data.document)
     } catch (error) {
+      if (requestId !== viewerRequest.current) return
       toast.error(resolveApiErrorMessage(error, "加载文件详情失败"))
       setViewerOpen(false)
     } finally {
-      setViewerLoading(false)
+      if (requestId === viewerRequest.current) setViewerLoading(false)
     }
-  }, [])
+  }, [libraryId])
+
+  React.useEffect(() => () => { viewerRequest.current += 1 }, [libraryId])
 
   React.useEffect(() => {
     if (!libraryId) return
@@ -585,6 +593,8 @@ export function DocLibraryBrowsePage() {
     setViewerOpen(open)
     if (open) return
 
+    viewerRequest.current += 1
+
     setViewerHighlight(null)
     const params = new URLSearchParams(location.search)
     const hadDocumentId = params.has("documentId")
@@ -594,6 +604,9 @@ export function DocLibraryBrowsePage() {
     params.delete("documentId")
     params.delete("hlPage")
     params.delete("hlText")
+    params.delete("generationId")
+    params.delete("passageId")
+    params.delete("contentHash")
     const nextSearch = params.toString()
     openedFromUrlRef.current = null
     navigate(
@@ -1057,6 +1070,7 @@ export function DocLibraryBrowsePage() {
               {viewerDoc?.fileName ?? "文件预览"}
             </DialogTitle>
           </DialogHeader>
+          {viewerDoc && viewerDoc.id === getDocumentIdFromSearch(location.search) && libraryId ? <DocumentCitationPanel libraryId={libraryId} documentId={viewerDoc.id} search={location.search} /> : null}
           <div className="min-h-0 flex-1">
             {viewerLoading ? (
               <div className="flex h-full items-center justify-center text-muted-foreground">
