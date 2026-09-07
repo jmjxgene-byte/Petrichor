@@ -30,7 +30,7 @@ describe("事务本地只读查询预算", () => {
         mocks.getDb.mockReturnValue({ transaction })
         const run = vi.fn(async () => ["safe"])
         expect(await withReadBudget(run, { queryDeadlineAt: 1_500 })).toEqual(["safe"])
-        expect(transaction).toHaveBeenCalledWith(expect.any(Function), { accessMode: "read only" })
+        expect(transaction).toHaveBeenCalledWith(expect.any(Function), { accessMode: "read only", isolationLevel: "repeatable read" })
         const compiled = new PgDialect().sqlToQuery(execute.mock.calls[0][0])
         expect(compiled.sql).toContain("set_config('statement_timeout'")
         expect(compiled.sql).toContain("true")

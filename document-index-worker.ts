@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { hostname } from "node:os"
 import { claimDocumentIndexJob } from "./apps/web/src/server/doc-library/index-jobs"
 import { documentIndexWorkerEnabled, executeDocumentIndexJob } from "./apps/web/src/server/doc-library/index-runtime"
-import { indexProviderPolicySchema } from "./apps/web/src/server/doc-library/index-provider"
+import { parseIndexProviderPolicies } from "./apps/web/src/server/doc-library/index-provider"
 
 if (!documentIndexWorkerEnabled()) {
     console.log("Petrichor document index Worker disabled")
@@ -10,8 +10,8 @@ if (!documentIndexWorkerEnabled()) {
 }
 let policyExpiresAt = 0
 try {
-    const policy = indexProviderPolicySchema.parse(JSON.parse(process.env.PETRICHOR_DOC_INDEX_PROVIDER_POLICY ?? "null"))
-    policyExpiresAt = Date.parse(policy.expiresAt)
+    const policies = parseIndexProviderPolicies(JSON.parse(process.env.PETRICHOR_DOC_INDEX_PROVIDER_POLICY ?? "null"))
+    policyExpiresAt = Math.min(...policies.map((policy) => Date.parse(policy.expiresAt)))
     if (policyExpiresAt <= Date.now()) throw new Error("expired")
 } catch {
     console.error("Document index Worker stopped: provider_policy_missing_or_expired")

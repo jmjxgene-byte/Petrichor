@@ -3,7 +3,7 @@ import { MockEmbeddingModelV3 } from "ai/test"
 import { APICallError } from "ai"
 const mocks = vi.hoisted(() => ({ resolveEmbeddingModel: vi.fn() }))
 vi.mock("@/server/ai/resolution", () => mocks)
-import { quoteIndexInputs, resolveDocumentIndexProvider, type IndexProviderPolicy } from "./index-provider"
+import { quoteIndexInputs, resolveDocumentIndexProvider, parseIndexProviderPolicies, type IndexProviderPolicy } from "./index-provider"
 import { hashDocumentText } from "./passage-builder"
 const date = new Date(0)
 const profileKey = hashDocumentText(JSON.stringify({ modelRefId: 1, model: "synthetic", dimensions: 2, providerId: 1,
@@ -16,6 +16,10 @@ function resolveWith(model: MockEmbeddingModelV3) {
     } })
 }
 describe("provider预算与SDK边界", () => {
+    it("多模型policy不得有相同档案的歧义价格", () => {
+        expect(parseIndexProviderPolicies(policy)).toEqual([policy])
+        expect(() => parseIndexProviderPolicies([policy, policy])).toThrow("重复")
+    })
     it("保守覆盖逐输入请求费用与特殊token，不接受过期/超限", () => {
         expect(quoteIndexInputs(["x", "yy"], policy)).toEqual({ inputTokens: 7, costMicrousd: 27 })
         expect(() => quoteIndexInputs(["中文"], { ...policy, maxInputTokens: 4 })).toThrow("上界")

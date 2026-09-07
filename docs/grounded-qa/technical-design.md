@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08代际检索节点：index-retrieval已接source adapter；完整current manifest与库内ready文档集合/版本一致才使用索引，新增/修改导致不一致时整库回词法，避免漏新文档或混旧版本。中文tsvector词法+按模型档案分组的向量召回，经RRF及本地重排；内部沿用chunk_bm25枚举名，但实际SQL为ts_rank_cd，不宣称实现了BM25。DOC_HYBRID独立默认false，单组向量阶段≤2.5秒并预留至少2秒深读时间，语义失败保留词法与降级信息。不同空间按各自排名融合，词法/语义各最多30候选；同组选定文档库合批，不逐库重复query embedding。新source.read使用generation/passage/hash完整锚点，退休版本可按固定版本回读但原文变化拒绝；同一文档多片段独立证据共享来源编号。ReadBudget改为只读repeatable-read；旧API补libraryIds限制。policy支持最多20个不同档案并拒绝重复价格键。这里是离线mock/SQL构造验证，真实PG执行计划/向量索引性能、外部reranker、引用UI/历史恢复与全链路成本计数仍待验证。
+
 2026-09-08完成/发布存储节点：index-complete完成源hash、文档版本、模型档案与manifest一致性、向量数量/维度/float32/非零校验；50片段一批绑定参数写入同一事务，job完成和generation ready同事务。ready不自动current；独立activate重新核对所有任务、文档版本、片段覆盖与向量，再先退休旧current、后激活新current。代码支持同库retired版本经同样校验重新激活，不跳过变更检测。只有mock/SQL参数及数值测试已验证，尚无实际Postgres写入/回滚证明，未运行模型或切换生产。
 
 先核对真实Run，记录目标轮次是否有工具与Evidence，不提交原始对话/查询正文。新日志只记录阶段、数量、query hash、generation、耗时桶和错误码。检索缓存不得跨用户；GeneOps正文仅请求内存，最终回答按现有会话规则保存。

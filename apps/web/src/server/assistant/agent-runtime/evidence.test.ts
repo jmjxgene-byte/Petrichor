@@ -10,6 +10,16 @@ import {
 } from "./evidence"
 
 describe("EvidenceStore 去重", () => {
+    it("同文档不同代际片段保留独立证据但共享来源编号", () => {
+        const store = new EvidenceStore()
+        const first = store.add({ source: "document", sourceId: "12:gen:5:pass:6", content: "片段一",
+            url: "/document/12?passageId=6", metadata: { documentId: "12" } })
+        const second = store.add({ source: "document", sourceId: "12:gen:5:pass:7", content: "片段二",
+            url: "/document/12?passageId=7", metadata: { documentId: "12" } })
+        expect(store.size).toBe(2)
+        expect(store.citationIndex(first.id)).toBe(1)
+        expect(store.citationIndex(second.id)).toBe(1)
+    })
     it("同 nodeKey 视为同一条证据并合并信息", () => {
         const store = new EvidenceStore()
         store.add({

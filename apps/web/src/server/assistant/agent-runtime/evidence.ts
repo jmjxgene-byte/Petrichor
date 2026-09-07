@@ -107,6 +107,7 @@ export function citationSourceKey(evidence: AgentEvidence): string {
         return `knowledge-article:${scope}${articleId}`
     }
 
+    if (evidence.source === "document" && typeof metadata.documentId === "string") return `document:${metadata.documentId}`
     if (evidence.url?.trim()) return `url:${canonicalUrl(evidence.url)}`
     if (evidence.sourceId?.trim()) return `source:${evidence.source}:${evidence.sourceId.trim()}`
     return `evidence:${evidence.id}`

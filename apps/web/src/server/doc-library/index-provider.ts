@@ -1,6 +1,7 @@
 import { embedMany } from "ai"
 import { z } from "zod"
-import { resolveEmbeddingModel } from "@/server/ai/resolution"
+import { resolveEmbeddingModel, resolveModelForPurpose } from "@/server/ai/resolution"
+import { createTextEmbeddingModel } from "@/server/ai/model-factory"
 import { indexEmbeddingProfileSchema } from "./index-contract"
 import { hashDocumentText } from "./passage-builder"
 
@@ -15,6 +16,12 @@ export const indexProviderPolicySchema = z.object({
     batchSize: z.number().int().min(1).max(32),
 }).strict()
 export type IndexProviderPolicy = z.infer<typeof indexProviderPolicySchema>
+
+export function parseIndexProviderPolicies(raw: unknown) {
+    const policies = z.array(indexProviderPolicySchema).min(1).max(20).parse(Array.isArray(raw) ? raw : [raw])
+    if (new Set(policies.map((policy) => policy.profileKey)).size !== policies.length) throw new Error("provider policy档案重复")
+    return policies
+}
 
 export function quoteIndexInputs(values: string[], policy: IndexProviderPolicy, now = Date.now()) {
     policy = indexProviderPolicySchema.parse(policy)
@@ -31,9 +38,12 @@ export function quoteIndexInputs(values: string[], policy: IndexProviderPolicy, 
     return { inputTokens, costMicrousd }
 }
 
-export async function resolveDocumentIndexProvider(userId: number, rawPolicy: unknown) {
-    const policy = indexProviderPolicySchema.parse(rawPolicy)
-    const { model, resolved } = await resolveEmbeddingModel(userId)
+export async function resolveDocumentIndexProvider(userId: number, rawPolicy: unknown, expectedProfile?: z.infer<typeof indexEmbeddingProfileSchema>) {
+    const policies = parseIndexProviderPolicies(rawPolicy)
+    const selected = expectedProfile ? await resolveModelForPurpose(userId, "EMBEDDING", expectedProfile.modelRefId) : null
+    const { model, resolved } = selected
+        ? { resolved: selected, model: await createTextEmbeddingModel(selected.runtime, selected.model.modelId) }
+        : await resolveEmbeddingModel(userId)
     const profile = indexEmbeddingProfileSchema.parse({
         modelRefId: resolved.model.id, model: resolved.model.modelId, dimensions: resolved.model.dimensions, version: 1,
         key: hashDocumentText(JSON.stringify({ modelRefId: resolved.model.id, model: resolved.model.modelId,
@@ -41,7 +51,8 @@ export async function resolveDocumentIndexProvider(userId: number, rawPolicy: un
             providerRevision: resolved.provider.updatedAt.toISOString(), modelRevision: resolved.model.updatedAt.toISOString(),
         })),
     })
-    if (policy.profileKey !== profile.key) throw new Error("provider核验档案不匹配")
+    const policy = policies.find((item) => item.profileKey === profile.key)
+    if (!policy || (expectedProfile && JSON.stringify(profile) !== JSON.stringify(expectedProfile))) throw new Error("provider核验档案不匹配")
     return {
         profile,
         quote: (values: string[]) => quoteIndexInputs(values, policy),

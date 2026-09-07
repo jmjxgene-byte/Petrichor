@@ -29,5 +29,5 @@ export async function withReadBudget<T>(run: (reader: Reader, checkpoint: () => 
         const result = await run(tx, checkpoint)
         check()
         return result
-    }, { accessMode: "read only" })
+    }, { accessMode: "read only", isolationLevel: "repeatable read" })
 }

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm"
 import { z } from "zod"
 import { getServerConfig } from "@/config/server"
 import { CACHE_TTL_SECONDS, cacheDropByPrefix, cacheKey, cacheReadThrough } from "@/server/cache"
@@ -472,6 +472,7 @@ export async function listDocumentsForQa(userId: number, libraryId: number | nul
 export async function searchChunks(input: {
     userId: number
     libraryId: number | null
+    libraryIds?: number[]
     query: string
     documentId?: number | null
     limit?: number
@@ -479,10 +480,12 @@ export async function searchChunks(input: {
     queryDeadlineAt?: number
 }) {
     const terms = documentSearchTerms(input.query)
+    if (input.libraryIds?.length === 0) return []
     if (!terms.length) return []
     const limit = Math.min(Math.max(input.limit ?? 8, 1), 20)
     const filters = [eq(docChunks.userId, input.userId), eq(docDocuments.userId, input.userId)]
     if (input.libraryId != null) filters.push(eq(docChunks.libraryId, input.libraryId))
+    if (input.libraryIds != null) filters.push(inArray(docChunks.libraryId, input.libraryIds))
     if (input.documentId != null) filters.push(eq(docChunks.documentId, input.documentId))
     const matches = terms.map((term) =>
         sql`lower(${docChunks.text}) like ${literalLikePattern(term)} escape ${"\\"}`)

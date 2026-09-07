@@ -7,7 +7,11 @@ const mocks = vi.hoisted(() => ({
     readGeneOpsChunks: vi.fn(),
     searchDocuments: vi.fn(),
     readDocument: vi.fn(),
+    searchIndex: vi.fn(),
+    readIndex: vi.fn(),
 }))
+
+vi.mock("@/server/doc-library/index-retrieval", () => ({ searchDocumentIndex: mocks.searchIndex, readDocumentIndexPassage: mocks.readIndex }))
 
 vi.mock("@/server/assistant/tools/doc-library", () => ({
     searchDocuments: mocks.searchDocuments,
@@ -82,6 +86,7 @@ function context(): ToolExecutionContext {
 
 beforeEach(() => {
     vi.clearAllMocks()
+    mocks.searchIndex.mockResolvedValue({ hits: [], indexedLibraryIds: [], degraded: [] })
     mocks.resolveSources.mockResolvedValue({
         scope: { mode: "selected", refs: [source.ref] },
         selected: [source],
@@ -110,6 +115,31 @@ beforeEach(() => {
 })
 
 describe("unified source tools", () => {
+    it("已就绪索引走代际锚点，不重复读取旧chunk，并保留实际检索模式", async () => {
+        const local = { ...source, ref: "doc-library:3", kind: "doc-library", id: "3" }
+        mocks.resolveSources.mockResolvedValue({ scope: { mode: "selected", refs: [local.ref] }, selected: [local], unavailable: [] })
+        mocks.searchIndex.mockResolvedValue({ hits: [{ documentId: 12, libraryId: 3, generationId: 5, passageId: 6,
+            contentHash: "a".repeat(64), title: "合成文档", snippet: "合成", href: "/document/12", mode: "hybrid" }], indexedLibraryIds: [3], degraded: [] })
+        mocks.readIndex.mockResolvedValue({ title: "合成文档", content: "合成命中", href: "/document/12?generationId=5&passageId=6",
+            anchor: { sourceHash: "b".repeat(64), startOffset: 10, endOffset: 20 } })
+        const tool = sourceTools.find((item) => item.id === "source.lookup")!
+        const output = await tool.execute(context(), { query: "合成" })
+        const normalized = tool.normalize!(output, {})
+        expect(mocks.searchDocuments).not.toHaveBeenCalled()
+        expect(mocks.readDocument).not.toHaveBeenCalled()
+        expect(mocks.readIndex).toHaveBeenCalledWith(expect.objectContaining({ userId: 1, libraryId: 3, documentId: 12, generationId: 5, passageId: 6 }))
+        expect(normalized.evidence?.[0].metadata).toMatchObject({ generationId: "5", passageId: "6", documentId: "12" })
+        expect(normalized.data).toMatchObject({ retrievalModes: ["hybrid"] })
+    })
+
+    it("代际锚点不完整或混用旧chunk时拒绝", async () => {
+        const tool = sourceTools.find((item) => item.id === "source.read")!
+        await expect(tool.execute(context(), { kind: "document", sourceRef: "doc-library:3", documentId: 12, passageId: 6 })).rejects.toThrow()
+        await expect(tool.execute(context(), { kind: "document", sourceRef: "doc-library:3", documentId: 12,
+            passageId: 6, generationId: 5, contentHash: "a".repeat(64), anchorChunkId: 9 })).rejects.toThrow()
+        expect(mocks.readIndex).not.toHaveBeenCalled()
+    })
+
     it("保留同一长文两个命中，深读传入各自锚点并分别保存证据", async () => {
         const local = { ...source, ref: "doc-library:3", kind: "doc-library", id: "3" }
         mocks.resolveSources.mockResolvedValue({ scope: { mode: "selected", refs: [local.ref] }, selected: [local], unavailable: [] })

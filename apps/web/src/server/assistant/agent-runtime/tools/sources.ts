@@ -5,6 +5,7 @@ import type { AssistantFocus } from "@/server/assistant/domain-types"
 import { searchDocuments, readDocument } from "@/server/assistant/tools/doc-library"
 import { resolveAssistantSources } from "@/server/assistant/source-catalog"
 import { buildEvidenceWindow } from "@/server/doc-library/evidence-window"
+import { searchDocumentIndex, readDocumentIndexPassage } from "@/server/doc-library/index-retrieval"
 import { badRequest } from "@/server/http/response"
 import { defineTool, toAssistantContext } from "./adapter"
 import { geneOpsTools } from "./geneops"
@@ -43,6 +44,14 @@ const documentReadSchema = z.object({
     sourceRef: assistantSourceRefSchema,
     documentId: positiveIdSchema,
     anchorChunkId: positiveIdSchema.optional(),
+    passageId: positiveIdSchema.optional(),
+    generationId: positiveIdSchema.optional(),
+    contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+}).superRefine((value, ctx) => {
+    const modern = [value.passageId, value.generationId, value.contentHash].some((item) => item != null)
+    if (modern && (value.passageId == null || value.generationId == null || value.contentHash == null || value.anchorChunkId != null)) {
+        ctx.addIssue({ code: "custom", message: "代际锚点必须完整，且不能与旧chunk锚点混用" })
+    }
 })
 
 const geneOpsReadSchema = z.object({
@@ -64,6 +73,7 @@ type SourceCandidate = {
     snippet: string
     url: string | null
     score: number
+    retrievalMode?: string
     read: SourceReadInput
 }
 
@@ -186,54 +196,53 @@ async function searchKnowledgeAcross(
 }
 
 async function searchDocumentLibrary(
-    ctx: ToolExecutionContext,
-    source: AssistantSourceCatalogItem,
-    query: string,
+    ctx: ToolExecutionContext, source: AssistantSourceCatalogItem, query: string,
+    degraded?: (source: AssistantSourceCatalogItem, message: string) => void,
 ): Promise<SourceCandidate[]> {
-    const rows = await searchDocuments(toAssistantContext(focusForSource(ctx, source)), {
-        query,
-        libraryId: Number(source.id),
-        limit: 8,
-    }) as Array<Record<string, unknown>>
-    return rankFeed(rows.map((row) => {
-        const documentId = String(row.documentId)
-        return {
-            candidateKey: `document:${documentId}:chunk:${row.chunkId}`,
-            sourceRef: source.ref,
-            sourceKind: source.kind,
-            sourceName: source.name,
-            title: stringValue(row.title) ?? stringValue(row.fileName) ?? "未命名文档",
-            snippet: clip(stringValue(row.snippet) ?? "", 600),
-            url: stringValue(row.href),
-            read: { kind: "document", sourceRef: source.ref, documentId: Number(documentId), anchorChunkId: positiveIdSchema.parse(row.chunkId) },
-        }
-    }), 0.8)
+    return searchDocumentsAcross(ctx, [source], query, degraded)
 }
 
 async function searchDocumentsAcross(
-    ctx: ToolExecutionContext,
-    sources: AssistantSourceCatalogItem[],
-    query: string,
+    ctx: ToolExecutionContext, sources: AssistantSourceCatalogItem[], query: string,
+    degraded?: (source: AssistantSourceCatalogItem, message: string) => void,
 ): Promise<SourceCandidate[]> {
-    const rows = await searchDocuments(toAssistantContext({ ...ctx, focus: {} }), {
-        query,
-        libraryId: null,
-        limit: 12,
-    }) as Array<Record<string, unknown>>
+    let indexed: Awaited<ReturnType<typeof searchDocumentIndex>> = { hits: [], indexedLibraryIds: [], degraded: [] }
+    try {
+        indexed = await searchDocumentIndex({ userId: ctx.userId, libraryIds: sources.map((source) => Number(source.id)),
+            query, limit: 12, abortSignal: ctx.abortSignal, queryDeadlineAt: ctx.queryDeadlineAt })
+        if (indexed.degraded.length) for (const source of sources) degraded?.(source, "增强检索部分不可用，已使用可用词法结果")
+    } catch {
+        if (ctx.abortSignal?.aborted) throw new Error("文档检索已取消")
+        for (const source of sources) degraded?.(source, "增强索引不可用，回退关键词检索")
+    }
+    const fallback = sources.filter((source) => !indexed.indexedLibraryIds.includes(Number(source.id)))
+    let legacy: Array<Record<string, unknown>> = []
+    if (fallback.length) {
+        try {
+            legacy = await searchDocuments(toAssistantContext({ ...ctx, focus: {} }), {
+                query, libraryId: null, libraryIds: fallback.map((source) => Number(source.id)), limit: 12,
+            }) as Array<Record<string, unknown>>
+        } catch {
+            if (!indexed.hits.length) throw new Error("文档检索未能完成")
+            for (const source of fallback) degraded?.(source, "部分文档关键词检索未能完成")
+        }
+    }
     const byId = new Map(sources.map((source) => [source.id, source]))
+    const rows: Array<Record<string, unknown>> = [...indexed.hits, ...legacy]
     return rankFeed(rows.flatMap((row): Array<Omit<SourceCandidate, "score">> => {
         const source = byId.get(String(row.libraryId))
         if (!source) return []
-        const documentId = String(row.documentId)
+        const documentId = Number(row.documentId)
+        const read: SourceReadInput = row.passageId != null
+            ? { kind: "document", sourceRef: source.ref, documentId, passageId: Number(row.passageId),
+                generationId: Number(row.generationId), contentHash: String(row.contentHash) }
+            : { kind: "document", sourceRef: source.ref, documentId, anchorChunkId: positiveIdSchema.parse(row.chunkId) }
         return [{
-            candidateKey: `document:${documentId}:chunk:${row.chunkId}`,
-            sourceRef: source.ref,
-            sourceKind: source.kind,
-            sourceName: source.name,
+            candidateKey: row.passageId != null ? `document:${documentId}:generation:${row.generationId}:passage:${row.passageId}` : `document:${documentId}:chunk:${row.chunkId}`,
+            sourceRef: source.ref, sourceKind: source.kind, sourceName: source.name,
             title: stringValue(row.title) ?? stringValue(row.fileName) ?? "未命名文档",
-            snippet: clip(stringValue(row.snippet) ?? "", 600),
-            url: stringValue(row.href),
-            read: { kind: "document", sourceRef: source.ref, documentId: Number(documentId), anchorChunkId: positiveIdSchema.parse(row.chunkId) },
+            snippet: clip(stringValue(row.snippet) ?? "", 600), url: stringValue(row.href), read,
+            retrievalMode: stringValue(row.mode) ?? "keyword",
         }]
     }), 0.8)
 }
@@ -273,6 +282,8 @@ async function executeSourceSearch(
     const input = sourceSearchSchema.parse(raw)
     const resolved = await resolveAssistantSources(ctx.userId, (ctx.focus ?? null) as AssistantFocus | null)
     const sources = resolved.selected
+    const indexDegradations: SourceSearchOutput["degradedSources"] = []
+    const reportDegraded = (source: AssistantSourceCatalogItem, message: string) => indexDegradations.push({ sourceRef: source.ref, sourceName: source.name, message })
     if (sources.length === 0) {
         throw badRequest(resolved.unavailable[0]?.unavailableReason ?? "当前范围没有可用资料源")
     }
@@ -288,9 +299,9 @@ async function executeSourceSearch(
         for (const source of knowledgeSources) {
             tasks.push({ source, run: async () => await searchKnowledge(ctx, source, input.query) })
         }
-        for (const source of documentSources) {
-            tasks.push({ source, run: async () => await searchDocumentLibrary(ctx, source, input.query) })
-        }
+        if (documentSources[0]) tasks.push({ source: documentSources[0], run: async () => documentSources.length === 1
+            ? searchDocumentLibrary(ctx, documentSources[0], input.query, reportDegraded)
+            : searchDocumentsAcross(ctx, documentSources, input.query, reportDegraded) })
     } else {
         if (knowledgeSources[0]) {
             tasks.push({
@@ -301,7 +312,7 @@ async function executeSourceSearch(
         if (documentSources[0]) {
             tasks.push({
                 source: { ...documentSources[0], name: "全部文档库" },
-                run: async () => await searchDocumentsAcross(ctx, documentSources, input.query),
+                run: async () => await searchDocumentsAcross(ctx, documentSources, input.query, reportDegraded),
             })
         }
     }
@@ -317,6 +328,7 @@ async function executeSourceSearch(
         sourceName: source.name,
         message: source.unavailableReason ?? "资料源不可用",
     }))
+    degradedSources.push(...indexDegradations)
     settled.forEach((result, index) => {
         const source = tasks[index]!.source
         if (result.status === "fulfilled") {
@@ -387,6 +399,20 @@ async function executeSourceRead(ctx: ToolExecutionContext, raw: unknown): Promi
     }
 
     const documentId = Number(input.documentId)
+    if (input.passageId != null && input.generationId != null && input.contentHash != null) {
+        const output = await readDocumentIndexPassage({ userId: ctx.userId, libraryId: Number(source.id), documentId,
+            passageId: input.passageId, generationId: input.generationId, contentHash: input.contentHash,
+            abortSignal: ctx.abortSignal, queryDeadlineAt: ctx.queryDeadlineAt })
+        return { normalized: {
+            progress: true, summary: `已按命中位置读取「${output.title}」`, evidence: [{
+                source: "document", title: output.title, content: output.content,
+                sourceId: `${documentId}:generation:${input.generationId}:passage:${input.passageId}`, url: output.href,
+                metadata: { sourceRef: source.ref, sourceName: source.name, documentId: String(documentId),
+                    generationId: String(input.generationId), passageId: String(input.passageId), contentHash: input.contentHash,
+                    sourceHash: output.anchor.sourceHash, startOffset: output.anchor.startOffset, endOffset: output.anchor.endOffset },
+            }],
+        } }
+    }
     // reader在同一受限事务中核验focus.libraryId、用户和锚点后才读取正文。
     const output = await readDocument(toAssistantContext(focusForSource(ctx, source)), {
         documentId,
@@ -475,6 +501,7 @@ function normalizeSourceLookup(output: unknown): ToolNormalizerResult {
         data: {
             candidateCount: value.search.candidates.length,
             readCount,
+            retrievalModes: [...new Set(value.search.candidates.map((candidate) => candidate.retrievalMode).filter(Boolean))],
             degradedSources: degraded,
         },
         evidence,

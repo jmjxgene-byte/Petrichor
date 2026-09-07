@@ -11,6 +11,7 @@ import type { AssistantToolContext, AssistantToolRegistration } from "../domain-
 const searchDocumentsSchema = z.object({
     query: z.string().trim().min(1),
     libraryId: idSchema.optional().nullable(),
+    libraryIds: z.array(idSchema).min(1).max(1000).optional(),
     documentId: idSchema.optional().nullable(),
     limit: z.number().int().min(1).max(20).optional(),
 })
@@ -30,7 +31,7 @@ export async function searchDocuments(
     ctx: AssistantToolContext,
     input: z.infer<typeof searchDocumentsSchema>,
 ) {
-    const hasExplicitScope = input.libraryId != null || input.documentId != null
+    const hasExplicitScope = input.libraryIds != null || input.libraryId != null || input.documentId != null
     const libraryId = input.libraryId
         ?? (hasExplicitScope ? null : focusId(ctx.focus?.libraryId))
     const documentId = input.documentId
@@ -39,6 +40,7 @@ export async function searchDocuments(
     return await searchChunks({
         userId: ctx.userId,
         libraryId,
+        libraryIds: input.libraryIds,
         documentId,
         query: input.query,
         limit: input.limit,
