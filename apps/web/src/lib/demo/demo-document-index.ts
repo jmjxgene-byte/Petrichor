@@ -3,7 +3,8 @@ import type { DocumentIndexStatus, DocumentIndexQuote } from "@/lib/document-ind
 
 /** 纯浏览器内存演示；无数据库、模型或实际费用。 */
 const date = "2026-09-08T00:00:00Z"
-const source = "# 演示文档\n\n这是用于界面验证的合成文本，不是真实知识。\n"
+export const demoIndexSourceText = Array.from({ length: 300 }, (_, index) => `第${index + 1}段：这是合成长文的前置内容，不是真实资料。`).join("\n\n") + "\n\n# 演示文档\n\n这是用于界面验证的合成文本，不是真实知识。\n"
+const source = demoIndexSourceText
 export const demoIndexLibrary: DocLibrary = { id: "700001", name: "示例资料库（演示）", description: "合成示例，不连接真实数据", color: null, icon: null, documentCount: 1, createdAt: date, updatedAt: date }
 export const demoIndexDocument: DocDocumentDetail = { id: "700101", libraryId: "700001", folderId: null, fileName: "synthetic.md", title: "演示文档",
     fileType: "markdown", contentType: "text/markdown", objectKey: "demo/document-index.md", sizeBytes: new TextEncoder().encode(source).length,
