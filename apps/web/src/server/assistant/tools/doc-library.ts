@@ -61,6 +61,9 @@ export async function readDocument(
         fromIndex: input.fromIndex,
         limit: input.limit,
         anchorChunkId: input.anchorChunkId,
+        libraryId: focusId(ctx.focus?.libraryId),
+        abortSignal: ctx.abortSignal,
+        queryDeadlineAt: ctx.queryDeadlineAt,
     })
 }
 

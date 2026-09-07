@@ -10,6 +10,18 @@ beforeEach(() => { vi.clearAllMocks(); mocks.isSqliteDatabase.mockReturnValue(fa
 afterEach(() => vi.restoreAllMocks())
 
 describe("事务本地只读查询预算", () => {
+    it("多条读取语句的checkpoint不断收窄剩余服务端预算", async () => {
+        const clock = vi.spyOn(Date, "now").mockReturnValue(1_000)
+        const execute = vi.fn(async (_statement: SQL) => [])
+        mocks.getDb.mockReturnValue({ transaction: async (callback: (tx: object) => unknown) => callback({ execute }) })
+        await withReadBudget(async (_reader, checkpoint) => {
+            clock.mockReturnValue(1_250)
+            await checkpoint()
+            return []
+        }, { queryDeadlineAt: 1_500 })
+        const dialect = new PgDialect()
+        expect(execute.mock.calls.map(([statement]) => dialect.sqlToQuery(statement).params)).toEqual([["500"], ["250"]])
+    })
     it("继承剩余deadline，以只读事务设置本地超时后查询", async () => {
         vi.spyOn(Date, "now").mockReturnValue(1_000)
         const execute = vi.fn(async (_statement: SQL) => [])

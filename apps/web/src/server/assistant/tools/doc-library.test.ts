@@ -87,6 +87,7 @@ describe("doc library assistant tools", () => {
         expect(libraryMocks.readDocumentChunks).toHaveBeenCalledWith({
             userId: 7,
             documentId: 5,
+            libraryId: null,
             fromIndex: 12,
             limit: 4,
         })

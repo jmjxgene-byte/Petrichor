@@ -516,56 +516,67 @@ export async function readDocumentChunks(input: {
     fromIndex?: number
     limit?: number
     anchorChunkId?: number
+    libraryId?: number | null
+    abortSignal?: AbortSignal
+    queryDeadlineAt?: number
 }) {
-    const doc = await getDocumentOrThrow(input.userId, input.documentId)
-    let anchorIndex: number | null = null
-    if (input.anchorChunkId != null) {
-        const [anchor] = await getDb().select({ chunkIndex: docChunks.chunkIndex })
-            .from(docChunks).where(and(
-                eq(docChunks.id, input.anchorChunkId),
+    return await withReadBudget(async (reader, checkpoint) => {
+        const [doc] = await reader.select().from(docDocuments).where(and(
+            eq(docDocuments.id, input.documentId), eq(docDocuments.userId, input.userId),
+            ...(input.libraryId == null ? [] : [eq(docDocuments.libraryId, input.libraryId)]),
+        )).limit(1)
+        if (!doc) throw notFound("文档不存在或不属于当前文档库")
+        let anchorIndex: number | null = null
+        if (input.anchorChunkId != null) {
+            await checkpoint()
+            const [anchor] = await reader.select({ chunkIndex: docChunks.chunkIndex })
+                .from(docChunks).where(and(
+                    eq(docChunks.id, input.anchorChunkId),
+                    eq(docChunks.documentId, input.documentId),
+                    eq(docChunks.userId, input.userId),
+                )).limit(1)
+            if (!anchor) throw notFound("命中片段已失效或不属于当前文档")
+            anchorIndex = anchor.chunkIndex
+        }
+        const from = Math.max(input.fromIndex ?? 0, 0)
+        const limit = Math.min(Math.max(input.limit ?? 12, 1), 40)
+        await checkpoint()
+        const rows = await reader
+            .select({
+                chunkIndex: docChunks.chunkIndex,
+                page: docChunks.page,
+                locator: docChunks.locator,
+                text: docChunks.text,
+            })
+            .from(docChunks)
+            .where(and(
                 eq(docChunks.documentId, input.documentId),
                 eq(docChunks.userId, input.userId),
-            )).limit(1)
-        if (!anchor) throw notFound("命中片段已失效或不属于当前文档")
-        anchorIndex = anchor.chunkIndex
-    }
-    const from = Math.max(input.fromIndex ?? 0, 0)
-    const limit = Math.min(Math.max(input.limit ?? 12, 1), 40)
-    const rows = await getDb()
-        .select({
-            chunkIndex: docChunks.chunkIndex,
-            page: docChunks.page,
-            locator: docChunks.locator,
-            text: docChunks.text,
-        })
-        .from(docChunks)
-        .where(and(
-            eq(docChunks.documentId, input.documentId),
-            eq(docChunks.userId, input.userId),
-            ...(anchorIndex == null ? [] : [
-                gte(docChunks.chunkIndex, Math.max(0, anchorIndex - 1)),
-                lte(docChunks.chunkIndex, anchorIndex + 1),
-            ]),
-        ))
-        .orderBy(asc(docChunks.chunkIndex))
-        .limit(anchorIndex == null ? limit : 3)
-        .offset(anchorIndex == null ? from : 0)
-    return {
-        documentId: String(doc.id),
-        libraryId: String(doc.libraryId),
-        href: docLibraryDocumentPath(String(doc.libraryId), String(doc.id)),
-        title: doc.title,
-        fileName: doc.fileName,
-        fileType: doc.fileType,
-        fromIndex: anchorIndex == null ? from : Math.max(0, anchorIndex - 1),
-        anchorIndex,
-        chunks: rows.map((row) => ({
-            chunkIndex: row.chunkIndex,
-            locator: row.locator ?? (row.page != null ? `p.${row.page}` : null),
-            page: row.page,
-            text: row.text,
-        })),
-    }
+                ...(anchorIndex == null ? [] : [
+                    gte(docChunks.chunkIndex, Math.max(0, anchorIndex - 1)),
+                    lte(docChunks.chunkIndex, anchorIndex + 1),
+                ]),
+            ))
+            .orderBy(asc(docChunks.chunkIndex))
+            .limit(anchorIndex == null ? limit : 3)
+            .offset(anchorIndex == null ? from : 0)
+        return {
+            documentId: String(doc.id),
+            libraryId: String(doc.libraryId),
+            href: docLibraryDocumentPath(String(doc.libraryId), String(doc.id)),
+            title: doc.title,
+            fileName: doc.fileName,
+            fileType: doc.fileType,
+            fromIndex: anchorIndex == null ? from : Math.max(0, anchorIndex - 1),
+            anchorIndex,
+            chunks: rows.map((row) => ({
+                chunkIndex: row.chunkIndex,
+                locator: row.locator ?? (row.page != null ? `p.${row.page}` : null),
+                page: row.page,
+                text: row.text,
+            })),
+        }
+    }, input)
 }
 
 function toLibraryResponse(row: typeof docLibraries.$inferSelect) {

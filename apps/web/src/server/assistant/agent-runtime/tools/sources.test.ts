@@ -228,11 +228,15 @@ describe("unified source tools", () => {
                 }),
             }),
         })
+        mocks.readDocument.mockRejectedValueOnce(new Error("文档不存在或不属于当前文档库"))
         const tool = sourceTools.find((item) => item.id === "source.read")!
         await expect(tool.execute(context(), {
             kind: "document",
             sourceRef: documentSource.ref,
             documentId: "99",
-        })).rejects.toThrow("文档候选不属于当前选定的文档库")
+        })).rejects.toThrow("文档不存在或不属于当前文档库")
+        expect(mocks.readDocument).toHaveBeenCalledWith(
+            expect.objectContaining({ focus: expect.objectContaining({ libraryId: "3" }) }), expect.anything(),
+        )
     })
 })

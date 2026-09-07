@@ -1,12 +1,9 @@
 import { z } from "zod"
-import { and, eq } from "drizzle-orm"
 
 import { assistantSourceRefSchema, type AssistantSourceCatalogItem } from "@/lib/assistant-source-contract"
 import type { AssistantFocus } from "@/server/assistant/domain-types"
 import { searchDocuments, readDocument } from "@/server/assistant/tools/doc-library"
 import { resolveAssistantSources } from "@/server/assistant/source-catalog"
-import { getDb } from "@/server/db/client"
-import { docDocuments } from "@/server/db/schema"
 import { buildEvidenceWindow } from "@/server/doc-library/evidence-window"
 import { badRequest } from "@/server/http/response"
 import { defineTool, toAssistantContext } from "./adapter"
@@ -390,16 +387,7 @@ async function executeSourceRead(ctx: ToolExecutionContext, raw: unknown): Promi
     }
 
     const documentId = Number(input.documentId)
-    const [ownedDocument] = await getDb().select({ id: docDocuments.id })
-        .from(docDocuments)
-        .where(and(
-            eq(docDocuments.id, documentId),
-            eq(docDocuments.userId, ctx.userId),
-            eq(docDocuments.libraryId, Number(source.id)),
-        ))
-        .limit(1)
-    if (!ownedDocument) throw badRequest("文档候选不属于当前选定的文档库")
-
+    // reader在同一受限事务中核验focus.libraryId、用户和锚点后才读取正文。
     const output = await readDocument(toAssistantContext(focusForSource(ctx, source)), {
         documentId,
         fromIndex: 0,
