@@ -471,9 +471,26 @@ function annotateEvidence(
 
 async function executeSourceLookup(ctx: ToolExecutionContext, raw: unknown) {
     const search = await executeSourceSearch(ctx, raw)
-    const readLimit = ctx.state.complexity === "simple" ? 2 : 3
+    // 每轮最多3个窗口；两轮合计不超过快速检索的6窗口上限。
+    // 只在最靠前的6个候选内做文档去重优先，不能为了凑来源去深读长尾。
+    const pool = search.candidates.slice(0, 6)
+    const selected: SourceCandidate[] = []
+    const seen = new Set<string>()
+    for (const candidate of pool) {
+        const read = candidate.read
+        const documentKey = read.kind === "document" || read.kind === "geneops"
+            ? `${candidate.sourceRef}:${read.documentId}`
+            : `${candidate.sourceRef}:${read.articleId ?? read.pageKey ?? candidate.url?.split(/[?#]/)[0] ?? candidate.candidateKey}`
+        if (seen.has(documentKey)) continue
+        seen.add(documentKey); selected.push(candidate)
+        if (selected.length === 3) break
+    }
+    for (const candidate of pool) {
+        if (selected.length === 3) break
+        if (!selected.some((item) => item.candidateKey === candidate.candidateKey)) selected.push(candidate)
+    }
     const reads = await Promise.allSettled(
-        search.candidates.slice(0, readLimit).map((candidate) => executeSourceRead(ctx, candidate.read)),
+        selected.map((candidate) => executeSourceRead(ctx, candidate.read)),
     )
     return { search, reads }
 }
@@ -485,6 +502,7 @@ function normalizeSourceLookup(output: unknown): ToolNormalizerResult {
     }
     const evidence: NonNullable<ToolNormalizerResult["evidence"]> = []
     let readCount = 0
+    const failedReadCount = value.reads.filter((read) => read.status === "rejected").length
     for (const read of value.reads) {
         if (read.status !== "fulfilled") continue
         readCount += 1
@@ -496,11 +514,12 @@ function normalizeSourceLookup(output: unknown): ToolNormalizerResult {
     return {
         progress: evidence.length > 0,
         summary: evidence.length > 0
-            ? `跨资料源找到 ${value.search.candidates.length} 个候选并深读 ${readCount} 个${degraded.length ? `；${degraded.length} 个来源降级` : ""}`
+            ? `跨资料源找到 ${value.search.candidates.length} 个候选并深读 ${readCount} 个${failedReadCount ? `；${failedReadCount} 个候选读取失败` : ""}${degraded.length ? `；${degraded.length} 个来源降级` : ""}`
             : `跨资料源没有读到可引用正文${degraded.length ? `；${degraded.length} 个来源降级` : ""}`,
         data: {
             candidateCount: value.search.candidates.length,
             readCount,
+            failedReadCount,
             retrievalModes: [...new Set(value.search.candidates.map((candidate) => candidate.retrievalMode).filter(Boolean))],
             degradedSources: degraded,
         },

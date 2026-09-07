@@ -175,6 +175,29 @@ describe("unified source tools", () => {
         await expect(tool.execute(context(), { kind: "document", sourceRef: local.ref, documentId: 12, anchorChunkId: 900 })).rejects.toThrow("已失效")
     })
 
+    it("快速深读优先不同文档，限三个窗口，局部失败可见且不重试", async () => {
+        const local = { ...source, ref: "doc-library:3", kind: "doc-library", id: "3" }
+        mocks.resolveSources.mockResolvedValue({ scope: { mode: "selected", refs: [local.ref] }, selected: [local], unavailable: [] })
+        mocks.searchDocuments.mockResolvedValue([12, 12, 13, 14, 15, 16, 17].map((id, index) => ({
+            documentId: String(id), chunkId: String(900 + index), libraryId: "3", title: `文档${id}`, snippet: "命中", href: `/document/${id}`,
+        })))
+        mocks.getDb.mockReturnValue({ select: () => ({ from: () => ({ where: () => ({ limit: async () => [{ id: 12 }] }) }) }) })
+        mocks.readDocument.mockImplementation(async (_ctx, input) => {
+            if (input.documentId === 13) throw new Error("synthetic_read_failed")
+            return { documentId: String(input.documentId), href: `/document/${input.documentId}`, title: "合成", fileName: "demo.md", anchorIndex: input.anchorChunkId,
+                chunks: [{ chunkIndex: input.anchorChunkId, text: "已读合成证据", locator: null }] }
+        })
+        const tool = sourceTools.find((item) => item.id === "source.lookup")!
+        const output = await tool.execute(context(), { query: "合成", limit: 10 })
+        const result = tool.normalize!(output, {})
+        expect(mocks.readDocument.mock.calls.map((call) => call[1].documentId)).toEqual([12, 13, 14])
+        expect(mocks.readDocument).toHaveBeenCalledTimes(3)
+        expect(result.evidence).toHaveLength(2)
+        expect(result.data).toMatchObject({ readCount: 2, failedReadCount: 1 })
+        expect(result.summary).toContain("1 个候选读取失败")
+        expect(JSON.stringify(result.data)).not.toContain("synthetic_read_failed")
+    })
+
     it("external-only lookup follows search to read and emits GeneOps evidence", async () => {
         const tool = sourceTools.find((item) => item.id === "source.lookup")!
         const output = await tool.execute(context(), { query: "Amazon 退货", limit: 10 })
