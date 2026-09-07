@@ -19,6 +19,7 @@ const readDocumentSchema = z.object({
     documentId: idSchema.optional().nullable(),
     fromIndex: z.number().int().min(0).optional(),
     limit: z.number().int().min(1).max(40).optional(),
+    anchorChunkId: idSchema.optional(),
 })
 
 function focusId(value: string | null | undefined): number | null {
@@ -57,6 +58,7 @@ export async function readDocument(
         documentId,
         fromIndex: input.fromIndex,
         limit: input.limit,
+        anchorChunkId: input.anchorChunkId,
     })
 }
 

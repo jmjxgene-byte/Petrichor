@@ -7,6 +7,7 @@ import { searchDocuments, readDocument } from "@/server/assistant/tools/doc-libr
 import { resolveAssistantSources } from "@/server/assistant/source-catalog"
 import { getDb } from "@/server/db/client"
 import { docDocuments } from "@/server/db/schema"
+import { buildEvidenceWindow } from "@/server/doc-library/evidence-window"
 import { badRequest } from "@/server/http/response"
 import { defineTool, toAssistantContext } from "./adapter"
 import { geneOpsTools } from "./geneops"
@@ -44,6 +45,7 @@ const documentReadSchema = z.object({
     kind: z.literal("document"),
     sourceRef: assistantSourceRefSchema,
     documentId: positiveIdSchema,
+    anchorChunkId: positiveIdSchema.optional(),
 })
 
 const geneOpsReadSchema = z.object({
@@ -199,14 +201,14 @@ async function searchDocumentLibrary(
     return rankFeed(rows.map((row) => {
         const documentId = String(row.documentId)
         return {
-            candidateKey: `document:${documentId}`,
+            candidateKey: `document:${documentId}:chunk:${row.chunkId}`,
             sourceRef: source.ref,
             sourceKind: source.kind,
             sourceName: source.name,
             title: stringValue(row.title) ?? stringValue(row.fileName) ?? "未命名文档",
             snippet: clip(stringValue(row.snippet) ?? "", 600),
             url: stringValue(row.href),
-            read: { kind: "document", sourceRef: source.ref, documentId: Number(documentId) },
+            read: { kind: "document", sourceRef: source.ref, documentId: Number(documentId), anchorChunkId: positiveIdSchema.parse(row.chunkId) },
         }
     }), 0.8)
 }
@@ -227,14 +229,14 @@ async function searchDocumentsAcross(
         if (!source) return []
         const documentId = String(row.documentId)
         return [{
-            candidateKey: `document:${documentId}`,
+            candidateKey: `document:${documentId}:chunk:${row.chunkId}`,
             sourceRef: source.ref,
             sourceKind: source.kind,
             sourceName: source.name,
             title: stringValue(row.title) ?? stringValue(row.fileName) ?? "未命名文档",
             snippet: clip(stringValue(row.snippet) ?? "", 600),
             url: stringValue(row.href),
-            read: { kind: "document", sourceRef: source.ref, documentId: Number(documentId) },
+            read: { kind: "document", sourceRef: source.ref, documentId: Number(documentId), anchorChunkId: positiveIdSchema.parse(row.chunkId) },
         }]
     }), 0.8)
 }
@@ -401,16 +403,20 @@ async function executeSourceRead(ctx: ToolExecutionContext, raw: unknown): Promi
     const output = await readDocument(toAssistantContext(focusForSource(ctx, source)), {
         documentId,
         fromIndex: 0,
-        limit: 12,
+        limit: input.anchorChunkId == null ? 12 : 3,
+        anchorChunkId: input.anchorChunkId,
     }) as {
         documentId: string
         href: string
         title: string
         fileName: string
-        chunks: Array<{ locator: string | null; text: string }>
+        anchorIndex: number | null
+        chunks: Array<{ chunkIndex: number; locator: string | null; text: string }>
     }
-    const content = output.chunks.map((chunk) =>
-        `${chunk.locator ? `[${chunk.locator}]\n` : ""}${chunk.text}`).join("\n\n")
+    if (input.anchorChunkId != null && output.anchorIndex == null) throw badRequest("命中片段已失效")
+    const content = output.anchorIndex != null
+        ? buildEvidenceWindow(output.chunks, output.anchorIndex).content
+        : output.chunks.map((chunk) => `${chunk.locator ? `[${chunk.locator}]\n` : ""}${chunk.text}`).join("\n\n")
     return {
         normalized: {
             progress: content.length > 0,
@@ -419,10 +425,13 @@ async function executeSourceRead(ctx: ToolExecutionContext, raw: unknown): Promi
                 source: "document",
                 title: output.title || output.fileName,
                 content: clip(content, 8_000),
-                sourceId: output.documentId,
+                sourceId: input.anchorChunkId == null ? output.documentId : `${output.documentId}:chunk:${input.anchorChunkId}`,
                 url: output.href,
                 confidence: 0.8,
-                metadata: { sourceRef: source.ref, sourceName: source.name },
+                metadata: {
+                    sourceRef: source.ref, sourceName: source.name, documentId: output.documentId,
+                    ...(input.anchorChunkId == null ? {} : { anchorChunkId: String(input.anchorChunkId), anchorIndex: output.anchorIndex }),
+                },
             }] : [],
         },
     }

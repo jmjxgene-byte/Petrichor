@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, like, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, ilike, like, lte, or, sql } from "drizzle-orm"
 import { z } from "zod"
 import { getServerConfig } from "@/config/server"
 import { CACHE_TTL_SECONDS, cacheDropByPrefix, cacheKey, cacheReadThrough } from "@/server/cache"
@@ -584,8 +584,20 @@ export async function readDocumentChunks(input: {
     documentId: number
     fromIndex?: number
     limit?: number
+    anchorChunkId?: number
 }) {
     const doc = await getDocumentOrThrow(input.userId, input.documentId)
+    let anchorIndex: number | null = null
+    if (input.anchorChunkId != null) {
+        const [anchor] = await getDb().select({ chunkIndex: docChunks.chunkIndex })
+            .from(docChunks).where(and(
+                eq(docChunks.id, input.anchorChunkId),
+                eq(docChunks.documentId, input.documentId),
+                eq(docChunks.userId, input.userId),
+            )).limit(1)
+        if (!anchor) throw notFound("命中片段已失效或不属于当前文档")
+        anchorIndex = anchor.chunkIndex
+    }
     const from = Math.max(input.fromIndex ?? 0, 0)
     const limit = Math.min(Math.max(input.limit ?? 12, 1), 40)
     const rows = await getDb()
@@ -596,10 +608,17 @@ export async function readDocumentChunks(input: {
             text: docChunks.text,
         })
         .from(docChunks)
-        .where(eq(docChunks.documentId, input.documentId))
+        .where(and(
+            eq(docChunks.documentId, input.documentId),
+            eq(docChunks.userId, input.userId),
+            ...(anchorIndex == null ? [] : [
+                gte(docChunks.chunkIndex, Math.max(0, anchorIndex - 1)),
+                lte(docChunks.chunkIndex, anchorIndex + 1),
+            ]),
+        ))
         .orderBy(asc(docChunks.chunkIndex))
-        .limit(limit)
-        .offset(from)
+        .limit(anchorIndex == null ? limit : 3)
+        .offset(anchorIndex == null ? from : 0)
     return {
         documentId: String(doc.id),
         libraryId: String(doc.libraryId),
@@ -607,7 +626,8 @@ export async function readDocumentChunks(input: {
         title: doc.title,
         fileName: doc.fileName,
         fileType: doc.fileType,
-        fromIndex: from,
+        fromIndex: anchorIndex == null ? from : Math.max(0, anchorIndex - 1),
+        anchorIndex,
         chunks: rows.map((row) => ({
             chunkIndex: row.chunkIndex,
             locator: row.locator ?? (row.page != null ? `p.${row.page}` : null),

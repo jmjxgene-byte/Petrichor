@@ -5,6 +5,13 @@ const mocks = vi.hoisted(() => ({
     resolveSources: vi.fn(),
     searchGeneOps: vi.fn(),
     readGeneOpsChunks: vi.fn(),
+    searchDocuments: vi.fn(),
+    readDocument: vi.fn(),
+}))
+
+vi.mock("@/server/assistant/tools/doc-library", () => ({
+    searchDocuments: mocks.searchDocuments,
+    readDocument: mocks.readDocument,
 }))
 
 vi.mock("@/server/assistant/source-catalog", () => ({
@@ -103,6 +110,41 @@ beforeEach(() => {
 })
 
 describe("unified source tools", () => {
+    it("保留同一长文两个命中，深读传入各自锚点并分别保存证据", async () => {
+        const local = { ...source, ref: "doc-library:3", kind: "doc-library", id: "3" }
+        mocks.resolveSources.mockResolvedValue({ scope: { mode: "selected", refs: [local.ref] }, selected: [local], unavailable: [] })
+        mocks.searchDocuments.mockResolvedValue([900, 950].map((id) => ({
+            documentId: "12", chunkId: String(id), libraryId: "3", title: "长群聊", snippet: "命中", href: "/document/12",
+        })))
+        mocks.getDb.mockReturnValue({ select: () => ({ from: () => ({ where: () => ({ limit: async () => [{ id: 12 }] }) }) }) })
+        mocks.readDocument.mockImplementation(async (_ctx, input) => ({
+            documentId: "12", href: "/document/12", title: "长群聊", fileName: "demo.md", anchorIndex: input.anchorChunkId,
+            chunks: [
+                { chunkIndex: input.anchorChunkId - 1, locator: null, text: "前".repeat(4_000) },
+                { chunkIndex: input.anchorChunkId, locator: null, text: `尾部证据${input.anchorChunkId}` },
+            ],
+        }))
+        const tool = sourceTools.find((item) => item.id === "source.lookup")!
+        const output = await tool.execute(context(), { query: "翻新" })
+        const normalized = tool.normalize!(output, {})
+        expect(mocks.readDocument).toHaveBeenCalledTimes(2)
+        expect(mocks.readDocument).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ anchorChunkId: 900, limit: 3 }))
+        expect(mocks.readDocument).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ anchorChunkId: 950, limit: 3 }))
+        expect(normalized.evidence?.map((e) => e.sourceId)).toEqual(["12:chunk:900", "12:chunk:950"])
+        expect(normalized.evidence?.[0].content).toContain("尾部证据900")
+        expect(normalized.evidence?.[1].content).toContain("尾部证据950")
+        expect(normalized.evidence?.every((e) => (e.content?.length ?? 0) <= 4_000)).toBe(true)
+    })
+
+    it("锚点没有被reader确认时拒绝把开头当命中正文", async () => {
+        const local = { ...source, ref: "doc-library:3", kind: "doc-library", id: "3" }
+        mocks.resolveSources.mockResolvedValue({ scope: { mode: "selected", refs: [local.ref] }, selected: [local], unavailable: [] })
+        mocks.getDb.mockReturnValue({ select: () => ({ from: () => ({ where: () => ({ limit: async () => [{ id: 12 }] }) }) }) })
+        mocks.readDocument.mockResolvedValue({ documentId: "12", anchorIndex: null, chunks: [{ chunkIndex: 0, text: "无关开头" }] })
+        const tool = sourceTools.find((item) => item.id === "source.read")!
+        await expect(tool.execute(context(), { kind: "document", sourceRef: local.ref, documentId: 12, anchorChunkId: 900 })).rejects.toThrow("已失效")
+    })
+
     it("external-only lookup follows search to read and emits GeneOps evidence", async () => {
         const tool = sourceTools.find((item) => item.id === "source.lookup")!
         const output = await tool.execute(context(), { query: "Amazon 退货", limit: 10 })
