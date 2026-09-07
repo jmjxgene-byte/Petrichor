@@ -29,7 +29,7 @@ async function verifyCompleteGeneration(tx: Transaction, generation: Generation)
     const byDocument = new Map(jobs.map((job) => [job.documentId, job]))
     if (manifest.documents.some((doc) => byDocument.get(doc.documentId)?.sourceHash !== doc.sourceHash)) throw new Error("索引任务与manifest不匹配")
     const documents = await tx.select({ id: docDocuments.id, updatedAt: docDocuments.updatedAt }).from(docDocuments).where(and(
-        eq(docDocuments.userId, generation.userId), eq(docDocuments.libraryId, generation.libraryId),
+        eq(docDocuments.userId, generation.userId), eq(docDocuments.libraryId, generation.libraryId), eq(docDocuments.status, "ready"),
         inArray(docDocuments.id, manifest.documents.map((doc) => doc.documentId)),
     )).for("share")
     const versions = new Map(documents.map((doc) => [doc.id, doc.updatedAt.toISOString()]))
@@ -62,7 +62,7 @@ export async function completeDocumentIndexJob(input: {
         const manifest = parseStoredIndexManifest(generation.manifestJson, generation.manifestHash)
         const snapshot = manifest.documents.find((doc) => doc.documentId === job.documentId)
         const [document] = await tx.select().from(docDocuments).where(and(eq(docDocuments.id, job.documentId),
-            eq(docDocuments.userId, job.userId), eq(docDocuments.libraryId, job.libraryId))).for("share")
+            eq(docDocuments.userId, job.userId), eq(docDocuments.libraryId, job.libraryId), eq(docDocuments.status, "ready"))).for("share")
         if (!document || !snapshot || snapshot.updatedAt !== document.updatedAt.toISOString() || snapshot.sourceHash !== sourceHash) throw new Error("源文档快照已变化")
         const passages = buildDocumentPassages(input.source, document.title)
         const vectors = serializeIndexVectors(input.embeddings, passages.length, profile.dimensions)

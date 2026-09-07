@@ -48,6 +48,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 5. Worker与API
 
+2026-09-08执行器接线：index-runtime把source、provider、reserve、complete/fail/cancel接入index-executor；document-index-worker.ts与Compose index-worker profile独立于Deep，两个DOC_INDEX开关默认false，缺失/过期provider policy在认领前停止。运行阶段20秒heartbeat、15分钟索引任务取消预算（不改变Deep180秒），SDKembedding显式maxRetries=0/maxParallelCalls=1，每批≤32并校验返回用量；价格用BigInt上取整按逐输入请求保守预算，不能把占用当实际账单。policy须由运营核验profileKey、token上界/余量、请求费及价格依据与到期时间，不能由浏览器自报。Markdown保留BOM/CRLF原文offset；PDF/DOCX/CSV复用已有提取文本，manifest可声明extracted_text_v1，位置不得冒充源文件字节。source/prepare/complete/publish只接受ready原文记录。假provider链路、真实SDK+假EmbeddingModel、503零重试、缺usage拒绝、源适配测试通过；关闭开关CLI冒烟退出0，未启动容器或连接真实provider。Hybrid、API/UI和实际PG/provider验证仍待完成。
+
 2026-09-08状态机节点：index-jobs/index-job-policy增加单活跃任务claim、60秒lease、heartbeat、取消与失败收尾、调用前generation总预算预占。未占额度的过期任务最多3次认领，占用后过期按model_outcome_unknown失败且不重发；cancel/failed不退还占用。现有consumed_input_tokens/consumed_cost_microusd在索引任务中表示保守预算占用上界，并非provider实际账单，后续UI必须使用“预算占用”标识，实际计费另行核对。短事务统一先slot锁，预算与代际累计原子核验；锁等待后重新检查lease和审批期限。当前只有存储函数和mock/SQL构造测试，未接实际Worker、未验证真实PG并发或执行embedding。
 
 复用现有Deep Job的claim/lease/heartbeat/cancel/最终写入事务，capability snapshot改为逐source记录，可向后读旧snapshot但新任务写新版本。Deep走同一检索服务，最多6查询/12窗口，180秒总deadline，模型输出硬上限与maxRetries=0保持。任务恢复要核对累计已消费调用/费用，调用结果不确定不得自动重发。

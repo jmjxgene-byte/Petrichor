@@ -9,6 +9,7 @@ export const indexEmbeddingProfileSchema = z.object({
 export const indexSnapshotSchema = z.object({
     documentId: z.number().int().positive(), sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
     updatedAt: z.string().datetime(),
+    sourceFormat: z.enum(["raw_markdown", "extracted_text_v1"]).optional(),
 }).strict()
 /** 此结构只能由服务端已确认的预算记录构造，不能直接接受浏览器自报授权。 */
 export const indexApprovalSchema = z.object({

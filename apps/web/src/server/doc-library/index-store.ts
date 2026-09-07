@@ -19,7 +19,7 @@ export async function createDocumentIndexGeneration(input: {
         requireIndexApproval(approval, manifestHash)
         const ids = manifest.documents.map((doc) => doc.documentId)
         const rows = await tx.select({ id: docDocuments.id, updatedAt: docDocuments.updatedAt }).from(docDocuments)
-            .where(and(eq(docDocuments.userId, input.userId), eq(docDocuments.libraryId, input.libraryId), inArray(docDocuments.id, ids)))
+            .where(and(eq(docDocuments.userId, input.userId), eq(docDocuments.libraryId, input.libraryId), eq(docDocuments.status, "ready"), inArray(docDocuments.id, ids)))
         if (rows.length !== ids.length) throw badRequest("manifest包含不可访问的文档")
         const versions = new Map(rows.map((row) => [row.id, row.updatedAt.toISOString()]))
         if (manifest.documents.some((doc) => versions.get(doc.documentId) !== doc.updatedAt)) throw badRequest("文档已变化，请重新准备manifest")

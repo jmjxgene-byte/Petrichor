@@ -25,9 +25,12 @@ export interface S3ObjectBytes {
  * 服务端按对象键下载 S3 文件，返回原始字节与 MIME。
  * 多模态识别与裁剪嵌入图共用这一份字节，避免重复下载。
  */
-export async function fetchS3ObjectBytes(objectKey: string, options?: { maxBytes: number; timeoutMs: number }): Promise<S3ObjectBytes> {
+export async function fetchS3ObjectBytes(objectKey: string, options?: { maxBytes: number; timeoutMs: number; abortSignal?: AbortSignal }): Promise<S3ObjectBytes> {
+    options?.abortSignal?.throwIfAborted()
     if (getLocalStorageDirOrNull()) {
-        return readLocalObjectBytes(objectKey, options?.maxBytes)
+        const result = await readLocalObjectBytes(objectKey, options?.maxBytes)
+        options?.abortSignal?.throwIfAborted()
+        return result
     }
 
     const config = getServerConfig().s3
@@ -41,7 +44,9 @@ export async function fetchS3ObjectBytes(objectKey: string, options?: { maxBytes
         method: "GET",
         objectKey: key,
     })
-    const response = await fetch(url, options ? { signal: AbortSignal.timeout(options.timeoutMs), redirect: "error" } : undefined)
+    const response = await fetch(url, options ? { signal: options.abortSignal
+        ? AbortSignal.any([options.abortSignal, AbortSignal.timeout(options.timeoutMs)])
+        : AbortSignal.timeout(options.timeoutMs), redirect: "error" } : undefined)
     if (!response.ok) {
         throw new HttpError(502, `下载页面图片失败：HTTP ${response.status}`)
     }
