@@ -1,6 +1,6 @@
 import { embedMany } from "ai"
 import { z } from "zod"
-import { resolveEmbeddingModel, resolveModelForPurpose } from "@/server/ai/resolution"
+import { resolveEmbeddingModel, resolveModelForPurpose, type ResolvedModel } from "@/server/ai/resolution"
 import { createTextEmbeddingModel } from "@/server/ai/model-factory"
 import { indexEmbeddingProfileSchema } from "./index-contract"
 import { hashDocumentText } from "./passage-builder"
@@ -8,6 +8,7 @@ import { hashDocumentText } from "./passage-builder"
 /** 由运营核验后配置，不从浏览器请求直接信任价格或provider能力。 */
 export const indexProviderPolicySchema = z.object({
     profileKey: z.string().min(1).max(500),
+    credentialFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
     maxInputTokens: z.number().int().min(1).max(100_000),
     tokenOverheadPerInput: z.number().int().min(0).max(1000),
     priceMicrousdPerMillionTokens: z.number().int().nonnegative(),
@@ -38,21 +39,43 @@ export function quoteIndexInputs(values: string[], policy: IndexProviderPolicy, 
     return { inputTokens, costMicrousd }
 }
 
-export async function resolveDocumentIndexProvider(userId: number, rawPolicy: unknown, expectedProfile?: z.infer<typeof indexEmbeddingProfileSchema>) {
-    const policies = parseIndexProviderPolicies(rawPolicy)
-    const selected = expectedProfile ? await resolveModelForPurpose(userId, "EMBEDDING", expectedProfile.modelRefId) : null
-    const { model, resolved } = selected
-        ? { resolved: selected, model: await createTextEmbeddingModel(selected.runtime, selected.model.modelId) }
-        : await resolveEmbeddingModel(userId)
-    const profile = indexEmbeddingProfileSchema.parse({
+function profileFor(resolved: ResolvedModel) {
+    return indexEmbeddingProfileSchema.parse({
         modelRefId: resolved.model.id, model: resolved.model.modelId, dimensions: resolved.model.dimensions, version: 1,
         key: hashDocumentText(JSON.stringify({ modelRefId: resolved.model.id, model: resolved.model.modelId,
             dimensions: resolved.model.dimensions, providerId: resolved.provider.id, baseUrl: resolved.runtime.baseUrl,
             providerRevision: resolved.provider.updatedAt.toISOString(), modelRevision: resolved.model.updatedAt.toISOString(),
         })),
     })
+}
+function credentialFingerprint(resolved: ResolvedModel) {
+    return hashDocumentText(JSON.stringify({ id: resolved.credential.id, updatedAt: resolved.credential.updatedAt.toISOString() }))
+}
+
+/** 报价只解析现有配置，不创建SDK模型、不做网络能力探测。 */
+export async function getDocumentIndexVerificationDescriptor(userId: number) {
+    const resolved = await resolveModelForPurpose(userId, "EMBEDDING")
+    return { profile: profileFor(resolved), credentialFingerprint: credentialFingerprint(resolved) }
+}
+
+export async function resolveDocumentIndexQuotePolicy(userId: number, rawPolicy: unknown) {
+    const { profile, credentialFingerprint: fingerprint } = await getDocumentIndexVerificationDescriptor(userId)
+    const policy = parseIndexProviderPolicies(rawPolicy).find((item) => item.profileKey === profile.key)
+    if (!policy || Date.parse(policy.expiresAt) <= Date.now() || policy.credentialFingerprint !== fingerprint) throw new Error("provider核验策略缺失、过期或凭证已变化")
+    return { profile, policy }
+}
+
+export async function resolveDocumentIndexProvider(userId: number, rawPolicy: unknown, expectedProfile?: z.infer<typeof indexEmbeddingProfileSchema>) {
+    const policies = parseIndexProviderPolicies(rawPolicy)
+    const selected = expectedProfile ? await resolveModelForPurpose(userId, "EMBEDDING", expectedProfile.modelRefId) : null
+    const { model, resolved } = selected
+        ? { resolved: selected, model: await createTextEmbeddingModel(selected.runtime, selected.model.modelId) }
+        : await resolveEmbeddingModel(userId)
+    const profile = profileFor(resolved)
     const policy = policies.find((item) => item.profileKey === profile.key)
     if (!policy || (expectedProfile && JSON.stringify(profile) !== JSON.stringify(expectedProfile))) throw new Error("provider核验档案不匹配")
+    if (Date.parse(policy.expiresAt) <= Date.now()) throw new Error("provider核验策略已过期")
+    if (policy.credentialFingerprint !== credentialFingerprint(resolved)) throw new Error("provider凭证变化后需要重新核验价格")
     return {
         profile,
         quote: (values: string[]) => quoteIndexInputs(values, policy),

@@ -18,7 +18,7 @@ export function assertIndexMutationOrigin(request: AppRequest) {
         if (!allowed.has(origin)) throw forbidden("不允许跨域索引操作")
     }
 }
-function safeError(error: unknown, request: AppRequest) {
+export function safeError(error: unknown, request: AppRequest) {
     return toErrorResponse(error instanceof HttpError || error instanceof ZodError
         ? error : new HttpError(503, "索引操作暂不可用，请稍后重试"), request.urlObject.pathname)
 }

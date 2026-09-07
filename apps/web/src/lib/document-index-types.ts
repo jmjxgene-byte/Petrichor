@@ -20,3 +20,16 @@ export interface DocumentIndexStatus {
   current: DocumentIndexGenerationView | null
   latest: DocumentIndexGenerationView | null
 }
+
+export interface DocumentIndexQuote {
+  token: string
+  libraryId: string
+  documentCount: number
+  passageCount: number
+  maxInputTokens: number
+  maxCostMicrousd: number
+  quoteExpiresAt: string
+  executionExpiresAt: string
+  model: string
+  manifestHash: string
+}

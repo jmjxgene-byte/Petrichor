@@ -2515,6 +2515,9 @@ export interface DocQaThreadListParams {
 export const docLibraryApi = {
   indexStatus: (libraryId: string, signal?: AbortSignal) => api.post<import("./document-index-types").DocumentIndexStatus>("/doc-library/index/status", { libraryId }, { signal, timeout: 10_000 }),
   cancelIndex: (generationId: string) => api.post<{ generationId: string; status: string }>("/doc-library/index/cancel", { generationId }, { timeout: 10_000 }),
+  quoteIndex: (libraryId: string, signal?: AbortSignal) => api.post<import("./document-index-types").DocumentIndexQuote>("/doc-library/index/quote", { libraryId }, { signal, timeout: 125_000 }),
+  buildIndex: (libraryId: string, token: string) => api.post<{ generationId: string; status: string }>("/doc-library/index/build", { libraryId, token, confirm: true }, { timeout: 30_000 }),
+  activateIndex: (generationId: string, manifestHash: string) => api.post<{ generationId: number; manifestHash: string }>("/doc-library/index/activate", { generationId, manifestHash, confirm: true }, { timeout: 30_000 }),
   listLibraries: () => api.get<{ libraries: DocLibrary[] }>("/doc-library/library/list"),
   saveLibrary: (data: DocLibrarySaveRequest) => api.post<{ id: string }>("/doc-library/library/save", data),
   deleteLibrary: (id: string) => api.post<DocDeleteResponse>("/doc-library/library/delete", { id }),

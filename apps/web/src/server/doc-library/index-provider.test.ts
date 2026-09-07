@@ -9,13 +9,18 @@ const date = new Date(0)
 const profileKey = hashDocumentText(JSON.stringify({ modelRefId: 1, model: "synthetic", dimensions: 2, providerId: 1,
     baseUrl: "https://example.invalid", providerRevision: date.toISOString(), modelRevision: date.toISOString() }))
 const policy: IndexProviderPolicy = { profileKey, maxInputTokens: 1000, tokenOverheadPerInput: 2,
+    credentialFingerprint: hashDocumentText(JSON.stringify({ id: 1, updatedAt: date.toISOString() })),
     priceMicrousdPerMillionTokens: 1_000_000, maxRequestFeeMicrousd: 10, pricingEvidence: "fixture-only", expiresAt: "2099-01-01T00:00:00Z", batchSize: 2 }
 function resolveWith(model: MockEmbeddingModelV3) {
     mocks.resolveEmbeddingModel.mockResolvedValue({ model, resolved: {
-        model: { id: 1, modelId: "synthetic", dimensions: 2, updatedAt: date }, provider: { id: 1, updatedAt: date }, runtime: { baseUrl: "https://example.invalid" },
+        model: { id: 1, modelId: "synthetic", dimensions: 2, updatedAt: date }, provider: { id: 1, updatedAt: date }, credential: { id: 1, updatedAt: date }, runtime: { baseUrl: "https://example.invalid" },
     } })
 }
 describe("provider预算与SDK边界", () => {
+    it("凭证轮换后不能沿用旧价格核验", async () => {
+        resolveWith(new MockEmbeddingModelV3())
+        await expect(resolveDocumentIndexProvider(1, { ...policy, credentialFingerprint: "f".repeat(64) })).rejects.toThrow("凭证")
+    })
     it("多模型policy不得有相同档案的歧义价格", () => {
         expect(parseIndexProviderPolicies(policy)).toEqual([policy])
         expect(() => parseIndexProviderPolicies([policy, policy])).toThrow("重复")
