@@ -36,6 +36,7 @@ import { Label } from "@/components/ui/label"
 import { FileUpload } from "@/components/extend/ui/file-upload"
 import { DocViewerPanel, type DocViewerHighlight } from "@/features/pages/doc-library/DocViewerPanel"
 import { DocumentCitationPanel } from "./DocumentCitationPanel"
+import type { DocumentCitationWindow } from "@/lib/document-citation"
 import { runDocumentUploadQueue } from "@/features/pages/doc-library/lib/upload-batch"
 import {
   detectFileType,
@@ -306,6 +307,8 @@ export function DocLibraryBrowsePage() {
   const [deleteTarget, setDeleteTarget] = React.useState<DeleteTarget | null>(null)
   const [viewerDoc, setViewerDoc] = React.useState<DocDocumentDetail | null>(null)
   const viewerRequest = React.useRef(0)
+  const [resolvedCitation, setResolvedCitation] = React.useState<{ search: string; data: DocumentCitationWindow | null } | null>(null)
+  const onCitationResolved = React.useCallback((data: DocumentCitationWindow | null) => setResolvedCitation({ search: location.search, data }), [location.search])
   const [viewerOpen, setViewerOpen] = React.useState(false)
   const [viewerLoading, setViewerLoading] = React.useState(false)
   const [viewerHighlight, setViewerHighlight] = React.useState<DocViewerHighlight | null>(null)
@@ -1070,14 +1073,14 @@ export function DocLibraryBrowsePage() {
               {viewerDoc?.fileName ?? "文件预览"}
             </DialogTitle>
           </DialogHeader>
-          {viewerDoc && viewerDoc.id === getDocumentIdFromSearch(location.search) && libraryId ? <DocumentCitationPanel libraryId={libraryId} documentId={viewerDoc.id} search={location.search} /> : null}
+          {viewerDoc && viewerDoc.id === getDocumentIdFromSearch(location.search) && libraryId ? <DocumentCitationPanel libraryId={libraryId} documentId={viewerDoc.id} search={location.search} onResolved={onCitationResolved} /> : null}
           <div className="min-h-0 flex-1">
             {viewerLoading ? (
               <div className="flex h-full items-center justify-center text-muted-foreground">
                 <Loader2 className="size-5 animate-spin" />
               </div>
             ) : (
-              <DocViewerPanel document={viewerDoc} highlight={viewerHighlight} />
+              <DocViewerPanel document={viewerDoc} highlight={viewerHighlight} sourceAnchor={resolvedCitation?.search === location.search && viewerDoc?.id === getDocumentIdFromSearch(location.search) ? resolvedCitation.data?.sourceAnchor : undefined} />
             )}
           </div>
         </DialogContent>

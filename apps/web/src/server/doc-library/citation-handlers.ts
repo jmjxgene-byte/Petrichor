@@ -12,6 +12,8 @@ export async function readDocumentCitation(request: AppRequest) {
         const input = z.object({ libraryId: id, documentId: id, generationId: id, passageId: id, contentHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(await readJson(request))
         const result = await readDocumentIndexPassage({ ...input, userId: user.id, abortSignal: request.signal })
         // 不把数据库完整行（向量、档案等）发送到浏览器。
-        return ok({ title: result.title, content: result.content, anchorStart: result.anchorStart, anchorEnd: result.anchorEnd })
+        return ok({ title: result.title, content: result.content, anchorStart: result.anchorStart, anchorEnd: result.anchorEnd,
+            sourceAnchor: { sourceHash: result.anchor.sourceHash, contentHash: result.anchor.contentHash, startOffset: result.anchor.startOffset,
+                endOffset: result.anchor.endOffset, sourceFormat: result.sourceFormat } })
     } catch (error) { return safeError(error, request) }
 }

@@ -124,7 +124,7 @@ export async function readDocumentIndexPassage(input: ReadBudget & { userId: num
             return { chunkIndex: item.passageIndex, text: end > start ? item.text.slice(start - item.startOffset, end - item.startOffset) : "" }
         })
         const window = buildEvidenceWindow(chunks, anchor.passageIndex)
-        return { title: document.title, content: window.content, anchorStart: window.anchorStart, anchorEnd: window.anchorEnd, anchor,
+        return { title: document.title, content: window.content, anchorStart: window.anchorStart, anchorEnd: window.anchorEnd, anchor, sourceFormat: snapshot.sourceFormat ?? "raw_markdown",
             href: `${docLibraryDocumentPath(String(input.libraryId), String(input.documentId))}&generationId=${input.generationId}&passageId=${input.passageId}&contentHash=${input.contentHash}` }
     }, input)
 }

@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08Markdown原文定位节点：read-citation白名单增加sourceFormat/sourceHash/contentHash及UTF-16原文偏移；浏览器保持BOM/CRLF解码，验证整文和核心片段SHA后，才将范围交给MarkdownPreview。sanitize后的citation-position插件按解析器位置标记命中所在可渲染段落，保留GFM/代码结构、拒绝正文伪造标记，渲染后滚动至首个匹配块。重复文本不靠字符串搜索，内容/位置变化不高亮。新增hash/边界、BOM/CRLF/emoji、重复段落与HTML伪造测试，合成浏览器验证原文件段落高亮；长文滚动仍未实测。此能力仅用于raw_markdown，提取文本偏移不冒充PDF坐标；旧无锚点引用保持仅原文入口。实际PG/生产和原始文件均未修改。
+
 2026-09-08引用窗口节点：新增POST /api/doc-library/index/read-citation，登录后严格接收library/document/generation/passage/hash，复用8秒只读版本/归属/hash核验，仅返回标题、≤4000字符窗口与核心偏移，不返回完整数据库行。新版href携带contentHash，DocumentCitationPanel在原查看器上方按偏移标记命中（重复文字不靠首次匹配）；缺参数、版本失效或读取失败明确提示。原文件仍可独立查看，当前只高亮经过校验的证据窗口，不宣称PDF坐标或原始Markdown全篇已经滚动定位。查看器增加库/文档身份及迟到请求校验，关闭清除引用参数。合成浏览器验证正常高亮/原文预览和错误hash提示；没有实际PG或生产引用验收。此前“URL未消费”的缺口已接线，旧无hash引用仍只能打开原文。
 
 2026-09-08文档来源身份节点：PublicEvidence与客户端响应/视图新增documentId，实时reducer不再丢弃来源名称、作者及查询时间。前端按documentId归并来源，旧本站相对文档路由可回退解析身份，原始generation/passage URL与各片段仍独立保留；来源面板区分文档数和片段数。合成契约测试比较同一PublicEvidence经过实时reducer和历史hydrate后的结果，并验证两个位置共享编号、不同文档/外站不误并。本节点没有实现原文锚点高亮，也不是实际数据库历史恢复验收；原文查看器目前只消费documentId，generation/passage读取与高亮仍待接线。

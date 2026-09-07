@@ -318,7 +318,8 @@ const handlers: Record<string, DemoHandler> = {
     "POST /doc-library/index/read-citation": (input) => {
         if (String(input.libraryId) !== "700001" || String(input.documentId) !== "700101" || String(input.generationId) !== "700201" || String(input.passageId) !== "700301" || input.contentHash !== "0".repeat(64)) return notFound("引用不存在")
         const content = "# 演示文档\n\n这是用于界面验证的合成文本，不是真实知识。\n"
-        return ok({ title: "演示文档", content, anchorStart: 8, anchorEnd: content.length - 1 })
+        return ok({ title: "演示文档", content, anchorStart: 8, anchorEnd: content.length - 1,
+            sourceAnchor: { sourceHash: "822f5fa43d8db3e59999a8c8d64a5047ae374e574ff8f87f14305a567b55f062", contentHash: "ec7c5833ab46f0e5b9f92a0d0abd72e8ded117498fdac7faee9c9f1938999051", startOffset: 8, endOffset: 29, sourceFormat: "raw_markdown" } })
     },
     "POST /doc-library/index/quote": () => ok(demoDocumentIndexQuote()),
     "POST /doc-library/index/build": (body) => body.confirm === true && body.token === "demo-only-not-a-real-signature" ? ok(demoCompleteIndex()) : badRequest("请确认演示报价"),

@@ -20,6 +20,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { uploadApi, type DocDocumentDetail } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { verifyDocumentSourceAnchor, type DocumentSourceAnchor } from "@/lib/document-citation"
 
 type ViewerMode = "file" | "text"
 type FilePreviewState = {
@@ -37,9 +38,11 @@ export type DocViewerHighlight = {
 export function DocViewerPanel({
     document,
     highlight,
+    sourceAnchor,
 }: {
     document: DocDocumentDetail | null
     highlight?: DocViewerHighlight | null
+    sourceAnchor?: DocumentSourceAnchor
 }) {
     const { resolvedTheme } = useTheme()
     const [manualDark, setManualDark] = React.useState<boolean | null>(null)
@@ -118,6 +121,7 @@ export function DocViewerPanel({
             onIsDarkChange={(value) => setManualDark(value)}
             blocks={blocks}
             highlight={highlight ?? null}
+            sourceAnchor={sourceAnchor}
         />
     )
 
@@ -148,6 +152,7 @@ function OriginalFilePreview({
     onIsDarkChange,
     blocks,
     highlight,
+    sourceAnchor,
 }: {
     document: DocDocumentDetail
     url: string | null
@@ -157,6 +162,7 @@ function OriginalFilePreview({
     onIsDarkChange: (value: boolean) => void
     blocks: OcrBlock[]
     highlight: DocViewerHighlight | null
+    sourceAnchor?: DocumentSourceAnchor
 }) {
     if (loading || !url) {
         return (
@@ -198,7 +204,7 @@ function OriginalFilePreview({
     }
 
     if (document.fileType === "markdown") {
-        return <MarkdownFilePreview url={url} />
+        return <MarkdownFilePreview url={url} sourceAnchor={sourceAnchor} />
     }
 
     // CSV 的解析内容在「文本」标签展示，避免把非工作簿交给表格运行时。
@@ -209,7 +215,7 @@ function OriginalFilePreview({
     )
 }
 
-function MarkdownFilePreview({ url }: { url: string }) {
+function MarkdownFilePreview({ url, sourceAnchor }: { url: string; sourceAnchor?: DocumentSourceAnchor }) {
     const [state, setState] = React.useState<{
         url: string
         text: string | null
@@ -221,7 +227,7 @@ function MarkdownFilePreview({ url }: { url: string }) {
         fetch(url)
             .then(async (response) => {
                 if (!response.ok) throw new Error(`HTTP ${response.status}`)
-                return await response.text()
+                return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(await response.arrayBuffer())
             })
             .then((text) => {
                 if (!cancelled) setState({ url, text, error: null })
@@ -251,10 +257,26 @@ function MarkdownFilePreview({ url }: { url: string }) {
         )
     }
 
-    return <ParsedTextPreview text={current.text} />
+    return <VerifiedMarkdownPreview text={current.text} anchor={sourceAnchor} />
 }
 
-function ParsedTextPreview({ text }: { text: string }) {
+function VerifiedMarkdownPreview({ text, anchor }: { text: string; anchor?: DocumentSourceAnchor }) {
+    const [verified, setVerified] = React.useState<{ text: string; anchor: DocumentSourceAnchor; valid: boolean } | null>(null)
+    React.useEffect(() => {
+        if (!anchor) return
+        let cancelled = false
+        verifyDocumentSourceAnchor(text, anchor).then((valid) => { if (!cancelled) setVerified({ text, anchor, valid }) })
+            .catch(() => { if (!cancelled) setVerified({ text, anchor, valid: false }) })
+        return () => { cancelled = true }
+    }, [text, anchor])
+    const matched = verified?.text === text && verified?.anchor === anchor ? verified : null
+    return <div className="flex h-full min-h-0 flex-col">
+        {anchor ? <p role="status" className="px-3 py-2 text-xs text-muted-foreground">{!matched ? "正在核验原文件版本…" : matched.valid ? "原文版本已核验 · 高亮命中所在段落" : "原文件版本或位置不匹配，未在原文中定位。"}</p> : null}
+        <div className="min-h-0 flex-1"><ParsedTextPreview text={text} sourceRange={matched?.valid && anchor ? { start: anchor.startOffset, end: anchor.endOffset } : undefined} /></div>
+    </div>
+}
+
+function ParsedTextPreview({ text, sourceRange }: { text: string; sourceRange?: { start: number; end: number } }) {
     if (!text.trim()) {
         return (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -266,7 +288,7 @@ function ParsedTextPreview({ text }: { text: string }) {
     return (
         <ScrollArea className="h-full">
             <div className="mx-auto w-full max-w-4xl px-6 py-6">
-                <MarkdownPreview value={text} variant="typography" className="max-w-none" />
+                <MarkdownPreview value={text} variant="typography" className="max-w-none" sourceRange={sourceRange} />
             </div>
         </ScrollArea>
     )

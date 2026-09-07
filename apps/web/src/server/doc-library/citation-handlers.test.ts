@@ -14,9 +14,10 @@ const req = (body: unknown) => new AppRequest("https://example.invalid/citation"
 beforeEach(() => { vi.clearAllMocks(); mocks.user.mockResolvedValue({ id: 7 }) })
 describe("引用只读接口", () => {
     it("使用登录用户与完整锚点，返回白名单而非数据库行", async () => {
-        mocks.read.mockResolvedValue({ title: "合成", content: "前命中后", anchorStart: 1, anchorEnd: 3, anchor: { embedding: [1, 2] } })
+        const position = { sourceHash: "b".repeat(64), contentHash: input.contentHash, startOffset: 100, endOffset: 102 }
+        mocks.read.mockResolvedValue({ title: "合成", content: "前命中后", anchorStart: 1, anchorEnd: 3, sourceFormat: "raw_markdown", anchor: { ...position, embedding: [1, 2] } })
         const response = await readDocumentCitation(req(input))
-        expect(await response.json()).toEqual({ title: "合成", content: "前命中后", anchorStart: 1, anchorEnd: 3 })
+        expect(await response.json()).toEqual({ title: "合成", content: "前命中后", anchorStart: 1, anchorEnd: 3, sourceAnchor: { ...position, sourceFormat: "raw_markdown" } })
         expect(mocks.read).toHaveBeenCalledWith(expect.objectContaining({ userId: 7, libraryId: 2, documentId: 3, generationId: 4, passageId: 5, contentHash: input.contentHash }))
     })
     it("缺少hash或伪造用户字段不得读取", async () => {

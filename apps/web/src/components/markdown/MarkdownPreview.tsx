@@ -1,9 +1,10 @@
 import ReactMarkdown from "react-markdown"
-import type { ComponentProps } from "react"
+import { useEffect, useRef, type ComponentProps } from "react"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
 import rehypeSanitize from "rehype-sanitize"
 import rehypeSlug from "rehype-slug"
 import remarkGfm from "remark-gfm"
+import { citationPosition } from "./citation-position"
 
 import { cn } from "@/lib/utils"
 import {
@@ -18,6 +19,7 @@ type MarkdownPreviewProps = {
   className?: string
   variant?: MarkdownPreviewVariant
   enableHeadingAnchor?: boolean
+  sourceRange?: { start: number; end: number }
 }
 
 const HEADING_ANCHOR_ICON: ElementContent = {
@@ -75,9 +77,15 @@ export function MarkdownPreview({
   className,
   variant = "default",
   enableHeadingAnchor = false,
+  sourceRange,
 }: MarkdownPreviewProps) {
   const components = createMarkdownComponents(variant)
   const rehypePlugins = buildRehypePlugins(enableHeadingAnchor)
+  if (sourceRange) rehypePlugins.push([citationPosition, sourceRange])
+  const container = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (sourceRange) container.current?.querySelector("[data-citation-hit]")?.scrollIntoView?.({ block: "center", behavior: "instant" })
+  }, [value, sourceRange?.start, sourceRange?.end])
   const wrapperClassName =
     variant === "heti"
       ? "heti"
@@ -86,7 +94,7 @@ export function MarkdownPreview({
         : "text-[15px] leading-7 text-foreground/95"
 
   return (
-    <div className={cn(wrapperClassName, className)}>
+    <div ref={container} className={cn(wrapperClassName, className)}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
         {value || ""}
       </ReactMarkdown>
