@@ -105,6 +105,55 @@ function baseRequest(model: unknown, goal: string) {
 }
 
 describe("Agent Runtime 集成", () => {
+    it("选定文档库的模糊短问先检索，未命中有限补检且不调用模型编答案", async () => {
+        const queries: unknown[] = []
+        tools.register(makeTool("source.lookup", "lookup_sources", "source", async (_ctx, input) => {
+            queries.push(input)
+            return {}
+        }, { core: true, normalize: () => ({ summary: "无命中", evidence: [] }) }))
+        const model = new MockLanguageModelV3({ doStream: async () => { throw new Error("无依据不得调用生成模型") } })
+        const result = await new PetrichorAgentRuntime({ tools, skills }).run({
+            ...baseRequest(model, "翻新怎么翻？"),
+            focus: { sourceScope: { mode: "selected", refs: ["doc-library:3"] } },
+        })
+        expect(queries).toEqual([{ query: "翻新怎么翻？" }, { query: "翻新" }])
+        expect(result.answer).toContain("还没有读到足够依据")
+        expect(result.state.status).toBe("completed")
+        expect(result.trace.toolCalls).toHaveLength(2)
+        expect(result.state.tokenUsage.total).toBe(0)
+    })
+
+    it("选定范围缺少检索工具也不能回到直答", async () => {
+        const model = new MockLanguageModelV3({ doStream: async () => { throw new Error("不得直答") } })
+        const result = await new PetrichorAgentRuntime({ tools, skills }).run({
+            ...baseRequest(model, "翻新怎么翻？"), focus: { libraryId: "3" },
+        })
+        expect(result.answer).toContain("检索未能完成")
+        expect(result.state.status).toBe("completed")
+    })
+
+    it("检索失败不补检、不用常识兜底", async () => {
+        tools.register(makeTool("source.lookup", "lookup_sources", "source", async () => {
+            throw new Error("source unavailable")
+        }, { core: true, maxRetries: 0 }))
+        const model = new MockLanguageModelV3({ doStream: async () => { throw new Error("不得直答") } })
+        const result = await new PetrichorAgentRuntime({ tools, skills }).run({
+            ...baseRequest(model, "翻新怎么翻？"), focus: { libraryId: "3" },
+        })
+        expect(result.answer).toContain("检索未能完成")
+        expect(result.trace.toolCalls).toHaveLength(1)
+        expect(result.state.tokenUsage.total).toBe(0)
+    })
+
+    it("资料范围下的明确问候仍可直接回复", async () => {
+        tools.register(makeTool("source.lookup", "lookup_sources", "source", async () => { throw new Error("不应检索问候") }, { core: true }))
+        const result = await new PetrichorAgentRuntime({ tools, skills }).run({
+            ...baseRequest(scriptedModel([{ kind: "text", text: "你好！" }]), "你好！"), focus: { libraryId: "3" },
+        })
+        expect(result.answer).toBe("你好！")
+        expect(result.trace.toolCalls).toHaveLength(0)
+    })
+
     it("直答问题：不建计划、不加载技能、不调用工具", async () => {
         tools.register(makeTool("knowledge.search", "search_knowledge", "knowledge", async () => ({}), { core: true }))
         const runtime = new PetrichorAgentRuntime({ tools, skills })

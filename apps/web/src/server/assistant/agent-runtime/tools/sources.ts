@@ -512,6 +512,8 @@ export const sourceTools: AgentToolDefinition[] = [
         core: true,
         riskLevel: "low",
         sideEffect: false,
+        maxRetries: 0,
+        timeoutMs: 8_000,
         description: "在当前选择的知识库、文档库与实时外部资料源中并行检索并深读最相关内容。何时用：普通资料问答优先使用。何时不用：复杂比较需要自行选择多个候选时改用 source.search 与 source.read。",
         inputSchema: sourceSearchSchema,
         execute: executeSourceLookup,

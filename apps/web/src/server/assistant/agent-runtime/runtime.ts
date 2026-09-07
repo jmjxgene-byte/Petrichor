@@ -8,6 +8,7 @@ import { evaluateRun, type AgentRunEval } from "./eval"
 import { EvidenceStore } from "./evidence"
 import { AgentEventEmitter, type AgentEventSink } from "./events"
 import { buildFinalAnswerPlan } from "./final-answer"
+import { groundingPolicy, groundingQueries, GROUNDED_ANSWER_GUIDANCE, insufficientGroundingAnswer } from "./grounding-policy"
 import { newRunId } from "./ids"
 import { LoopDetector } from "./loop-detector"
 import { runAgentSegment, SegmentController } from "./mastra-bridge"
@@ -220,7 +221,11 @@ export class PetrichorAgentRuntime {
             ...(request.turnCount != null ? { turnCount: request.turnCount } : {}),
             hasFocus: Boolean(request.focus),
         })
-        const complexity = complexityDecision.complexity
+        const requiresGrounding = request.qaMode !== "wiki"
+            && (request.focus !== undefined || this.tools.has("source.lookup"))
+            && groundingPolicy(request.goal) === "required"
+        const complexity = requiresGrounding && complexityDecision.complexity === "direct"
+            ? "simple" : complexityDecision.complexity
         trace.setComplexity(complexity, complexityDecision.reason)
         events.emit("complexity_detected", {
             complexity,
@@ -259,6 +264,7 @@ export class PetrichorAgentRuntime {
             }
         }
 
+        let groundingDeadline: number | null = null
         const executor = new ToolExecutor({
             registry: this.tools,
             permissions: this.permissions,
@@ -270,7 +276,8 @@ export class PetrichorAgentRuntime {
             events,
             ...(request.confirmSideEffect ? { confirmSideEffect: request.confirmSideEffect } : {}),
             ...(request.onToolTrace ? { onToolTrace: request.onToolTrace } : {}),
-            clampTimeout: (desired) => budget.clampToolTimeout(desired),
+            clampTimeout: (desired) => Math.min(budget.clampToolTimeout(desired),
+                groundingDeadline == null ? desired : Math.max(1, groundingDeadline - Date.now())),
         })
 
         const skillLoader = new SkillLoader({
@@ -386,7 +393,38 @@ export class PetrichorAgentRuntime {
         // 未命中或读取失败则原样回到完整 Agentic Loop。
         // Wiki 模式不走快车道：它面向分片/章节，而 Wiki 模式要求页面级检索与 [[..]] 引用。
         let simpleKnowledgeFastPath = false
-        if (request.qaMode !== "wiki"
+        let groundingFallback: string | null = null
+        if (requiresGrounding && !request.abortSignal?.aborted) {
+            const deadline = Date.now() + 8_000
+            groundingDeadline = deadline
+            let failed = false
+            for (const query of groundingQueries(request.goal)) {
+                if (Date.now() >= deadline || request.abortSignal?.aborted) break
+                if (!this.tools.has("source.lookup")) { failed = true; break }
+                const controller = new AbortController()
+                const abort = () => controller.abort()
+                request.abortSignal?.addEventListener("abort", abort, { once: true })
+                const timer = setTimeout(abort, Math.max(1, deadline - Date.now()))
+                try {
+                    const outcome = await executor.execute("source.lookup", { query }, { ...buildCtx(), abortSignal: controller.signal })
+                    if (!outcome.ok) { failed = true; break }
+                    if (outcome.evidence.some((item) => item.content?.trim())) {
+                        simpleKnowledgeFastPath = true
+                        break
+                    }
+                } finally {
+                    clearTimeout(timer)
+                    request.abortSignal?.removeEventListener("abort", abort)
+                }
+            }
+            if (!simpleKnowledgeFastPath) groundingFallback = insufficientGroundingAnswer(failed || Date.now() >= deadline)
+            groundingDeadline = null
+            trace.event("observation", {
+                strategy: "required_source_grounding", status: simpleKnowledgeFastPath ? "grounded" : failed ? "unavailable" : "insufficient",
+                evidenceCount: evidence.size,
+            })
+        }
+        if (!requiresGrounding && request.qaMode !== "wiki"
             && !request.abortSignal?.aborted
             && this.tools.has("source.lookup")
             && shouldUseSimpleKnowledgeFastPath({
@@ -405,19 +443,23 @@ export class PetrichorAgentRuntime {
         }
 
         // ------------------------------------------------------------ 计划
-        if (shouldCreatePlan(complexity)) {
+        if (!requiresGrounding && shouldCreatePlan(complexity)) {
             const steps = state.setPlan(draftPlan(request.goal))
             trace.event("plan_created", { steps })
             events.emit("plan_created", { steps })
         }
 
         // ------------------------------------------------------ 主 Agentic Loop
-        let answer = ""
+        let answer = groundingFallback ?? ""
         let segments = 0
         let fatal: AgentError | null = null
 
         try {
-            while (segments < MAX_SEGMENTS) {
+            if (request.abortSignal?.aborted) {
+                answer = ""
+                stopReason = "cancelled"
+            }
+            while (!groundingFallback && segments < MAX_SEGMENTS) {
                 if (request.abortSignal?.aborted) {
                     stopReason = "cancelled"
                     break
@@ -454,6 +496,7 @@ export class PetrichorAgentRuntime {
                     conversationSummary: request.conversationSummary ?? null,
                     conversationBackground: request.conversationBackground ?? null,
                     routingHint: actionableHint,
+                    ...(requiresGrounding ? { modeGuidance: GROUNDED_ANSWER_GUIDANCE } : {}),
                     ...(request.qaMode === "wiki" ? { modeGuidance: WIKI_QA_MODE_GUIDANCE, qaMode: "wiki" as const } : {}),
                     remainingToolCalls: stopPolicy.remainingToolCalls(state.current),
                 })
