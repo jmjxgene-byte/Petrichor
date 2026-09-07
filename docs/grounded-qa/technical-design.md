@@ -58,6 +58,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08完成/发布存储节点：index-complete完成源hash、文档版本、模型档案与manifest一致性、向量数量/维度/float32/非零校验；50片段一批绑定参数写入同一事务，job完成和generation ready同事务。ready不自动current；独立activate重新核对所有任务、文档版本、片段覆盖与向量，再先退休旧current、后激活新current。代码支持同库retired版本经同样校验重新激活，不跳过变更检测。只有mock/SQL参数及数值测试已验证，尚无实际Postgres写入/回滚证明，未运行模型或切换生产。
+
 先核对真实Run，记录目标轮次是否有工具与Evidence，不提交原始对话/查询正文。新日志只记录阶段、数量、query hash、generation、耗时桶和错误码。检索缓存不得跨用户；GeneOps正文仅请求内存，最终回答按现有会话规则保存。
 
 按[需求评测](requirements.md)运行60题和安全/异常回归；先离线迁移/合成数据，再独立授权小样本和Staging。生产前核验源码、镜像、备份、flags、worker和现有配置；保留旧镜像、旧索引。异常优先关闭新增语义/Deep并切旧generation，必要时恢复旧镜像；不做破坏性down。每个阶段提交推送且核验远程SHA，未完成不合并/发布。

@@ -32,3 +32,26 @@ export function requireIndexApproval(raw: unknown, manifestHash: string, now = D
     if (Date.parse(approval.expiresAt) <= now) throw new Error("索引审批已过期")
     return approval
 }
+
+export function parseStoredIndexManifest(raw: string, expectedHash: string) {
+    const parsed = z.object({ preprocessingVersion: z.literal(DOCUMENT_PREPROCESSING_VERSION),
+        documents: z.array(indexSnapshotSchema), profile: indexEmbeddingProfileSchema,
+    }).strict().parse(JSON.parse(raw))
+    const prepared = prepareIndexManifest(parsed.documents, parsed.profile)
+    if (prepared.manifestHash !== expectedHash) throw new Error("索引manifest校验失败")
+    return prepared.manifest
+}
+
+/** pgvector存储float32；提前拒绝维度漂移、NaN/Infinity、float32溢出及零向量。 */
+export function serializeIndexVectors(embeddings: number[][], expectedCount: number, dimensions: number): string[] {
+    if (embeddings.length !== expectedCount || !expectedCount) throw new Error("分片与向量数量不匹配")
+    return embeddings.map((vector) => {
+        if (!Array.isArray(vector) || vector.length !== dimensions) throw new Error("向量维度不匹配")
+        const values = vector.map((value) => {
+            if (typeof value !== "number" || !Number.isFinite(value) || !Number.isFinite(Math.fround(value))) throw new Error("向量数值无效")
+            return Math.fround(value)
+        })
+        if (!values.some((value) => value !== 0)) throw new Error("零向量不可用于语义检索")
+        return `[${values.join(",")}]`
+    })
+}
