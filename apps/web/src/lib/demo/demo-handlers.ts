@@ -308,7 +308,12 @@ const handlers: Record<string, DemoHandler> = {
                 },
             ],
         }),
-    "GET /doc-library/library/list": () => ok({ libraries: [] }),
+    "GET /doc-library/library/list": () => ok({ libraries: [{ id: "700001", name: "示例资料库（演示）", description: "仅演示界面，不连接真实数据", color: null, icon: null, documentCount: 0,
+        createdAt: "2026-09-08T00:00:00Z", updatedAt: "2026-09-08T00:00:00Z" }] }),
+    "POST /doc-library/folder/list": () => ok({ folders: [] }),
+    "POST /doc-library/document/list": () => ok({ documents: [] }),
+    "POST /doc-library/index/status": (body) => ok({ libraryId: str(body.libraryId), enabled: false, workerConfigured: false, hybridConfigured: false,
+        keywordDocuments: 0, phase: "disabled", currentReady: false, current: null, latest: null }),
 
     /* ---------- 仪表盘 ---------- */
     "POST /dashboard/overview": () => {

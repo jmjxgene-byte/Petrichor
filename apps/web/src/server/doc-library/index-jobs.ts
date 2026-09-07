@@ -91,7 +91,12 @@ export async function cancelDocumentIndexGeneration(userId: number, generationId
         const now = clock ?? new Date()
         const [generation] = await tx.update(docIndexGenerations).set({ status: "cancelled", updatedAt: now })
             .where(and(eq(docIndexGenerations.id, generationId), eq(docIndexGenerations.userId, userId), eq(docIndexGenerations.status, "building"))).returning()
-        if (!generation) return null
+        if (!generation) {
+            const [cancelled] = await tx.select().from(docIndexGenerations).where(and(
+                eq(docIndexGenerations.id, generationId), eq(docIndexGenerations.userId, userId), eq(docIndexGenerations.status, "cancelled"),
+            )).limit(1)
+            return cancelled ?? null
+        }
         await tx.update(docIndexJobs).set({ status: "cancelled", updatedAt: now }).where(and(eq(docIndexJobs.generationId, generationId), eq(docIndexJobs.status, "queued")))
         await tx.update(docIndexJobs).set({ status: "cancel_requested", updatedAt: now }).where(and(eq(docIndexJobs.generationId, generationId), eq(docIndexJobs.status, "running")))
         return generation

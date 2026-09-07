@@ -55,6 +55,7 @@ import {
 } from "@/lib/api"
 import { assistantSourcePath, dashboardRoutes } from "@/lib/dashboard-routes"
 import { demoAssistantSourceRef, isDemoMode } from "@/lib/demo/demo-mode"
+import { DocumentIndexStatusLine } from "./DocumentIndexStatusLine"
 
 const ACCEPT = ".pdf,.docx,.md,.markdown,.csv,.tsv"
 const TREE_NODE_INDENT_PX = 20
@@ -805,6 +806,7 @@ export function DocLibraryBrowsePage() {
           <p className="mt-1 text-xs text-muted-foreground">
             {folders.length} 个文件夹 · {documents.length} 个文件
           </p>
+          {libraryId ? <DocumentIndexStatusLine key={libraryId} libraryId={libraryId} revision={documents.map((doc) => `${doc.id}:${doc.updatedAt}`).join("|")} /> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button

@@ -79,11 +79,19 @@ export async function completeDocumentIndexJob(input: {
         const now = clock ?? new Date()
         if (!hasLiveIndexLease(job, input.workerId, now)) throw new Error("提交期间租约已过期")
         await tx.update(docIndexJobs).set({ status: "succeeded", leaseOwner: null, leaseExpiresAt: null, errorCode: null, updatedAt: now }).where(eq(docIndexJobs.id, job.id))
-        const [remaining] = await tx.select({ count: sql<number>`count(*)::integer` }).from(docIndexJobs)
-            .where(and(eq(docIndexJobs.generationId, generation.id), sql`${docIndexJobs.status} <> 'succeeded'`))
+        const [remaining] = await tx.select({
+            count: sql<number>`count(*) filter (where ${docIndexJobs.status} <> 'succeeded')::integer`,
+            completed: sql<number>`count(*) filter (where ${docIndexJobs.status} = 'succeeded')::integer`,
+            passages: sql<number>`(select count(*)::integer from petrichor_doc_passage p where p.generation_id = ${generation.id})`,
+        }).from(docIndexJobs).where(eq(docIndexJobs.generationId, generation.id))
         if (remaining?.count === 0) {
             const counts = await verifyCompleteGeneration(tx, generation)
             await tx.update(docIndexGenerations).set({ ...counts, status: "ready", updatedAt: now }).where(eq(docIndexGenerations.id, generation.id))
+        } else {
+            if (!remaining || !Number.isInteger(remaining.completed) || !Number.isInteger(remaining.passages)
+                || remaining.completed < 0 || remaining.passages < 0 || remaining.completed + remaining.count !== generation.expectedDocuments) throw new Error("索引进度计数不一致")
+            await tx.update(docIndexGenerations).set({ completedDocuments: remaining.completed, passageCount: remaining.passages, updatedAt: now })
+                .where(eq(docIndexGenerations.id, generation.id))
         }
         return { jobId: job.id, alreadyCompleted: false }
     })

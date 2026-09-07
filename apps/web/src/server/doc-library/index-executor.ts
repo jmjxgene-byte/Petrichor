@@ -56,9 +56,10 @@ export async function runDocumentIndexJob(job: Pick<IndexJob, "sourceHash" | "do
         await deps.complete({ source: loaded.source, embeddings, profile: provider.profile })
         return "succeeded" as const
     } catch {
+        const acknowledged = await deps.cancelled()
+        if (acknowledged) return "cancelled" as const
         if (signal?.aborted || lostLease) {
-            const acknowledged = await deps.cancelled()
-            return acknowledged ? "cancelled" as const : "lease_lost" as const
+            return "lease_lost" as const
         }
         await deps.fail(sourceChanged ? "source_changed" : calledModel ? "model_outcome_unknown" : "validation_failed")
         return "failed" as const

@@ -38,6 +38,15 @@ function fixture(results: unknown[][]) {
 beforeEach(() => { vi.clearAllMocks(); mocks.isSqliteDatabase.mockReturnValue(false) })
 
 describe("索引向量与发布门", () => {
+    it("部分文档完成即更新真实进度，不提前ready或current", async () => {
+        const two = prepareIndexManifest([snapshot, { ...snapshot, documentId: 2 }], profile)
+        const gen = { ...generation, expectedDocuments: 2, manifestHash: two.manifestHash, manifestJson: JSON.stringify(two.manifest) }
+        const f = fixture([[job], [gen], [document], [{ count: 1, completed: 1, passages: 1 }]])
+        await completeDocumentIndexJob(completeInput, now)
+        expect(f.settings[1]).toMatchObject({ completedDocuments: 1, passageCount: 1 })
+        expect(f.settings[1]).not.toHaveProperty("status")
+        expect(f.settings[1]).not.toHaveProperty("isCurrent")
+    })
     it("拒绝数量、维度、float32溢出与零向量", () => {
         expect(serializeIndexVectors([[1, 0]], 1, 2)).toEqual(["[1,0]"])
         expect(() => serializeIndexVectors([], 1, 2)).toThrow("数量")

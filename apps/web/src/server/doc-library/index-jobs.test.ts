@@ -35,6 +35,11 @@ function fixture(results: unknown[][], returns: unknown[][] = []) {
 beforeEach(() => { vi.clearAllMocks(); mocks.isSqliteDatabase.mockReturnValue(false) })
 
 describe("索引任务状态机存储契约", () => {
+    it("重复取消返回已取消代际，不再次操作其job", async () => {
+        const f = fixture([[{ id: 3, status: "cancelled" }]], [[]])
+        expect(await cancelDocumentIndexGeneration(1, 3, now)).toEqual({ id: 3, status: "cancelled" })
+        expect(f.settings).toHaveLength(1)
+    })
     it("失败终态保留已占用预算并阻止代际继续处理", async () => {
         const f = fixture([], [[job], []])
         await failDocumentIndexJob({ userId: 1, jobId: 7, workerId: "worker", errorCode: "model_outcome_unknown" }, now)

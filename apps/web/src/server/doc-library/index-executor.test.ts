@@ -18,6 +18,13 @@ function fixture() {
     return { deps, embed, quote }
 }
 describe("索引执行链路（假provider）", () => {
+    it("generation取消导致完成登记被拒绝时优先确认取消，不误报模型失败", async () => {
+        const f = fixture()
+        f.deps.complete.mockRejectedValueOnce(new Error("generation no longer building"))
+        f.deps.cancelled.mockResolvedValueOnce({ status: "cancelled" })
+        expect(await runDocumentIndexJob(job, f.deps)).toBe("cancelled")
+        expect(f.deps.fail).not.toHaveBeenCalled()
+    })
     it("预算预占在模型调用前，成功后才完成登记", async () => {
         const f = fixture()
         expect(await runDocumentIndexJob(job, f.deps)).toBe("succeeded")
