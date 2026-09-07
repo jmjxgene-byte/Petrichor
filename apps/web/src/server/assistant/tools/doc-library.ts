@@ -42,6 +42,8 @@ export async function searchDocuments(
         documentId,
         query: input.query,
         limit: input.limit,
+        abortSignal: ctx.abortSignal,
+        queryDeadlineAt: ctx.queryDeadlineAt,
     })
 }
 

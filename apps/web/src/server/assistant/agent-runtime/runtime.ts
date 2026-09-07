@@ -406,7 +406,7 @@ export class PetrichorAgentRuntime {
                 request.abortSignal?.addEventListener("abort", abort, { once: true })
                 const timer = setTimeout(abort, Math.max(1, deadline - Date.now()))
                 try {
-                    const outcome = await executor.execute("source.lookup", { query }, { ...buildCtx(), abortSignal: controller.signal })
+                    const outcome = await executor.execute("source.lookup", { query }, { ...buildCtx(), abortSignal: controller.signal, queryDeadlineAt: deadline })
                     if (!outcome.ok) { failed = true; break }
                     if (outcome.evidence.some((item) => item.content?.trim())) {
                         simpleKnowledgeFastPath = true

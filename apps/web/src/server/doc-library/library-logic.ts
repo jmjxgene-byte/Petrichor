@@ -1,8 +1,9 @@
-import { and, asc, desc, eq, gte, ilike, like, lte, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm"
 import { z } from "zod"
 import { getServerConfig } from "@/config/server"
 import { CACHE_TTL_SECONDS, cacheDropByPrefix, cacheKey, cacheReadThrough } from "@/server/cache"
-import { getDb, isSqliteDatabase } from "@/server/db/client"
+import { getDb } from "@/server/db/client"
+import { withReadBudget } from "@/server/db/read-budget"
 import {
     docChunks,
     docDocuments,
@@ -14,6 +15,7 @@ import { docLibraryDocumentPath } from "@/lib/dashboard-routes"
 import { deleteS3Objects, type S3DeleteFailure } from "@/server/upload/s3-delete"
 import { stripS4KeyPrefix } from "@/server/upload/s3-presign"
 import { readUploadedMarkdown } from "./markdown-source"
+import { documentSearchTerms, documentHitSnippet, literalLikePattern } from "./search-query"
 
 export const idSchema = z.union([z.string(), z.number()]).transform((value, ctx) => {
     const raw = String(value).trim()
@@ -473,109 +475,38 @@ export async function searchChunks(input: {
     query: string
     documentId?: number | null
     limit?: number
+    abortSignal?: AbortSignal
+    queryDeadlineAt?: number
 }) {
-    const keyword = input.query.trim()
-    if (!keyword) return []
+    const terms = documentSearchTerms(input.query)
+    if (!terms.length) return []
     const limit = Math.min(Math.max(input.limit ?? 8, 1), 20)
-    const terms = keyword.split(/\s+/).filter(Boolean).slice(0, 5)
-    const filters = [eq(docChunks.userId, input.userId)]
+    const filters = [eq(docChunks.userId, input.userId), eq(docDocuments.userId, input.userId)]
     if (input.libraryId != null) filters.push(eq(docChunks.libraryId, input.libraryId))
     if (input.documentId != null) filters.push(eq(docChunks.documentId, input.documentId))
-
-    if (isSqliteDatabase()) {
-        // SQLite 分支：LIKE OR 召回 + JS 词频打分（中文效果一般，仅作 dev 兜底）
-        const termConditions = terms.map((term) => {
-            const pattern = `%${term.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`
-            return like(docChunks.text, pattern)
-        })
-        if (termConditions.length > 0) {
-            const combined = termConditions.length === 1 ? termConditions[0] : or(...termConditions)
-            if (combined) filters.push(combined)
-        }
-
-        const rows = await getDb()
-            .select({
-                chunkId: docChunks.id,
-                documentId: docChunks.documentId,
-                libraryId: docChunks.libraryId,
-                page: docChunks.page,
-                locator: docChunks.locator,
-                text: docChunks.text,
-                title: docDocuments.title,
-                fileName: docDocuments.fileName,
-                fileType: docDocuments.fileType,
-            })
-            .from(docChunks)
-            .innerJoin(docDocuments, eq(docDocuments.id, docChunks.documentId))
-            .where(and(...filters))
-            .limit(limit * 4)
-
-        // 简单打分：命中词数 + 出现次数
-        const lowerTerms = terms.map((t) => t.toLowerCase())
-        const scored = rows.map((row) => {
-            const lower = row.text.toLowerCase()
-            let score = 0
-            for (const term of lowerTerms) {
-                const count = lower.split(term).length - 1
-                if (count > 0) score += 1 + Math.min(count, 5) * 0.2
-            }
-            return { row, score }
-        })
-        scored.sort((a, b) => b.score - a.score)
-        return scored.slice(0, limit).map(({ row }) => ({
-            chunkId: String(row.chunkId),
-            documentId: String(row.documentId),
-            libraryId: String(row.libraryId),
-            href: docLibraryDocumentPath(String(row.libraryId), String(row.documentId)),
-            title: row.title,
-            fileName: row.fileName,
-            fileType: row.fileType,
-            locator: row.locator ?? (row.page != null ? `p.${row.page}` : null),
-            page: row.page,
-            snippet: row.text.slice(0, 600),
-        }))
-    }
-
-    // Postgres 分支：pg_trgm ILIKE 召回过滤 + word_similarity 打分排序（对中文更友好）
-    const termConditions = terms.map((term) => {
-        const pattern = `%${term.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`
-        return ilike(docChunks.text, pattern)
-    })
-    if (termConditions.length > 0) {
-        const combined = termConditions.length === 1 ? termConditions[0] : or(...termConditions)
-        if (combined) filters.push(combined)
-    }
-
-    const rows = await getDb()
+    const matches = terms.map((term) =>
+        sql`lower(${docChunks.text}) like ${literalLikePattern(term)} escape ${"\\"}`)
+    filters.push(sql`(${sql.join(matches, sql` or `)})`)
+    // 两种数据库都在 LIMIT 前打分，避免无序预截断丢失后部高相关候选。
+    const score = sql<number>`(${sql.join(matches.map((match, index) =>
+        sql`case when ${match} then ${Math.min(terms[index].length, 16)} else 0 end`), sql` + `)})`
+    const rows = await withReadBudget((reader) => reader
         .select({
-            chunkId: docChunks.id,
-            documentId: docChunks.documentId,
-            libraryId: docChunks.libraryId,
-            page: docChunks.page,
-            locator: docChunks.locator,
-            text: docChunks.text,
-            title: docDocuments.title,
-            fileName: docDocuments.fileName,
-            fileType: docDocuments.fileType,
-            score: sql<number>`word_similarity(${keyword}, ${docChunks.text})`.as("score"),
+            chunkId: docChunks.id, documentId: docChunks.documentId, libraryId: docChunks.libraryId,
+            page: docChunks.page, locator: docChunks.locator, text: docChunks.text,
+            title: docDocuments.title, fileName: docDocuments.fileName, fileType: docDocuments.fileType,
         })
         .from(docChunks)
         .innerJoin(docDocuments, eq(docDocuments.id, docChunks.documentId))
         .where(and(...filters))
-        .orderBy(sql`score DESC`, asc(docChunks.chunkIndex))
-        .limit(limit)
-
+        .orderBy(desc(score), asc(docChunks.id))
+        .limit(limit), input)
     return rows.map((row) => ({
-        chunkId: String(row.chunkId),
-        documentId: String(row.documentId),
-        libraryId: String(row.libraryId),
+        chunkId: String(row.chunkId), documentId: String(row.documentId), libraryId: String(row.libraryId),
         href: docLibraryDocumentPath(String(row.libraryId), String(row.documentId)),
-        title: row.title,
-        fileName: row.fileName,
-        fileType: row.fileType,
-        locator: row.locator ?? (row.page != null ? `p.${row.page}` : null),
-        page: row.page,
-        snippet: row.text.slice(0, 600),
+        title: row.title, fileName: row.fileName, fileType: row.fileType,
+        locator: row.locator ?? (row.page != null ? `p.${row.page}` : null), page: row.page,
+        snippet: documentHitSnippet(row.text, terms),
     }))
 }
 

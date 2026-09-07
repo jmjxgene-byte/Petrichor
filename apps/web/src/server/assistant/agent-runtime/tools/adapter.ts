@@ -18,6 +18,7 @@ export function toAssistantContext(ctx: ToolExecutionContext): AssistantToolCont
         systemRole: ctx.systemRole ?? null,
         ...(ctx.delegationDepth > 0 ? { spawnDepth: ctx.delegationDepth } : {}),
         ...(ctx.abortSignal ? { abortSignal: ctx.abortSignal } : {}),
+        ...(ctx.queryDeadlineAt != null ? { queryDeadlineAt: ctx.queryDeadlineAt } : {}),
     }
 }
 

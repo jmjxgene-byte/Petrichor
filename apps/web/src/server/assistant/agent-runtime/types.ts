@@ -218,6 +218,7 @@ export type ToolExecutionContext = {
     delegationDepth: number
     state: AgentState
     abortSignal?: AbortSignal
+    queryDeadlineAt?: number
     /** 主 Agent 的 DB run id，用于步骤落库与审计 */
     dbRunId?: number
     threadId?: number
