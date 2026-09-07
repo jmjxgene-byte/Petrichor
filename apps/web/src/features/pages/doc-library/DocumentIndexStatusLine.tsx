@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { docLibraryApi } from "@/lib/api"
 import type { DocumentIndexStatus, DocumentIndexPhase } from "@/lib/document-index-types"
+import { DocumentIndexActions } from "./DocumentIndexActions"
 
 const LABELS: Record<DocumentIndexPhase, string> = {
   disabled: "增强索引未启用", not_built: "尚未构建增强索引", building: "增强索引构建中",
@@ -9,7 +10,7 @@ const LABELS: Record<DocumentIndexPhase, string> = {
   ready_to_activate: "索引已构建，待核验启用",
 }
 
-export function DocumentIndexStatusLine({ libraryId, revision }: { libraryId: string; revision: string }) {
+export function DocumentIndexStatusLine({ libraryId, libraryName, revision }: { libraryId: string; libraryName: string; revision: string }) {
   const [refresh, setRefresh] = useState(0)
   const key = `${libraryId}:${revision}:${refresh}`
   const [loaded, setLoaded] = useState<{ key: string; data: DocumentIndexStatus | null } | null>(null)
@@ -47,6 +48,7 @@ export function DocumentIndexStatusLine({ libraryId, revision }: { libraryId: st
       <Button variant="ghost" size="sm" className="h-6 px-1 text-xs" disabled={data === undefined} onClick={() => setRefresh((value) => value + 1)}>刷新状态</Button>
       {data?.latest?.status === "building" ? <Button variant="ghost" size="sm" className="h-6 px-1 text-xs" disabled={cancelling} onClick={() => void cancel()}>{cancelling ? "正在请求取消…" : "停止构建"}</Button> : null}
       {actionError ? <span role="alert">取消请求未能完成，请刷新核对。</span> : null}
+      {data ? <DocumentIndexActions libraryId={libraryId} libraryName={libraryName} status={data} onChanged={() => setRefresh((value) => value + 1)} /> : null}
     </div>
   )
 }

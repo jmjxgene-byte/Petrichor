@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08确认UI节点：DocumentIndexActions沿用现有Dialog/Checkbox，用户点“生成预估”后才读取报价；显示范围、模型、输入/费用上界和两个截止时间，勾选后才创建任务。构建与激活独立确认，激活绑定打开时的版本。关闭中止报价，迟到响应丢弃；提交中防重复，失败清除确认且不自动重试；非法日期拒绝、确认计时上限15分钟。下方历史节点提到的确认入口缺口已补齐。浏览器仅用纯内存demo合成资料完成桌面全流程与console检查，不证明实际PG、费用、Worker或向量构建；限域canary仍需审批。
+
 2026-09-08签名报价接口节点：新增quote/build/activate路由及客户端方法。报价读取整库ready源并确定性计算上界，不构造SDK或调用模型；HMAC用既有SESSION_SECRET及独立用途前缀，绑定user/library/manifest/profile/policyHash/预算/时限，令牌不含正文或凭据。确认窗口最多15分钟，执行授权最多24小时且不越过policy到期；免费策略也使用最小1微美元保守授权上限，不代表收费。build需confirm=true并验证当前profile/policy未变、整库文档集合仍匹配；重复请求沿用既有代际，不重置原审批。activate独立确认并只用服务端核验档案。policy新增credentialFingerprint（凭证ID/更新时间的hash），轮换后必须重新核验价格；可通过只读getDocumentIndexVerificationDescriptor获得配置描述，不返回凭据。假源报价、篡改/过期/跨用户/模型变化及HTTP门测试已通过，无真实生产报价或模型任务。确认UI、限域canary执行与实际费用验证仍待接线/审批。
 
 2026-09-08状态入口节点：新增POST /api/doc-library/index/status和/cancel及客户端类型/API，状态仅返回进度、安全错误码和版本标识；关闭flags不读取索引表，不调用provider/原文。latest构建状态与currentReady分离，ready但未激活显示待核验启用；Worker configured不是进程健康。取消校验Origin/用户归属、支持重复请求，失败先确认取消避免误报；每个文档完成后更新实际进度。DocLibraryBrowsePage标题下新增紧凑状态行，独立请求10秒超时、切库/卸载取消、可刷新和停止构建，未加无后端支持的构建按钮。真实组件的本地mock页桌面/390px验证、刷新与返回导航、console无错误/无横向溢出通过；只验证了disabled演示状态，真实构建/取消和生产未执行。预览页已关闭、视口复原、5179服务已停止。quote/build/activate和引用恢复仍待接线。

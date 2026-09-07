@@ -806,7 +806,7 @@ export function DocLibraryBrowsePage() {
           <p className="mt-1 text-xs text-muted-foreground">
             {folders.length} 个文件夹 · {documents.length} 个文件
           </p>
-          {libraryId ? <DocumentIndexStatusLine key={libraryId} libraryId={libraryId} revision={documents.map((doc) => `${doc.id}:${doc.updatedAt}`).join("|")} /> : null}
+          {libraryId ? <DocumentIndexStatusLine key={libraryId} libraryId={libraryId} libraryName={library?.name ?? "当前文档库"} revision={documents.map((doc) => `${doc.id}:${doc.updatedAt}`).join("|")} /> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button
