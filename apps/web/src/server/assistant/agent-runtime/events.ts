@@ -131,6 +131,7 @@ export type PublicEvidence = {
     nodeKey?: string
     pageKey?: string
     articleId?: string
+    documentId?: string
     knowledgeBaseId?: string
     path?: string[]
     relevance?: number
@@ -199,6 +200,7 @@ export function toPublicEvidence(evidence: AgentEvidence, citationIndex?: number
         ...(typeof metadata.nodeKey === "string" ? { nodeKey: metadata.nodeKey } : {}),
         ...(typeof metadata.pageKey === "string" ? { pageKey: metadata.pageKey } : {}),
         ...(typeof metadata.articleId === "string" ? { articleId: metadata.articleId } : {}),
+        ...(evidence.source === "document" && typeof metadata.documentId === "string" ? { documentId: metadata.documentId } : {}),
         ...(typeof metadata.knowledgeBaseId === "string"
             ? { knowledgeBaseId: metadata.knowledgeBaseId }
             : {}),

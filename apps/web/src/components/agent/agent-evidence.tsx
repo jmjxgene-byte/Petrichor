@@ -52,7 +52,7 @@ export function AgentEvidencePanel({
                     <DrawerDescription>
                         共 {sourceCount} 个来源 · {evidence.length} 条可追溯证据
                         {knowledge.length > 0 ? ` · 知识库章节 ${knowledge.length}` : ""}
-                        {documents.length > 0 ? ` · 文档 ${documents.length}` : ""}
+                        {documents.length > 0 ? ` · 文档 ${groupEvidenceBySource(documents).length} 篇 / ${documents.length} 个片段` : ""}
                         {geneops.length > 0 ? ` · GeneOps ${geneops.length}` : ""}
                         {internal.length > 0 ? ` · 站内其他 ${internal.length}` : ""}
                         {external.length > 0 ? ` · 外部 ${external.length}` : ""}

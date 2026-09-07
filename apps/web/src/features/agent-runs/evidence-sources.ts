@@ -8,6 +8,16 @@ export function evidenceSourceKey(evidence: EvidenceViewModel): string {
     const knowledgeBaseId = evidence.knowledgeBaseId?.trim() ?? ""
     const scope = knowledgeBaseId ? `${knowledgeBaseId}:` : ""
 
+    if (evidence.source === "document") {
+        if (evidence.documentId?.trim()) return `document:${evidence.documentId.trim()}`
+        // 兼容旧记录，仅从本站已知文档路由恢复身份；锚点仍保留在原URL中。
+        if (evidence.url?.startsWith("/dashboard/doc-library/")) {
+            const url = new URL(evidence.url, "https://petrichor.invalid")
+            const id = url.searchParams.get("documentId")
+            if (/^\/dashboard\/doc-library\/\d+$/.test(url.pathname) && id && /^[1-9]\d*$/.test(id)) return `document:${id}`
+        }
+    }
+
     if ((evidence.source === "knowledge" || evidence.source === "wiki") && evidence.pageKey?.trim()) {
         return `wiki:${scope}${evidence.pageKey.trim()}`
     }

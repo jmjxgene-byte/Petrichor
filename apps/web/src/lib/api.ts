@@ -2654,6 +2654,7 @@ export interface AgentRunEvidenceResponse {
   nodeKey?: string
   pageKey?: string
   articleId?: string
+  documentId?: string
   knowledgeBaseId?: string
   path?: string[]
   relevance?: number

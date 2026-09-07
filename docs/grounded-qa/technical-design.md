@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08文档来源身份节点：PublicEvidence与客户端响应/视图新增documentId，实时reducer不再丢弃来源名称、作者及查询时间。前端按documentId归并来源，旧本站相对文档路由可回退解析身份，原始generation/passage URL与各片段仍独立保留；来源面板区分文档数和片段数。合成契约测试比较同一PublicEvidence经过实时reducer和历史hydrate后的结果，并验证两个位置共享编号、不同文档/外站不误并。本节点没有实现原文锚点高亮，也不是实际数据库历史恢复验收；原文查看器目前只消费documentId，generation/passage读取与高亮仍待接线。
+
 2026-09-08确认UI节点：DocumentIndexActions沿用现有Dialog/Checkbox，用户点“生成预估”后才读取报价；显示范围、模型、输入/费用上界和两个截止时间，勾选后才创建任务。构建与激活独立确认，激活绑定打开时的版本。关闭中止报价，迟到响应丢弃；提交中防重复，失败清除确认且不自动重试；非法日期拒绝、确认计时上限15分钟。下方历史节点提到的确认入口缺口已补齐。浏览器仅用纯内存demo合成资料完成桌面全流程与console检查，不证明实际PG、费用、Worker或向量构建；限域canary仍需审批。
 
 2026-09-08签名报价接口节点：新增quote/build/activate路由及客户端方法。报价读取整库ready源并确定性计算上界，不构造SDK或调用模型；HMAC用既有SESSION_SECRET及独立用途前缀，绑定user/library/manifest/profile/policyHash/预算/时限，令牌不含正文或凭据。确认窗口最多15分钟，执行授权最多24小时且不越过policy到期；免费策略也使用最小1微美元保守授权上限，不代表收费。build需confirm=true并验证当前profile/policy未变、整库文档集合仍匹配；重复请求沿用既有代际，不重置原审批。activate独立确认并只用服务端核验档案。policy新增credentialFingerprint（凭证ID/更新时间的hash），轮换后必须重新核验价格；可通过只读getDocumentIndexVerificationDescriptor获得配置描述，不返回凭据。假源报价、篡改/过期/跨用户/模型变化及HTTP门测试已通过，无真实生产报价或模型任务。确认UI、限域canary执行与实际费用验证仍待接线/审批。
