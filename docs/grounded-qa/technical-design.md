@@ -38,6 +38,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 4. 向量与模型
 
+2026-09-08分片/准备节点：passage-builder保留未归一化原文UTF-16位置与UTF-8 hash，frontmatter排除检索，代码/表格原子保护；识别大量带绝对日期文本的二级消息标题时打包完整短消息，不把每条消息标题当独立章节；未确认时区故publishedAt仍null，不推断时间。19篇原文件离线检查全部通过，共17733候选片段，不代表embedding已完成。index-contract/index-store固定manifest和模型档案、校验审批绑定与版本、库归属、重复请求与审批复用；准备仅建队列，不调用S3/模型或切current。审批额度是整generation共享总额，后续执行器需累计汇总，不能按每个job单独重复额度；真实token上限/计费/claim/发布仍待实现验收。
+
 复用EMBEDDING用途绑定，先独立验证真实embedding和rerank支持。档案包含provider/model身份、维度、模型版本与预处理版本；不同空间分别生成查询向量并检索，排名级融合。档案变化构建新generation，不能自动把旧向量解释为新空间。索引DDL由迁移角色受控执行，不复用会在运行请求中自动建索引的路径。
 
 中文词法采用项目词元与Postgres检索，语义采用pgvector；查询阶段先过滤用户/范围/current/档案，ANN结果必须复核。维度相关索引在模型档案核验后通过受控迁移创建。外部重排只传限量候选片段，失败降级本地；语义失败降级词法，并返回真实模式/原因。本地Hybrid开关独立于GeneOps Hybrid，后者沿用既有质量门与BGE-M3空间约束。
