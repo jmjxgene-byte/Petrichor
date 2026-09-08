@@ -2757,7 +2757,8 @@ export interface DeepResearchJobResponse {
 }
 
 export const deepResearchApi = {
-  start: (data: { threadId: string; questionMessageId: string; fastRunKey?: string | null }) =>
+  list: (threadId: string) => api.post<{ enabled: boolean; sourceScope: import("@/lib/assistant-source-contract").AssistantSourceScope; sourceScopeHash: string; jobs: DeepResearchJobResponse[] }>("/assistant/deep-research/list", { threadId }),
+  start: (data: { threadId: string; questionMessageId: string; fastRunKey?: string | null; expectedSourceScopeHash?: string }) =>
     api.post<DeepResearchJobResponse>("/assistant/deep-research/start", data),
   status: (runKey: string) =>
     api.post<DeepResearchJobResponse>("/assistant/deep-research/status", { runKey }),

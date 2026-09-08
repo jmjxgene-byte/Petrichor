@@ -79,128 +79,129 @@ import * as route77 from "../routes/api/assistant/agent-run/list/route"
 import * as route78 from "../routes/api/assistant/agent-run/trace/route"
 import * as route79 from "../routes/api/assistant/chat/route"
 import * as route80 from "../routes/api/assistant/deep-research/cancel/route"
-import * as route81 from "../routes/api/assistant/deep-research/start/route"
-import * as route82 from "../routes/api/assistant/deep-research/status/route"
-import * as route83 from "../routes/api/assistant/plan/patch/route"
-import * as route84 from "../routes/api/assistant/source-catalog/route"
-import * as route85 from "../routes/api/assistant/thread/create/route"
-import * as route86 from "../routes/api/assistant/thread/delete-many/route"
-import * as route87 from "../routes/api/assistant/thread/delete/route"
-import * as route88 from "../routes/api/assistant/thread/detail/route"
-import * as route89 from "../routes/api/assistant/thread/list/route"
-import * as route90 from "../routes/api/assistant/wiki/page/route"
-import * as route91 from "../routes/api/auth/[...all]/route"
-import * as route92 from "../routes/api/auth/callback/route"
-import * as route93 from "../routes/api/auth/linuxdo/bind/start/route"
-import * as route94 from "../routes/api/auth/linuxdo/callback/route"
-import * as route95 from "../routes/api/auth/linuxdo/login/start/route"
-import * as route96 from "../routes/api/auth/login/route"
-import * as route97 from "../routes/api/auth/logout/route"
-import * as route98 from "../routes/api/auth/me/route"
-import * as route99 from "../routes/api/auth/password/change/route"
-import * as route100 from "../routes/api/auth/profile/route"
-import * as route101 from "../routes/api/auth/profile/update/route"
-import * as route102 from "../routes/api/auth/register/route"
-import * as route103 from "../routes/api/auth/sessions/revoke-others/route"
-import * as route104 from "../routes/api/auth/sessions/revoke/route"
-import * as route105 from "../routes/api/auth/sessions/route"
-import * as route106 from "../routes/api/dashboard/overview/route"
-import * as route107 from "../routes/api/doc-library/document/delete/route"
-import * as route108 from "../routes/api/doc-library/document/detail/route"
-import * as route109 from "../routes/api/doc-library/document/list/route"
-import * as route110 from "../routes/api/doc-library/document/register-markdown/route"
-import * as route111 from "../routes/api/doc-library/document/register/route"
-import * as route112 from "../routes/api/doc-library/folder/delete/route"
-import * as route113 from "../routes/api/doc-library/folder/list/route"
-import * as route114 from "../routes/api/doc-library/folder/save/route"
-import * as route115 from "../routes/api/doc-library/index/activate/route"
-import * as route116 from "../routes/api/doc-library/index/build/route"
-import * as route117 from "../routes/api/doc-library/index/cancel/route"
-import * as route118 from "../routes/api/doc-library/index/quote/route"
-import * as route119 from "../routes/api/doc-library/index/read-citation/route"
-import * as route120 from "../routes/api/doc-library/index/status/route"
-import * as route121 from "../routes/api/doc-library/library/delete/route"
-import * as route122 from "../routes/api/doc-library/library/list/route"
-import * as route123 from "../routes/api/doc-library/library/save/route"
-import * as route124 from "../routes/api/external-source/create/route"
-import * as route125 from "../routes/api/external-source/cron-refresh/route"
-import * as route126 from "../routes/api/external-source/delete/route"
-import * as route127 from "../routes/api/external-source/list/route"
-import * as route128 from "../routes/api/external-source/test/route"
-import * as route129 from "../routes/api/external-source/update/route"
-import * as route130 from "../routes/api/kb/article/create/route"
-import * as route131 from "../routes/api/kb/article/delete/route"
-import * as route132 from "../routes/api/kb/article/detail/route"
-import * as route133 from "../routes/api/kb/article/mindmap/generate/route"
-import * as route134 from "../routes/api/kb/article/public-cache/refresh/route"
-import * as route135 from "../routes/api/kb/article/search/route"
-import * as route136 from "../routes/api/kb/article/share/create/route"
-import * as route137 from "../routes/api/kb/article/share/info/route"
-import * as route138 from "../routes/api/kb/article/share/pin/route"
-import * as route139 from "../routes/api/kb/article/share/revoke/route"
-import * as route140 from "../routes/api/kb/article/summary/generate/route"
-import * as route141 from "../routes/api/kb/article/update/route"
-import * as route142 from "../routes/api/kb/burn-link/create/route"
-import * as route143 from "../routes/api/kb/burn-link/list/route"
-import * as route144 from "../routes/api/kb/burn-link/revoke/route"
-import * as route145 from "../routes/api/kb/import/attach-ocr/route"
-import * as route146 from "../routes/api/kb/import/cancel/route"
-import * as route147 from "../routes/api/kb/import/create/route"
-import * as route148 from "../routes/api/kb/import/delete/route"
-import * as route149 from "../routes/api/kb/import/detail/route"
-import * as route150 from "../routes/api/kb/import/finalize/route"
-import * as route151 from "../routes/api/kb/import/list/route"
-import * as route152 from "../routes/api/kb/import/page-convert/route"
-import * as route153 from "../routes/api/kb/import/retry-failed/route"
-import * as route154 from "../routes/api/kb/import/retry-page/route"
-import * as route155 from "../routes/api/kb/knowledge-base/create/route"
-import * as route156 from "../routes/api/kb/knowledge-base/delete/route"
-import * as route157 from "../routes/api/kb/knowledge-base/detail/route"
-import * as route158 from "../routes/api/kb/knowledge-base/list/route"
-import * as route159 from "../routes/api/kb/knowledge-base/update/route"
-import * as route160 from "../routes/api/kb/knowledge/build/route"
-import * as route161 from "../routes/api/kb/knowledge/build/status/route"
-import * as route162 from "../routes/api/kb/knowledge/chunk/list/route"
-import * as route163 from "../routes/api/kb/node/children/route"
-import * as route164 from "../routes/api/kb/node/create-folder/route"
-import * as route165 from "../routes/api/kb/node/delete-folder/route"
-import * as route166 from "../routes/api/kb/node/detail/route"
-import * as route167 from "../routes/api/kb/node/move/route"
-import * as route168 from "../routes/api/kb/node/roots/route"
-import * as route169 from "../routes/api/kb/node/tree/route"
-import * as route170 from "../routes/api/kb/node/update-folder/route"
-import * as route171 from "../routes/api/kb/qa/knowledge-base/list/route"
-import * as route172 from "../routes/api/kb/qa/model-info/route"
-import * as route173 from "../routes/api/kb/wiki/dashboard/route"
-import * as route174 from "../routes/api/kb/wiki/embedding/run/route"
-import * as route175 from "../routes/api/kb/wiki/ingest/route"
-import * as route176 from "../routes/api/kb/wiki/lint/route"
-import * as route177 from "../routes/api/kb/wiki/page/detail/route"
-import * as route178 from "../routes/api/kb/wiki/page/list/route"
-import * as route179 from "../routes/api/kb/wiki/patch/apply/route"
-import * as route180 from "../routes/api/kb/wiki/patch/list/route"
-import * as route181 from "../routes/api/kb/wiki/patch/reject/route"
-import * as route182 from "../routes/api/kb/wiki/tree/route"
-import * as route183 from "../routes/api/mcp/route"
-import * as route184 from "../routes/api/notification/list/route"
-import * as route185 from "../routes/api/notification/read-all/route"
-import * as route186 from "../routes/api/notification/read/route"
-import * as route187 from "../routes/api/notification/summary/route"
-import * as route188 from "../routes/api/public/about/profile/route"
-import * as route189 from "../routes/api/public/appearance/route"
-import * as route190 from "../routes/api/public/article/list/route"
-import * as route191 from "../routes/api/public/article/search/route"
-import * as route192 from "../routes/api/public/article/share/detail/route"
-import * as route193 from "../routes/api/public/burn/consume/route"
-import * as route194 from "../routes/api/public/burn/meta/route"
-import * as route195 from "../routes/api/public/projects/route"
-import * as route196 from "../routes/api/public/qa/chat/route"
-import * as route197 from "../routes/api/public/site-graph/route"
-import * as route198 from "../routes/api/public/upload/presign-get/route"
-import * as route199 from "../routes/api/public/wiki/page/route"
-import * as route200 from "../routes/api/upload/local/[...objectKey]/route"
-import * as route201 from "../routes/api/upload/presign-get/route"
-import * as route202 from "../routes/api/upload/presign-put/route"
+import * as route81 from "../routes/api/assistant/deep-research/list/route"
+import * as route82 from "../routes/api/assistant/deep-research/start/route"
+import * as route83 from "../routes/api/assistant/deep-research/status/route"
+import * as route84 from "../routes/api/assistant/plan/patch/route"
+import * as route85 from "../routes/api/assistant/source-catalog/route"
+import * as route86 from "../routes/api/assistant/thread/create/route"
+import * as route87 from "../routes/api/assistant/thread/delete-many/route"
+import * as route88 from "../routes/api/assistant/thread/delete/route"
+import * as route89 from "../routes/api/assistant/thread/detail/route"
+import * as route90 from "../routes/api/assistant/thread/list/route"
+import * as route91 from "../routes/api/assistant/wiki/page/route"
+import * as route92 from "../routes/api/auth/[...all]/route"
+import * as route93 from "../routes/api/auth/callback/route"
+import * as route94 from "../routes/api/auth/linuxdo/bind/start/route"
+import * as route95 from "../routes/api/auth/linuxdo/callback/route"
+import * as route96 from "../routes/api/auth/linuxdo/login/start/route"
+import * as route97 from "../routes/api/auth/login/route"
+import * as route98 from "../routes/api/auth/logout/route"
+import * as route99 from "../routes/api/auth/me/route"
+import * as route100 from "../routes/api/auth/password/change/route"
+import * as route101 from "../routes/api/auth/profile/route"
+import * as route102 from "../routes/api/auth/profile/update/route"
+import * as route103 from "../routes/api/auth/register/route"
+import * as route104 from "../routes/api/auth/sessions/revoke-others/route"
+import * as route105 from "../routes/api/auth/sessions/revoke/route"
+import * as route106 from "../routes/api/auth/sessions/route"
+import * as route107 from "../routes/api/dashboard/overview/route"
+import * as route108 from "../routes/api/doc-library/document/delete/route"
+import * as route109 from "../routes/api/doc-library/document/detail/route"
+import * as route110 from "../routes/api/doc-library/document/list/route"
+import * as route111 from "../routes/api/doc-library/document/register-markdown/route"
+import * as route112 from "../routes/api/doc-library/document/register/route"
+import * as route113 from "../routes/api/doc-library/folder/delete/route"
+import * as route114 from "../routes/api/doc-library/folder/list/route"
+import * as route115 from "../routes/api/doc-library/folder/save/route"
+import * as route116 from "../routes/api/doc-library/index/activate/route"
+import * as route117 from "../routes/api/doc-library/index/build/route"
+import * as route118 from "../routes/api/doc-library/index/cancel/route"
+import * as route119 from "../routes/api/doc-library/index/quote/route"
+import * as route120 from "../routes/api/doc-library/index/read-citation/route"
+import * as route121 from "../routes/api/doc-library/index/status/route"
+import * as route122 from "../routes/api/doc-library/library/delete/route"
+import * as route123 from "../routes/api/doc-library/library/list/route"
+import * as route124 from "../routes/api/doc-library/library/save/route"
+import * as route125 from "../routes/api/external-source/create/route"
+import * as route126 from "../routes/api/external-source/cron-refresh/route"
+import * as route127 from "../routes/api/external-source/delete/route"
+import * as route128 from "../routes/api/external-source/list/route"
+import * as route129 from "../routes/api/external-source/test/route"
+import * as route130 from "../routes/api/external-source/update/route"
+import * as route131 from "../routes/api/kb/article/create/route"
+import * as route132 from "../routes/api/kb/article/delete/route"
+import * as route133 from "../routes/api/kb/article/detail/route"
+import * as route134 from "../routes/api/kb/article/mindmap/generate/route"
+import * as route135 from "../routes/api/kb/article/public-cache/refresh/route"
+import * as route136 from "../routes/api/kb/article/search/route"
+import * as route137 from "../routes/api/kb/article/share/create/route"
+import * as route138 from "../routes/api/kb/article/share/info/route"
+import * as route139 from "../routes/api/kb/article/share/pin/route"
+import * as route140 from "../routes/api/kb/article/share/revoke/route"
+import * as route141 from "../routes/api/kb/article/summary/generate/route"
+import * as route142 from "../routes/api/kb/article/update/route"
+import * as route143 from "../routes/api/kb/burn-link/create/route"
+import * as route144 from "../routes/api/kb/burn-link/list/route"
+import * as route145 from "../routes/api/kb/burn-link/revoke/route"
+import * as route146 from "../routes/api/kb/import/attach-ocr/route"
+import * as route147 from "../routes/api/kb/import/cancel/route"
+import * as route148 from "../routes/api/kb/import/create/route"
+import * as route149 from "../routes/api/kb/import/delete/route"
+import * as route150 from "../routes/api/kb/import/detail/route"
+import * as route151 from "../routes/api/kb/import/finalize/route"
+import * as route152 from "../routes/api/kb/import/list/route"
+import * as route153 from "../routes/api/kb/import/page-convert/route"
+import * as route154 from "../routes/api/kb/import/retry-failed/route"
+import * as route155 from "../routes/api/kb/import/retry-page/route"
+import * as route156 from "../routes/api/kb/knowledge-base/create/route"
+import * as route157 from "../routes/api/kb/knowledge-base/delete/route"
+import * as route158 from "../routes/api/kb/knowledge-base/detail/route"
+import * as route159 from "../routes/api/kb/knowledge-base/list/route"
+import * as route160 from "../routes/api/kb/knowledge-base/update/route"
+import * as route161 from "../routes/api/kb/knowledge/build/route"
+import * as route162 from "../routes/api/kb/knowledge/build/status/route"
+import * as route163 from "../routes/api/kb/knowledge/chunk/list/route"
+import * as route164 from "../routes/api/kb/node/children/route"
+import * as route165 from "../routes/api/kb/node/create-folder/route"
+import * as route166 from "../routes/api/kb/node/delete-folder/route"
+import * as route167 from "../routes/api/kb/node/detail/route"
+import * as route168 from "../routes/api/kb/node/move/route"
+import * as route169 from "../routes/api/kb/node/roots/route"
+import * as route170 from "../routes/api/kb/node/tree/route"
+import * as route171 from "../routes/api/kb/node/update-folder/route"
+import * as route172 from "../routes/api/kb/qa/knowledge-base/list/route"
+import * as route173 from "../routes/api/kb/qa/model-info/route"
+import * as route174 from "../routes/api/kb/wiki/dashboard/route"
+import * as route175 from "../routes/api/kb/wiki/embedding/run/route"
+import * as route176 from "../routes/api/kb/wiki/ingest/route"
+import * as route177 from "../routes/api/kb/wiki/lint/route"
+import * as route178 from "../routes/api/kb/wiki/page/detail/route"
+import * as route179 from "../routes/api/kb/wiki/page/list/route"
+import * as route180 from "../routes/api/kb/wiki/patch/apply/route"
+import * as route181 from "../routes/api/kb/wiki/patch/list/route"
+import * as route182 from "../routes/api/kb/wiki/patch/reject/route"
+import * as route183 from "../routes/api/kb/wiki/tree/route"
+import * as route184 from "../routes/api/mcp/route"
+import * as route185 from "../routes/api/notification/list/route"
+import * as route186 from "../routes/api/notification/read-all/route"
+import * as route187 from "../routes/api/notification/read/route"
+import * as route188 from "../routes/api/notification/summary/route"
+import * as route189 from "../routes/api/public/about/profile/route"
+import * as route190 from "../routes/api/public/appearance/route"
+import * as route191 from "../routes/api/public/article/list/route"
+import * as route192 from "../routes/api/public/article/search/route"
+import * as route193 from "../routes/api/public/article/share/detail/route"
+import * as route194 from "../routes/api/public/burn/consume/route"
+import * as route195 from "../routes/api/public/burn/meta/route"
+import * as route196 from "../routes/api/public/projects/route"
+import * as route197 from "../routes/api/public/qa/chat/route"
+import * as route198 from "../routes/api/public/site-graph/route"
+import * as route199 from "../routes/api/public/upload/presign-get/route"
+import * as route200 from "../routes/api/public/wiki/page/route"
+import * as route201 from "../routes/api/upload/local/[...objectKey]/route"
+import * as route202 from "../routes/api/upload/presign-get/route"
+import * as route203 from "../routes/api/upload/presign-put/route"
 
 import type { RouteDefinition } from "./types"
 
@@ -287,126 +288,127 @@ export const routeDefinitions: RouteDefinition[] = [
     { path: "/api/assistant/agent-run/trace", module: route78 },
     { path: "/api/assistant/chat", module: route79 },
     { path: "/api/assistant/deep-research/cancel", module: route80 },
-    { path: "/api/assistant/deep-research/start", module: route81 },
-    { path: "/api/assistant/deep-research/status", module: route82 },
-    { path: "/api/assistant/plan/patch", module: route83 },
-    { path: "/api/assistant/source-catalog", module: route84 },
-    { path: "/api/assistant/thread/create", module: route85 },
-    { path: "/api/assistant/thread/delete-many", module: route86 },
-    { path: "/api/assistant/thread/delete", module: route87 },
-    { path: "/api/assistant/thread/detail", module: route88 },
-    { path: "/api/assistant/thread/list", module: route89 },
-    { path: "/api/assistant/wiki/page", module: route90 },
-    { path: "/api/auth/[...all]", module: route91 },
-    { path: "/api/auth/callback", module: route92 },
-    { path: "/api/auth/linuxdo/bind/start", module: route93 },
-    { path: "/api/auth/linuxdo/callback", module: route94 },
-    { path: "/api/auth/linuxdo/login/start", module: route95 },
-    { path: "/api/auth/login", module: route96 },
-    { path: "/api/auth/logout", module: route97 },
-    { path: "/api/auth/me", module: route98 },
-    { path: "/api/auth/password/change", module: route99 },
-    { path: "/api/auth/profile", module: route100 },
-    { path: "/api/auth/profile/update", module: route101 },
-    { path: "/api/auth/register", module: route102 },
-    { path: "/api/auth/sessions/revoke-others", module: route103 },
-    { path: "/api/auth/sessions/revoke", module: route104 },
-    { path: "/api/auth/sessions", module: route105 },
-    { path: "/api/dashboard/overview", module: route106 },
-    { path: "/api/doc-library/document/delete", module: route107 },
-    { path: "/api/doc-library/document/detail", module: route108 },
-    { path: "/api/doc-library/document/list", module: route109 },
-    { path: "/api/doc-library/document/register-markdown", module: route110 },
-    { path: "/api/doc-library/document/register", module: route111 },
-    { path: "/api/doc-library/folder/delete", module: route112 },
-    { path: "/api/doc-library/folder/list", module: route113 },
-    { path: "/api/doc-library/folder/save", module: route114 },
-    { path: "/api/doc-library/index/activate", module: route115 },
-    { path: "/api/doc-library/index/build", module: route116 },
-    { path: "/api/doc-library/index/cancel", module: route117 },
-    { path: "/api/doc-library/index/quote", module: route118 },
-    { path: "/api/doc-library/index/read-citation", module: route119 },
-    { path: "/api/doc-library/index/status", module: route120 },
-    { path: "/api/doc-library/library/delete", module: route121 },
-    { path: "/api/doc-library/library/list", module: route122 },
-    { path: "/api/doc-library/library/save", module: route123 },
-    { path: "/api/external-source/create", module: route124 },
-    { path: "/api/external-source/cron-refresh", module: route125 },
-    { path: "/api/external-source/delete", module: route126 },
-    { path: "/api/external-source/list", module: route127 },
-    { path: "/api/external-source/test", module: route128 },
-    { path: "/api/external-source/update", module: route129 },
-    { path: "/api/kb/article/create", module: route130 },
-    { path: "/api/kb/article/delete", module: route131 },
-    { path: "/api/kb/article/detail", module: route132 },
-    { path: "/api/kb/article/mindmap/generate", module: route133 },
-    { path: "/api/kb/article/public-cache/refresh", module: route134 },
-    { path: "/api/kb/article/search", module: route135 },
-    { path: "/api/kb/article/share/create", module: route136 },
-    { path: "/api/kb/article/share/info", module: route137 },
-    { path: "/api/kb/article/share/pin", module: route138 },
-    { path: "/api/kb/article/share/revoke", module: route139 },
-    { path: "/api/kb/article/summary/generate", module: route140 },
-    { path: "/api/kb/article/update", module: route141 },
-    { path: "/api/kb/burn-link/create", module: route142 },
-    { path: "/api/kb/burn-link/list", module: route143 },
-    { path: "/api/kb/burn-link/revoke", module: route144 },
-    { path: "/api/kb/import/attach-ocr", module: route145 },
-    { path: "/api/kb/import/cancel", module: route146 },
-    { path: "/api/kb/import/create", module: route147 },
-    { path: "/api/kb/import/delete", module: route148 },
-    { path: "/api/kb/import/detail", module: route149 },
-    { path: "/api/kb/import/finalize", module: route150 },
-    { path: "/api/kb/import/list", module: route151 },
-    { path: "/api/kb/import/page-convert", module: route152 },
-    { path: "/api/kb/import/retry-failed", module: route153 },
-    { path: "/api/kb/import/retry-page", module: route154 },
-    { path: "/api/kb/knowledge-base/create", module: route155 },
-    { path: "/api/kb/knowledge-base/delete", module: route156 },
-    { path: "/api/kb/knowledge-base/detail", module: route157 },
-    { path: "/api/kb/knowledge-base/list", module: route158 },
-    { path: "/api/kb/knowledge-base/update", module: route159 },
-    { path: "/api/kb/knowledge/build", module: route160 },
-    { path: "/api/kb/knowledge/build/status", module: route161 },
-    { path: "/api/kb/knowledge/chunk/list", module: route162 },
-    { path: "/api/kb/node/children", module: route163 },
-    { path: "/api/kb/node/create-folder", module: route164 },
-    { path: "/api/kb/node/delete-folder", module: route165 },
-    { path: "/api/kb/node/detail", module: route166 },
-    { path: "/api/kb/node/move", module: route167 },
-    { path: "/api/kb/node/roots", module: route168 },
-    { path: "/api/kb/node/tree", module: route169 },
-    { path: "/api/kb/node/update-folder", module: route170 },
-    { path: "/api/kb/qa/knowledge-base/list", module: route171 },
-    { path: "/api/kb/qa/model-info", module: route172 },
-    { path: "/api/kb/wiki/dashboard", module: route173 },
-    { path: "/api/kb/wiki/embedding/run", module: route174 },
-    { path: "/api/kb/wiki/ingest", module: route175 },
-    { path: "/api/kb/wiki/lint", module: route176 },
-    { path: "/api/kb/wiki/page/detail", module: route177 },
-    { path: "/api/kb/wiki/page/list", module: route178 },
-    { path: "/api/kb/wiki/patch/apply", module: route179 },
-    { path: "/api/kb/wiki/patch/list", module: route180 },
-    { path: "/api/kb/wiki/patch/reject", module: route181 },
-    { path: "/api/kb/wiki/tree", module: route182 },
-    { path: "/api/mcp", module: route183 },
-    { path: "/api/notification/list", module: route184 },
-    { path: "/api/notification/read-all", module: route185 },
-    { path: "/api/notification/read", module: route186 },
-    { path: "/api/notification/summary", module: route187 },
-    { path: "/api/public/about/profile", module: route188 },
-    { path: "/api/public/appearance", module: route189 },
-    { path: "/api/public/article/list", module: route190 },
-    { path: "/api/public/article/search", module: route191 },
-    { path: "/api/public/article/share/detail", module: route192 },
-    { path: "/api/public/burn/consume", module: route193 },
-    { path: "/api/public/burn/meta", module: route194 },
-    { path: "/api/public/projects", module: route195 },
-    { path: "/api/public/qa/chat", module: route196 },
-    { path: "/api/public/site-graph", module: route197 },
-    { path: "/api/public/upload/presign-get", module: route198 },
-    { path: "/api/public/wiki/page", module: route199 },
-    { path: "/api/upload/local/[...objectKey]", module: route200 },
-    { path: "/api/upload/presign-get", module: route201 },
-    { path: "/api/upload/presign-put", module: route202 },
+    { path: "/api/assistant/deep-research/list", module: route81 },
+    { path: "/api/assistant/deep-research/start", module: route82 },
+    { path: "/api/assistant/deep-research/status", module: route83 },
+    { path: "/api/assistant/plan/patch", module: route84 },
+    { path: "/api/assistant/source-catalog", module: route85 },
+    { path: "/api/assistant/thread/create", module: route86 },
+    { path: "/api/assistant/thread/delete-many", module: route87 },
+    { path: "/api/assistant/thread/delete", module: route88 },
+    { path: "/api/assistant/thread/detail", module: route89 },
+    { path: "/api/assistant/thread/list", module: route90 },
+    { path: "/api/assistant/wiki/page", module: route91 },
+    { path: "/api/auth/[...all]", module: route92 },
+    { path: "/api/auth/callback", module: route93 },
+    { path: "/api/auth/linuxdo/bind/start", module: route94 },
+    { path: "/api/auth/linuxdo/callback", module: route95 },
+    { path: "/api/auth/linuxdo/login/start", module: route96 },
+    { path: "/api/auth/login", module: route97 },
+    { path: "/api/auth/logout", module: route98 },
+    { path: "/api/auth/me", module: route99 },
+    { path: "/api/auth/password/change", module: route100 },
+    { path: "/api/auth/profile", module: route101 },
+    { path: "/api/auth/profile/update", module: route102 },
+    { path: "/api/auth/register", module: route103 },
+    { path: "/api/auth/sessions/revoke-others", module: route104 },
+    { path: "/api/auth/sessions/revoke", module: route105 },
+    { path: "/api/auth/sessions", module: route106 },
+    { path: "/api/dashboard/overview", module: route107 },
+    { path: "/api/doc-library/document/delete", module: route108 },
+    { path: "/api/doc-library/document/detail", module: route109 },
+    { path: "/api/doc-library/document/list", module: route110 },
+    { path: "/api/doc-library/document/register-markdown", module: route111 },
+    { path: "/api/doc-library/document/register", module: route112 },
+    { path: "/api/doc-library/folder/delete", module: route113 },
+    { path: "/api/doc-library/folder/list", module: route114 },
+    { path: "/api/doc-library/folder/save", module: route115 },
+    { path: "/api/doc-library/index/activate", module: route116 },
+    { path: "/api/doc-library/index/build", module: route117 },
+    { path: "/api/doc-library/index/cancel", module: route118 },
+    { path: "/api/doc-library/index/quote", module: route119 },
+    { path: "/api/doc-library/index/read-citation", module: route120 },
+    { path: "/api/doc-library/index/status", module: route121 },
+    { path: "/api/doc-library/library/delete", module: route122 },
+    { path: "/api/doc-library/library/list", module: route123 },
+    { path: "/api/doc-library/library/save", module: route124 },
+    { path: "/api/external-source/create", module: route125 },
+    { path: "/api/external-source/cron-refresh", module: route126 },
+    { path: "/api/external-source/delete", module: route127 },
+    { path: "/api/external-source/list", module: route128 },
+    { path: "/api/external-source/test", module: route129 },
+    { path: "/api/external-source/update", module: route130 },
+    { path: "/api/kb/article/create", module: route131 },
+    { path: "/api/kb/article/delete", module: route132 },
+    { path: "/api/kb/article/detail", module: route133 },
+    { path: "/api/kb/article/mindmap/generate", module: route134 },
+    { path: "/api/kb/article/public-cache/refresh", module: route135 },
+    { path: "/api/kb/article/search", module: route136 },
+    { path: "/api/kb/article/share/create", module: route137 },
+    { path: "/api/kb/article/share/info", module: route138 },
+    { path: "/api/kb/article/share/pin", module: route139 },
+    { path: "/api/kb/article/share/revoke", module: route140 },
+    { path: "/api/kb/article/summary/generate", module: route141 },
+    { path: "/api/kb/article/update", module: route142 },
+    { path: "/api/kb/burn-link/create", module: route143 },
+    { path: "/api/kb/burn-link/list", module: route144 },
+    { path: "/api/kb/burn-link/revoke", module: route145 },
+    { path: "/api/kb/import/attach-ocr", module: route146 },
+    { path: "/api/kb/import/cancel", module: route147 },
+    { path: "/api/kb/import/create", module: route148 },
+    { path: "/api/kb/import/delete", module: route149 },
+    { path: "/api/kb/import/detail", module: route150 },
+    { path: "/api/kb/import/finalize", module: route151 },
+    { path: "/api/kb/import/list", module: route152 },
+    { path: "/api/kb/import/page-convert", module: route153 },
+    { path: "/api/kb/import/retry-failed", module: route154 },
+    { path: "/api/kb/import/retry-page", module: route155 },
+    { path: "/api/kb/knowledge-base/create", module: route156 },
+    { path: "/api/kb/knowledge-base/delete", module: route157 },
+    { path: "/api/kb/knowledge-base/detail", module: route158 },
+    { path: "/api/kb/knowledge-base/list", module: route159 },
+    { path: "/api/kb/knowledge-base/update", module: route160 },
+    { path: "/api/kb/knowledge/build", module: route161 },
+    { path: "/api/kb/knowledge/build/status", module: route162 },
+    { path: "/api/kb/knowledge/chunk/list", module: route163 },
+    { path: "/api/kb/node/children", module: route164 },
+    { path: "/api/kb/node/create-folder", module: route165 },
+    { path: "/api/kb/node/delete-folder", module: route166 },
+    { path: "/api/kb/node/detail", module: route167 },
+    { path: "/api/kb/node/move", module: route168 },
+    { path: "/api/kb/node/roots", module: route169 },
+    { path: "/api/kb/node/tree", module: route170 },
+    { path: "/api/kb/node/update-folder", module: route171 },
+    { path: "/api/kb/qa/knowledge-base/list", module: route172 },
+    { path: "/api/kb/qa/model-info", module: route173 },
+    { path: "/api/kb/wiki/dashboard", module: route174 },
+    { path: "/api/kb/wiki/embedding/run", module: route175 },
+    { path: "/api/kb/wiki/ingest", module: route176 },
+    { path: "/api/kb/wiki/lint", module: route177 },
+    { path: "/api/kb/wiki/page/detail", module: route178 },
+    { path: "/api/kb/wiki/page/list", module: route179 },
+    { path: "/api/kb/wiki/patch/apply", module: route180 },
+    { path: "/api/kb/wiki/patch/list", module: route181 },
+    { path: "/api/kb/wiki/patch/reject", module: route182 },
+    { path: "/api/kb/wiki/tree", module: route183 },
+    { path: "/api/mcp", module: route184 },
+    { path: "/api/notification/list", module: route185 },
+    { path: "/api/notification/read-all", module: route186 },
+    { path: "/api/notification/read", module: route187 },
+    { path: "/api/notification/summary", module: route188 },
+    { path: "/api/public/about/profile", module: route189 },
+    { path: "/api/public/appearance", module: route190 },
+    { path: "/api/public/article/list", module: route191 },
+    { path: "/api/public/article/search", module: route192 },
+    { path: "/api/public/article/share/detail", module: route193 },
+    { path: "/api/public/burn/consume", module: route194 },
+    { path: "/api/public/burn/meta", module: route195 },
+    { path: "/api/public/projects", module: route196 },
+    { path: "/api/public/qa/chat", module: route197 },
+    { path: "/api/public/site-graph", module: route198 },
+    { path: "/api/public/upload/presign-get", module: route199 },
+    { path: "/api/public/wiki/page", module: route200 },
+    { path: "/api/upload/local/[...objectKey]", module: route201 },
+    { path: "/api/upload/presign-get", module: route202 },
+    { path: "/api/upload/presign-put", module: route203 },
 ]

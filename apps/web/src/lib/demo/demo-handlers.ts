@@ -1,4 +1,5 @@
 import type { DemoHandler, DemoHandlerResult } from "./demo-adapter"
+import { demoDeepList, demoDeepStart, demoDeepCancel } from "./demo-deep-research"
 import {
     DEMO_USER,
     articleDetail,
@@ -334,6 +335,9 @@ const handlers: Record<string, DemoHandler> = {
 
     /* ---------- 助手（axios 部分；对话流走 demo-chat） ---------- */
     "POST /assistant/thread/list": (body) => demoThreadList(body),
+    "POST /assistant/deep-research/list": (body) => ok(demoDeepList(str(body.threadId))),
+    "POST /assistant/deep-research/start": (body) => ok(demoDeepStart(str(body.threadId))),
+    "POST /assistant/deep-research/cancel": () => ok(demoDeepCancel()),
     "POST /assistant/thread/detail": (body) => demoThreadDetail(body),
     "POST /assistant/thread/delete": (body) => demoThreadDelete([str(body.threadId)]),
     "POST /assistant/thread/delete-many": (body) =>

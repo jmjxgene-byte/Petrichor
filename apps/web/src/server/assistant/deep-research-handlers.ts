@@ -1,15 +1,16 @@
 import { createHash } from "node:crypto"
-import { and, eq, isNull, or } from "drizzle-orm"
+import { and, desc, eq, isNull, or } from "drizzle-orm"
 import { z } from "zod"
 
 import { getServerConfig } from "@/config/server"
 import { requireCurrentUser } from "@/server/auth/current-user"
 import { getDb } from "@/server/db/client"
-import { agentRuns, assistantMessages, assistantThreads } from "@/server/db/schema"
+import { agentRuns, assistantMessages, assistantThreads, deepResearchJobs } from "@/server/db/schema"
 import { badRequest, forbidden, notFound, ok, readJson, toErrorResponse } from "@/server/http/response"
 import type { AppRequest } from "@/server/http/request"
 import { assertMutationOrigin } from "@/server/http/mutation-origin"
 import { questionMessageIdFromMetadata } from "@/lib/question-message-id"
+import { assistantSourceScopeFromFocus } from "@/lib/assistant-source-contract"
 import { assistantIdSchema } from "./thread-logic"
 import { parseDeepResearchFocus } from "./deep-research-focus"
 import { resolveAssistantSources } from "./source-catalog"
@@ -25,6 +26,7 @@ const startSchema = z.object({
     threadId: assistantIdSchema,
     questionMessageId: assistantIdSchema,
     fastRunKey: z.string().trim().min(1).max(64).optional().nullable(),
+    expectedSourceScopeHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 })
 
 const runSchema = z.object({
@@ -65,6 +67,7 @@ export async function startDeepResearch(request: AppRequest) {
         }
 
         const focus = parseFocus(thread.focusJson)
+        if (input.expectedSourceScopeHash && input.expectedSourceScopeHash !== buildDeepResearchSourceScopeHash(focus)) throw badRequest("会话资料范围已变化，请刷新状态后重新确认")
         const sources = await resolveAssistantSources(user.id, focus)
         if (sources.selected.length === 0) throw forbidden("所选资料源当前不可用")
         const sourceScopeHash = buildDeepResearchSourceScopeHash(focus)
@@ -106,6 +109,23 @@ export async function deepResearchStatus(request: AppRequest) {
     } catch (error) {
         return toErrorResponse(error, request.urlObject.pathname)
     }
+}
+
+export async function listThreadDeepResearch(request: AppRequest) {
+    try {
+        const user = await requireCurrentUser(request)
+        const { threadId } = z.object({ threadId: assistantIdSchema }).strict().parse(await readJson(request))
+        const db = getDb()
+        const [thread] = await db.select({ id: assistantThreads.id, focusJson: assistantThreads.focusJson }).from(assistantThreads)
+            .where(and(eq(assistantThreads.id, threadId), eq(assistantThreads.userId, user.id), isNull(assistantThreads.deletedAt))).limit(1)
+        if (!thread) throw notFound("Assistant 会话不存在")
+        const jobs = await db.select().from(deepResearchJobs).where(and(eq(deepResearchJobs.userId, user.id), eq(deepResearchJobs.threadId, threadId)))
+            .orderBy(desc(deepResearchJobs.createdAt)).limit(100)
+        const config = getServerConfig()
+        const focus = parseFocus(thread.focusJson)
+        return ok({ enabled: config.deepResearch.enabled && config.deepResearch.workerEnabled,
+            sourceScope: assistantSourceScopeFromFocus(focus), sourceScopeHash: buildDeepResearchSourceScopeHash(focus), jobs: jobs.map(toDeepResearchJobResponse) })
+    } catch (error) { return toErrorResponse(error, request.urlObject.pathname) }
 }
 
 export async function cancelDeepResearch(request: AppRequest) {

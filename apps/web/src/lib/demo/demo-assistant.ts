@@ -3,6 +3,7 @@ import { assistantSourceScopeSchema } from "@/lib/assistant-source-contract"
 
 import type { DemoHandlerResult } from "./demo-adapter"
 import { demoStore, type DemoThread } from "./demo-store"
+import { seedDemoDeepThread } from "./demo-deep-research"
 
 /*
  * 演示模式的助手线程存储与 axios handlers。
@@ -61,6 +62,7 @@ export function ensureDemoThreads() {
         plans: [],
     }
     demoStore.threads.unshift(thread)
+    seedDemoDeepThread()
 }
 
 export function findThread(threadId: string) {

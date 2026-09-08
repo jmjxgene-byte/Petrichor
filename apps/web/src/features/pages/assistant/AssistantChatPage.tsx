@@ -36,6 +36,7 @@ import {
   X,
 } from "@/components/iconimate"
 import { toast } from "sonner"
+import { DeepResearchProvider, DeepResearchMessageControl } from "./deep-research-controls"
 import { useSearchParams } from "react-router-dom"
 
 import { MarkdownText } from "@/components/assistant-ui/markdown-text"
@@ -1142,6 +1143,7 @@ function QaChatPanel({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
+      <DeepResearchProvider threadId={threadId} disabled={qaMode === "wiki"}>
       {/* 工具卡片与消息渲染都在 Provider 内：回答和检索结果里的 Wiki 引用可点开弹窗；
           previewLoader 让回答里的内链悬停出预览小卡（聚焦知识库时带 kbId 消歧） */}
       <WikiLinkClickProvider onOpenWikiPage={setWikiPreviewKey} previewLoader={loadWikiDetail}>
@@ -1202,6 +1204,7 @@ function QaChatPanel({
         onClose={() => setWikiPreviewKey(null)}
         loadDetail={loadWikiDetail}
       />
+      </DeepResearchProvider>
     </AssistantRuntimeProvider>
   )
 }
@@ -1448,6 +1451,7 @@ function AssistantMessageBubble() {
           </MessagePrimitive.Parts>
         </div>
         <AgentCitationBar />
+        <DeepResearchMessageControl />
         <AuiIf
           condition={(s) =>
             s.thread.isRunning &&

@@ -20,6 +20,13 @@ beforeEach(() => {
     mocks.create.mockResolvedValue({ runKey: "fixture", status: "queued" })
 })
 describe("Deep启动关联归属", () => {
+    it("用户看到的保存范围已变化时拒绝创建", async () => {
+        const input = new AppRequest("https://example.invalid/api/deep", { method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ threadId: 11, questionMessageId: 22, expectedSourceScopeHash: "0".repeat(64) }) })
+        expect((await startDeepResearch(input)).status).toBe(400)
+        expect(mocks.sources).not.toHaveBeenCalled()
+        expect(mocks.create).not.toHaveBeenCalled()
+    })
     it.each(['{"questionMessageId":"23"}', "{}", "{broken"])("同会话错误轮次或缺少可靠关联不能创建任务：%s", async (metricsJson) => {
         mocks.rows.push([{ id: 33, metricsJson }])
         expect((await startDeepResearch(request("own-run"))).status).toBe(400)
