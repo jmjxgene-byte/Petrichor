@@ -23,11 +23,6 @@ import { parseDeepResearchFocus } from "./deep-research-focus"
 import { buildDeepResearchSourceScopeHash, searchDeepResearchMode } from "./deep-research-contract"
 import { DEEP_RESEARCH_MODEL_OUTPUT_LIMITS } from "./deep-research-limits"
 import {
-    estimateDeepResearchCost,
-    fetchDeepResearchPricingSnapshot,
-    type DeepResearchPricingSnapshot,
-} from "./deep-research-pricing"
-import {
     buildDeepResearchReferenceKey,
     deepResearchCitationIndices,
     validateDeepResearchCitations,
@@ -118,7 +113,6 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
     let executionReserved = false
     let plannerUsage: ChatCompletionResult["usage"] | null = null
     let synthesisUsage: ChatCompletionResult["usage"] | null = null
-    let pricingSnapshot: DeepResearchPricingSnapshot | null = null
     const startedAt = Date.now()
     try {
         if (!await reserveDeepResearchExecution(jobId, workerId)) {
@@ -129,12 +123,8 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
         const selectedModel = await resolveChatModel({ userId: job.userId })
         const fixedModelRefId = selectedModel.model.id
         const expectedModelFingerprint = chatModelFingerprint(selectedModel)
-        pricingSnapshot = await fetchDeepResearchPricingSnapshot({
-            providerKey: selectedModel.provider.providerKey,
-            baseUrl: selectedModel.provider.baseUrl,
-            modelId: selectedModel.model.modelId,
-        })
-        if (pricingSnapshot.status !== "available" || Object.keys(pricingSnapshot.groupRatios).length === 0) throw new DeepResearchExecutionError("validation_failed", "模型价格无法核验，未开始模型调用")
+        // 用户使用自托管CPA并明确取消Deep金额限制；不请求价格接口。
+        // 仍固定模型身份、记录实际token，并保留租约/超时/防重复保护。
         controller.signal.throwIfAborted()
         modelCallsStarted += 1
         const planner = await callModelOrThrow({
@@ -252,14 +242,9 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
                         planner: plannerUsage,
                         synthesis: synthesisUsage,
                     },
-                    pricingSnapshot,
-                    costEstimate: pricingSnapshot == null ? null : estimateDeepResearchCost({
-                        snapshot: pricingSnapshot,
-                        inputTokens,
-                        outputTokens,
-                        modelCalls: modelCallsStarted,
-                        usageComplete: countCompletedModelCalls(plannerUsage, synthesisUsage) === modelCallsStarted && [plannerUsage, synthesisUsage].filter(Boolean).every((usage) => usage?.totalsKnown === true),
-                    }),
+                    monetaryBudgetMode: "not_enforced_by_user_request",
+                    pricingSnapshot: null,
+                    costEstimate: null,
                 }),
                 inputTokens,
                 outputTokens,
@@ -284,14 +269,9 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
                     planner: plannerUsage,
                     synthesis: synthesisUsage,
                 },
-                pricingSnapshot,
-                costEstimate: pricingSnapshot == null ? null : estimateDeepResearchCost({
-                    snapshot: pricingSnapshot,
-                    inputTokens,
-                    outputTokens,
-                    modelCalls: modelCallsStarted,
-                    usageComplete: countCompletedModelCalls(plannerUsage, synthesisUsage) === modelCallsStarted && [plannerUsage, synthesisUsage].filter(Boolean).every((usage) => usage?.totalsKnown === true),
-                }),
+                monetaryBudgetMode: "not_enforced_by_user_request",
+                pricingSnapshot: null,
+                costEstimate: null,
             }),
             inputTokens,
             outputTokens,
