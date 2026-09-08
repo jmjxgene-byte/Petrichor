@@ -31,7 +31,7 @@ export type DeepResearchEvidence = {
 
 export type DeepResearchPipelineDeps = {
     planQueries(question: string, signal: AbortSignal): Promise<string[]>
-    search(query: string, mode: SearchMode): Promise<DeepResearchCandidate[] | { candidates: DeepResearchCandidate[]; degradedSourceChecks: number }>
+    search(query: string, mode: SearchMode): Promise<DeepResearchCandidate[] | { candidates: DeepResearchCandidate[]; degradedSourceChecks: number; failedSearches?: number }>
     read(candidate: DeepResearchCandidate): Promise<DeepResearchEvidence[]>
     synthesize(question: string, evidence: DeepResearchEvidence[], signal: AbortSignal): Promise<string>
 }
@@ -59,13 +59,14 @@ export async function runDeepResearchPipeline(input: {
         queries.flatMap((query) => modes.map(async (mode) => { input.signal.throwIfAborted(); return await deps.search(query, mode) })),
     )
     input.signal.throwIfAborted()
-    const failedSearchCount = searched.filter((result) => result.status === "rejected").length
+    let failedSearchCount = searched.filter((result) => result.status === "rejected").length
     let degradedSourceChecks = 0
     const byKey = new Map<string, DeepResearchCandidate>()
     for (const result of searched) {
         if (result.status !== "fulfilled") continue
         const hits = Array.isArray(result.value) ? result.value : result.value.candidates
         if (!Array.isArray(result.value)) degradedSourceChecks += result.value.degradedSourceChecks
+        if (!Array.isArray(result.value)) failedSearchCount += result.value.failedSearches ?? 0
         for (const candidate of hits) {
             const existing = byKey.get(candidate.candidateKey)
             if (!existing || candidate.score > existing.score) byKey.set(candidate.candidateKey, candidate)

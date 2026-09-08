@@ -16,7 +16,7 @@ import {
 } from "./deep-research-job-store"
 import { createAgentRunRecord, persistEvidence } from "./agent-runtime/store"
 import { assistantFocusSchema } from "./thread-logic"
-import { buildDeepResearchSourceScopeHash } from "./deep-research-contract"
+import { buildDeepResearchSourceScopeHash, searchDeepResearchMode } from "./deep-research-contract"
 import { DEEP_RESEARCH_MODEL_OUTPUT_LIMITS } from "./deep-research-limits"
 import {
     estimateDeepResearchCost,
@@ -150,12 +150,11 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
         const result = await runDeepResearchPipeline({ question, modes, signal: controller.signal }, {
             planQueries: async () => parseQueryPlan(planner.answer),
             search: async (query, mode) => {
-                const output = await searchTool.execute(toolContext, {
-                    query,
-                    limit: 20,
-                    geneOpsMode: mode,
-                }) as { candidates?: DeepResearchCandidate[]; degradedSources?: unknown[] }
-                return { candidates: output.candidates ?? [], degradedSourceChecks: output.degradedSources?.length ?? 0 }
+                return searchDeepResearchMode(snapshot, focus, mode, controller.signal, async (modeFocus) => {
+                    return await searchTool.execute({ ...toolContext, focus: modeFocus }, {
+                        query, limit: 20, geneOpsMode: mode,
+                    }) as { candidates?: DeepResearchCandidate[]; degradedSources?: unknown[] }
+                })
             },
             read: async (candidate) => {
                 const output = await readTool.execute(toolContext, candidate.read)

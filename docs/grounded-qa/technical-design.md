@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08逐源Deep快照节点：新snapshot.sources逐项保存sourceRef/kind/contractVersion/cutoff/allowedModes/qualityStale及Wiki/Graph能力，固定排序并拒绝重复引用/类型不匹配；旧无sources快照保留读取兼容。根字段只作摘要，单源保留旧版本/cutoff，多源不再拿第一外部源代表全部。新任务按模式缩小到已捕获且许可的来源，本地只参加exact这一次入口（其内部Hybrid仍独立开关），不因外部fuzzy再次检索本地。all超过20来源按20分批，不截断，snapshot最多200源；单批失败保留其他批次并记录失败次数，陈旧源跳过并记降级。默认Hybrid/Wiki/Graph未开启，executor对Hybrid的既有拒绝仍在，实际Hybrid Deep尚未交付。全量首次出现worker启动与流式测试超时，改用--maxWorkers=2后1358通过/40既有跳过，typecheck/lint/build通过，未放宽断言/超时；只做离线测试，无Job/生产/模型运行。跨查询固定generation、累计租约预算和真实PG/性能仍待验收。
+
 2026-09-08Deep本地引用节点：共享deep-evidence-url只允许已知本地文档/文章路由（限document/knowledge/wiki来源），保留ID/hash/位置，清除citeSnippet/hlText/citeTerms，拒绝协议相对地址、未知内部路由、非HTTP(S)和userinfo。Deep final schema与历史恢复支持安全相对URL及显式citationIndex，同文档不同锚点保留独立referenceKey；模型prompt、metadata evidence与恢复后的引用统一编号，混合两个本地片段与一个外部来源为1/1/2。保存最终消息前验证实际已读引用范围，失效编号或无引用拒绝；validation_failed为终态，执行器开始模型调用后的失败不再自动整任务重试，尚不代表租约恢复累计费用已解决。全量1354通过/40既有跳过，typecheck/lint/build通过，测试仅合成契约；无真实Job/模型/PG或部署。
 
 2026-09-08Deep取消与降级节点：pipeline在规划/检索/深读/综合各阶段前后检查AbortSignal，取消后不开始下一阶段，综合返回后取消也不交付草稿；无可用模式在executor实际规划调用前拒绝。区分失败搜索次数、失败深读次数及统一搜索内部来源降级次数，计数进入metadata metrics，最终回答固定提示仅覆盖成功读取的资料，不输出异常正文。合成回归覆盖四个阶段取消、预取消、空模式及部分失败/内部降级；全量1351通过/40既有跳过，typecheck/lint/build通过。未启动Worker或模型；实际网络中止/180秒端到端、逐源模式、租约/费用与PG仍待验收。只读检查发现本机无postgres/psql，orbstack socket不存在，已请求用户启动本机Docker后再建立隔离测试库，不能以SQLite证明PG通过。

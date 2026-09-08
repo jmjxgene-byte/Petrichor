@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm"
 import { z } from "zod"
 import { normalizeDeepEvidenceUrl } from "@/lib/deep-evidence-url"
+import { assistantSourceRefSchema } from "@/lib/assistant-source-contract"
 
 import { getDb, getSqlClient } from "@/server/db/client"
 import { assistantMessages, deepResearchJobs, type DeepResearchJobRecord } from "@/server/db/schema"
@@ -34,6 +35,17 @@ export const deepResearchErrorCodeSchema = z.enum([
 export type DeepResearchErrorCode = z.infer<typeof deepResearchErrorCodeSchema>
 
 export const deepResearchCapabilitySnapshotSchema = z.object({
+    sources: z.array(z.object({
+        sourceRef: assistantSourceRefSchema,
+        kind: z.enum(["knowledge-base", "doc-library", "external-source"]),
+        contractVersion: z.number().int().nonnegative().nullable(),
+        sourceCutoffs: z.record(z.string(), z.string().nullable()),
+        allowedModes: z.array(z.enum(["exact", "fuzzy", "hybrid"])).max(3),
+        qualityStale: z.boolean(),
+        wikiReady: z.boolean(),
+        graphReady: z.boolean(),
+    }).strict().refine((source) => source.sourceRef.startsWith(`${source.kind}:`), "source_kind_mismatch")).max(200)
+        .refine((sources) => new Set(sources.map((source) => source.sourceRef)).size === sources.length, "duplicate_source").optional(),
     contractVersion: z.number().int().nonnegative().nullable(),
     sourceCutoffs: z.record(z.string(), z.string().nullable()).default({}),
     allowedModes: z.array(z.enum(["exact", "fuzzy", "hybrid"])).max(3),
