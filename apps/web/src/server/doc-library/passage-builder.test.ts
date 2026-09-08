@@ -2,6 +2,20 @@ import { describe, expect, it } from "vitest"
 import { buildDocumentPassages, hashDocumentText } from "./passage-builder"
 
 describe("确定性文档passage", () => {
+    it("v2合并同节短段落，v1保持原有片段，原文偏移与边界不变", () => {
+        const source = "# 一节\n\n" + "短段落😀。\r\n\r\n".repeat(200) + "# 二节\n\n尾部证据"
+        const old = buildDocumentPassages(source, "文档", 1)
+        const current = buildDocumentPassages(source, "文档")
+        expect(old.length).toBeGreaterThan(200)
+        expect(current.length).toBeLessThan(10)
+        expect(current.every(row => row.text.length <= 768)).toBe(true)
+        expect(current.map(row => row.text).join("")).toBe(source)
+        for (const row of current) {
+            expect(source.slice(row.startOffset, row.endOffset)).toBe(row.text)
+            expect(row.contentHash).toBe(hashDocumentText(row.text))
+            expect(row.text.includes("# 一节") && row.text.includes("# 二节")).toBe(false)
+        }
+    })
     it("时间戳消息标题打包完整短消息，避免逐标题碎片化，不猜时间区", () => {
         const messages = Array.from({ length: 20 }, (_, i) => `## 2026\\-09\\-08 12:00:00 示例${i}\n\n合成消息${i}\n\n`)
         const source = "# 群聊\n\n" + messages.join("")

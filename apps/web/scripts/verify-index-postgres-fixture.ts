@@ -18,15 +18,16 @@ export async function verifyIndexFixture(runtime: ReturnType<typeof postgres>, u
   const libraryId = Number(library.id)
   const source = "# 合成资料\n\n" + "这是无关的背景信息，仅用于测试长文。\n\n".repeat(500) + "## 尾部证据\n\n蓝鲸校验码 QAZX739 的处理条件是先验证材料，再申请复核。\n"
   const sourceHash = hashDocumentText(source)
-  const passages = buildDocumentPassages(source, "合成资料")
   const [document] = await runtime`insert into petrichor_doc_document(user_id,library_id,file_name,title,file_type,object_key,status,updated_at)
     values(${userId},${libraryId},'synthetic.md','合成资料','markdown','synthetic-only','ready','2026-01-01T00:00:00Z') returning id`
   const documentId = Number(document.id)
   const profile = { modelRefId: 1, model: "synthetic-not-called", dimensions: 1024, version: 1, key: "synthetic" }
   const prepared = prepareIndexManifest([{ documentId, sourceHash, updatedAt: "2026-01-01T00:00:00.000Z" }], profile)
-  async function generation() {
+  async function generation(version: 1 | 2) {
+    const snapshot = prepareIndexManifest(prepared.manifest.documents, profile, version)
+    const passages = buildDocumentPassages(source, "合成资料", version)
     const [g] = await runtime`insert into petrichor_doc_index_generation(user_id,library_id,manifest_hash,manifest_json,embedding_profile_json,preprocessing_version,expected_documents)
-      values(${userId},${libraryId},${prepared.manifestHash},${JSON.stringify(prepared.manifest)},${JSON.stringify(profile)},1,1) returning id`
+      values(${userId},${libraryId},${snapshot.manifestHash},${JSON.stringify(snapshot.manifest)},${JSON.stringify(profile)},${version},1) returning id`
     for (const p of passages) {
       await runtime`insert into petrichor_doc_passage(generation_id,user_id,library_id,document_id,passage_index,source_hash,content_hash,start_offset,end_offset,parent_start_offset,parent_end_offset,locator,text,search_tokens)
         values(${g.id},${userId},${libraryId},${documentId},${p.passageIndex},${p.sourceHash},${p.contentHash},${p.startOffset},${p.endOffset},${p.parentStartOffset},${p.parentEndOffset},${p.locator},${p.text},${p.searchTokens})`
@@ -34,7 +35,7 @@ export async function verifyIndexFixture(runtime: ReturnType<typeof postgres>, u
     await runtime`update petrichor_doc_index_generation set status='ready',completed_documents=1,passage_count=${passages.length},is_current=true where id=${g.id}`
     return Number(g.id)
   }
-  const generationId = await generation()
+  const generationId = await generation(1)
   const session = createDocumentIndexReadSession()
   const input = { userId, libraryIds: [libraryId], query: "QAZX739", session }
   const search = await searchDocumentIndex(input)
@@ -49,7 +50,7 @@ export async function verifyIndexFixture(runtime: ReturnType<typeof postgres>, u
   await rejects("index_foreign_user_no_read", "版本已失效", () => readDocumentIndexPassage({ ...readInput, userId: userId + 10000 }))
   await rejects("index_wrong_hash_rejected", "hash不匹配", () => readDocumentIndexPassage({ ...readInput, contentHash: "0".repeat(64) }))
   await runtime`update petrichor_doc_index_generation set is_current=false,status='retired' where id=${generationId}`
-  const nextGeneration = await generation()
+  const nextGeneration = await generation(2)
   check((await searchDocumentIndex(input)).hits[0]?.generationId === generationId, "index_session_pins_retired_generation")
   check((await searchDocumentIndex({ ...input, session: createDocumentIndexReadSession() })).hits[0]?.generationId === nextGeneration, "index_new_session_uses_current")
   await readDocumentIndexPassage(readInput)
@@ -64,7 +65,7 @@ export async function verifyIndexFixture(runtime: ReturnType<typeof postgres>, u
   await rejects("index_expired_budget_stops", "超时", () => searchDocumentIndex({ ...input, session: undefined, queryDeadlineAt: Date.now() - 1 }))
   const jobs = await import("../src/server/doc-library/index-jobs")
   const [building] = await runtime`insert into petrichor_doc_index_generation(user_id,library_id,manifest_hash,manifest_json,embedding_profile_json,preprocessing_version,expected_documents)
-    values(${userId},${libraryId},${prepared.manifestHash},${JSON.stringify(prepared.manifest)},${JSON.stringify(profile)},1,1) returning id`
+    values(${userId},${libraryId},${prepared.manifestHash},${JSON.stringify(prepared.manifest)},${JSON.stringify(profile)},${prepared.manifest.preprocessingVersion},1) returning id`
   const approval = { approvalId: "synthetic-only", manifestHash: prepared.manifestHash, maxInputTokens: 100, maxCostMicrousd: 100, expiresAt: new Date(Date.now() + 60000).toISOString() }
   const [pending] = await runtime`insert into petrichor_doc_index_job(generation_id,user_id,library_id,document_id,source_hash,idempotency_key,approved_budget_json,available_at)
     values(${building.id},${userId},${libraryId},${documentId},${sourceHash},'synthetic-index-job',${JSON.stringify(approval)},'2020-01-01T00:00:00Z') returning id`

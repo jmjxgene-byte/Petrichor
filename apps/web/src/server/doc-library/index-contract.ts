@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { DOCUMENT_PREPROCESSING_VERSION, hashDocumentText } from "./passage-builder"
+import { DOCUMENT_PREPROCESSING_VERSION, hashDocumentText, type DocumentPreprocessingVersion } from "./passage-builder"
 
 export const indexEmbeddingProfileSchema = z.object({
     modelRefId: z.number().int().positive(), model: z.string().min(1).max(200),
@@ -18,12 +18,13 @@ export const indexApprovalSchema = z.object({
     expiresAt: z.string().datetime(),
 }).strict()
 
-export function prepareIndexManifest(rawDocuments: unknown, rawProfile: unknown) {
+export function prepareIndexManifest(rawDocuments: unknown, rawProfile: unknown, version: DocumentPreprocessingVersion = DOCUMENT_PREPROCESSING_VERSION) {
+    if (version !== 1 && version !== 2) throw new Error("不支持的索引预处理版本")
     const profile = indexEmbeddingProfileSchema.parse(rawProfile)
     const documents = z.array(indexSnapshotSchema).min(1).max(10_000).parse(rawDocuments)
         .sort((a, b) => a.documentId - b.documentId)
     if (new Set(documents.map((doc) => doc.documentId)).size !== documents.length) throw new Error("manifest含重复文档")
-    const manifest = { preprocessingVersion: DOCUMENT_PREPROCESSING_VERSION, profile, documents }
+    const manifest = { preprocessingVersion: version, profile, documents }
     return { manifest, manifestHash: hashDocumentText(JSON.stringify(manifest)) }
 }
 
@@ -35,10 +36,10 @@ export function requireIndexApproval(raw: unknown, manifestHash: string, now = D
 }
 
 export function parseStoredIndexManifest(raw: string, expectedHash: string) {
-    const parsed = z.object({ preprocessingVersion: z.literal(DOCUMENT_PREPROCESSING_VERSION),
+    const parsed = z.object({ preprocessingVersion: z.union([z.literal(1), z.literal(2)]),
         documents: z.array(indexSnapshotSchema), profile: indexEmbeddingProfileSchema,
     }).strict().parse(JSON.parse(raw))
-    const prepared = prepareIndexManifest(parsed.documents, parsed.profile)
+    const prepared = prepareIndexManifest(parsed.documents, parsed.profile, parsed.preprocessingVersion)
     if (prepared.manifestHash !== expectedHash) throw new Error("索引manifest校验失败")
     return prepared.manifest
 }

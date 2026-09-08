@@ -12,7 +12,7 @@ const profile = { modelRefId: 1, model: "synthetic", dimensions: 2, version: 1, 
 const snapshot = { documentId: 1, updatedAt: now.toISOString(), sourceHash: hashDocumentText(source) }
 const prepared = prepareIndexManifest([snapshot], profile)
 const generation = { id: 3, userId: 7, libraryId: 2, status: "building", manifestJson: JSON.stringify(prepared.manifest),
-    manifestHash: prepared.manifestHash, expectedDocuments: 1, embeddingProfileJson: JSON.stringify(profile), preprocessingVersion: 1 }
+    manifestHash: prepared.manifestHash, expectedDocuments: 1, embeddingProfileJson: JSON.stringify(profile), preprocessingVersion: prepared.manifest.preprocessingVersion }
 const job = { id: 4, userId: 7, libraryId: 2, documentId: 1, generationId: 3, sourceHash: snapshot.sourceHash, status: "running",
     leaseOwner: "worker", leaseExpiresAt: new Date(now.getTime() + 60000), consumedInputTokens: 10 }
 const document = { id: 1, updatedAt: now, title: "合成标题" }

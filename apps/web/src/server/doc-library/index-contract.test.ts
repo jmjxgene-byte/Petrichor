@@ -1,9 +1,18 @@
 import { describe, expect, it } from "vitest"
-import { prepareIndexManifest, requireIndexApproval } from "./index-contract"
+import { parseStoredIndexManifest, prepareIndexManifest, requireIndexApproval } from "./index-contract"
 const profile = { modelRefId: 1, model: "synthetic", dimensions: 1024, version: 1, key: "synthetic:v1" }
 const doc = { documentId: 1, sourceHash: "a".repeat(64), updatedAt: "2026-09-08T00:00:00.000Z" }
 
 describe("索引manifest与审批绑定", () => {
+    it("旧v1 manifest按原版本核验，新构建v2不复用旧hash或审批", () => {
+        const old = prepareIndexManifest([doc], profile, 1)
+        const current = prepareIndexManifest([doc], profile)
+        expect(current.manifest.preprocessingVersion).toBe(2)
+        expect(parseStoredIndexManifest(JSON.stringify(old.manifest), old.manifestHash)).toEqual(old.manifest)
+        expect(current.manifestHash).not.toBe(old.manifestHash)
+        expect(() => parseStoredIndexManifest(JSON.stringify(current.manifest), old.manifestHash)).toThrow("校验失败")
+        expect(() => parseStoredIndexManifest(JSON.stringify({ ...old.manifest, preprocessingVersion: 3 }), old.manifestHash)).toThrow()
+    })
     it("顺序无关，模型/源内容变化必须产生不同manifest", () => {
         const other = { ...doc, documentId: 2 }
         expect(prepareIndexManifest([doc, other], profile)).toEqual(prepareIndexManifest([other, doc], profile))

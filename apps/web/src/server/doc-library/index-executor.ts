@@ -44,7 +44,7 @@ export async function runDocumentIndexJob(job: Pick<IndexJob, "sourceHash" | "do
         const snapshot = manifest.documents.find((doc) => doc.documentId === job.documentId)
         if (!snapshot || (snapshot.sourceFormat ?? "raw_markdown") !== loaded.sourceFormat) throw new Error("source_format_changed")
         if (JSON.stringify(provider.profile) !== JSON.stringify(manifest.profile)) throw new Error("profile_changed")
-        const passages = buildDocumentPassages(loaded.source, loaded.title)
+        const passages = buildDocumentPassages(loaded.source, loaded.title, manifest.preprocessingVersion)
         const values = passages.map((passage) => `${loaded.title}\n${passage.locator}\n${passage.text}`)
         const reservation = provider.quote(values)
         controller.signal.throwIfAborted()

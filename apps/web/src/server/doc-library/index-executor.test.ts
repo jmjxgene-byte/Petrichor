@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { runDocumentIndexJob, type IndexExecutionDeps } from "./index-executor"
 import { prepareIndexManifest } from "./index-contract"
-import { hashDocumentText } from "./passage-builder"
+import { buildDocumentPassages, hashDocumentText } from "./passage-builder"
 const source = "合成正文"
 const profile = { modelRefId: 1, model: "synthetic", dimensions: 2, version: 1, key: "synthetic" }
 const job = { documentId: 1, sourceHash: hashDocumentText(source) }
@@ -18,6 +18,16 @@ function fixture() {
     return { deps, embed, quote }
 }
 describe("索引执行链路（假provider）", () => {
+    it.each([1, 2] as const)("执行版本%d任务时按manifest版本切片", async (version) => {
+        const f = fixture(), raw = "# 章节\n\n段落一。\n\n段落二。\n\n段落三。"
+        const hash = hashDocumentText(raw)
+        const m = prepareIndexManifest([{ documentId: 1, sourceHash: hash, updatedAt: "2026-09-08T00:00:00Z" }], profile, version)
+        f.deps.load.mockResolvedValue({ source: raw, title: "合成", sourceFormat: "raw_markdown", manifestJson: JSON.stringify(m.manifest), manifestHash: m.manifestHash })
+        const passages = buildDocumentPassages(raw, "合成", version)
+        f.embed.mockImplementation(async values => values.map(() => [1, 0]))
+        expect(await runDocumentIndexJob({ documentId: 1, sourceHash: hash }, f.deps)).toBe("succeeded")
+        expect(f.embed.mock.calls[0][0]).toEqual(passages.map(p => `合成\n${p.locator}\n${p.text}`))
+    })
     it("generation取消导致完成登记被拒绝时优先确认取消，不误报模型失败", async () => {
         const f = fixture()
         f.deps.complete.mockRejectedValueOnce(new Error("generation no longer building"))

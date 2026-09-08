@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto"
 import { buildIndexTokenText } from "@/server/retrieval/tokenize"
 
-export const DOCUMENT_PREPROCESSING_VERSION = 1
+export const DOCUMENT_PREPROCESSING_VERSION = 2
+export type DocumentPreprocessingVersion = 1 | 2
 const CHILD_TARGET = 768
 const OVERLAP = 80
 const PARENT_MAX = 4_000
@@ -16,7 +17,8 @@ export function hashDocumentText(text: string): string {
 }
 
 /** 位置是未归一化原字符串的UTF-16 offset；CRLF/BOM保持原样，回读必须核验sourceHash。 */
-export function buildDocumentPassages(source: string, title: string): BuiltPassage[] {
+export function buildDocumentPassages(source: string, title: string, version: DocumentPreprocessingVersion = DOCUMENT_PREPROCESSING_VERSION): BuiltPassage[] {
+    if (version !== 1 && version !== 2) throw new Error("不支持的文档预处理版本")
     if (Buffer.byteLength(source, "utf8") > 8 * 1024 * 1024) throw new Error("文档超过8MiB")
     const sourceHash = hashDocumentText(source)
     const messageHeading = /^##\s+\d{4}\\?-\d{2}\\?-\d{2}\s+\d{2}:\d{2}(?::\d{2})?(?:\s|$)/
@@ -37,7 +39,8 @@ export function buildDocumentPassages(source: string, title: string): BuiltPassa
         if (units.length >= 40_000) throw new Error("文档结构单元超过安全上限")
         if (end > start && source.slice(start, end).trim()) {
             const previous = units.at(-1)
-            if (message && !atomic && previous?.message && !previous.atomic && previous.section === section && end - previous.start <= CHILD_TARGET) {
+            const canPack = previous && ((message && previous.message) || (version === 2 && !message && !previous.message))
+            if (canPack && !atomic && !previous.atomic && previous.section === section && end - previous.start <= CHILD_TARGET) {
                 previous.end = end
             } else units.push({ start, end, locator: locator(), atomic, section, message })
         }

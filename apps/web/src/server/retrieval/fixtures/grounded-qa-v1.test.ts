@@ -3,6 +3,15 @@ import { buildDocumentPassages, hashDocumentText } from "@/server/doc-library/pa
 import { syntheticQaCases, syntheticQaDocuments, syntheticQaDataset } from "./grounded-qa-v1"
 import { QA_GROUP_COUNTS } from "../grounded-evaluation"
 describe("固定60题合成语料契约", () => {
+    it("v1长文片段集合保持旧版本身份，v2只改变派生片段不改原文", () => {
+        const doc = syntheticQaDocuments[0]
+        const old = buildDocumentPassages(doc.text, doc.title, 1)
+        expect(old).toHaveLength(1005)
+        expect(hashDocumentText(JSON.stringify(old.map(p => ({ index: p.passageIndex, hash: p.contentHash, start: p.startOffset, end: p.endOffset }))))).toBe("6cee0c38879030c595783e6b6967266ae1aa8cef36dfd000960a97261eeb44cf")
+        const current = buildDocumentPassages(doc.text, doc.title)
+        expect(current).toHaveLength(46)
+        expect(current.map(p => p.text).join("")).toBe(doc.text)
+    })
     it("固定版本SHA，变更题目或语料须创建新版本", () => {
         expect(hashDocumentText(JSON.stringify(syntheticQaDataset))).toBe("55eee733924fcda56d2ad3f6ff52bb4b546a6564db9e6bf858639f3d42d3ba1e")
     })

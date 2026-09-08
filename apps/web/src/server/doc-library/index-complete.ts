@@ -64,7 +64,7 @@ export async function completeDocumentIndexJob(input: {
         const [document] = await tx.select().from(docDocuments).where(and(eq(docDocuments.id, job.documentId),
             eq(docDocuments.userId, job.userId), eq(docDocuments.libraryId, job.libraryId), eq(docDocuments.status, "ready"))).for("share")
         if (!document || !snapshot || snapshot.updatedAt !== document.updatedAt.toISOString() || snapshot.sourceHash !== sourceHash) throw new Error("源文档快照已变化")
-        const passages = buildDocumentPassages(input.source, document.title)
+        const passages = buildDocumentPassages(input.source, document.title, manifest.preprocessingVersion)
         const vectors = serializeIndexVectors(input.embeddings, passages.length, profile.dimensions)
         for (let offset = 0; offset < passages.length; offset += 50) {
             if (!hasLiveIndexLease(job, input.workerId, clock ?? new Date())) throw new Error("写入期间租约已过期")

@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { buildDocumentPassages, hashDocumentText } from "@/server/doc-library/passage-builder"
+import { buildDocumentPassages, DOCUMENT_PREPROCESSING_VERSION, hashDocumentText } from "@/server/doc-library/passage-builder"
 import { syntheticQaDataset } from "./fixtures/grounded-qa-v1"
 
 export const FROZEN_QA_DATASET_SHA = "55eee733924fcda56d2ad3f6ff52bb4b546a6564db9e6bf858639f3d42d3ba1e"
@@ -26,7 +26,7 @@ export function planGroundedCanary(rawIds: unknown = DEFAULT_CANARY_DOCUMENTS) {
         }
     })
     const included = syntheticQaDataset.cases.filter(row => row.scope.every(id => ids.includes(id)))
-    const contract = { datasetSha: FROZEN_QA_DATASET_SHA, documents, caseIds: included.map(row => row.id) }
+    const contract = { datasetSha: FROZEN_QA_DATASET_SHA, preprocessingVersion: DOCUMENT_PREPROCESSING_VERSION, documents, caseIds: included.map(row => row.id) }
     return { mode: "plan_only", authorizedToExecute: false, planHash: hashDocumentText(JSON.stringify(contract)), ...contract,
         totals: { documents: documents.length, passages: documents.reduce((n, d) => n + d.passageCount, 0),
             sourceBytes: documents.reduce((n, d) => n + d.sourceBytes, 0), passageTextBytes: documents.reduce((n, d) => n + d.passageTextBytes, 0),
