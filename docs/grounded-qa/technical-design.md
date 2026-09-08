@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08模型与价格前置节点：Deep取得执行占位后先resolveChatModel读取模型元数据及匿名价格，价格/分组倍率不可用则validation_failed，尚未开始规划模型调用。规划与综合传同一modelRefId/expectedModelFingerprint；generation在重新解析后、generateText之前验证模型ID/版本、provider ID/key/baseURL/版本、credential ID/版本及options的指纹，阻止失效模型自动回落与运行中配置漂移。指纹不访问runtime/API Key；未传指纹的旧调用保持行为。全量2workers下1374通过/40既有跳过，typecheck/lint/build通过，假SDK验证不匹配时不调用generateText。该前置检查没有用户金额审批、报价锁价或累计预算预留，实际provider/价格/生产Job仍未验收。
+
 2026-09-08费用未知值节点：New API token计费必须显式提供model_ratio/completion_ratio，按次计费必须提供model_price，未知quota_type拒绝，不再把缺失价格默认成免费；未参与该计费分支的字段才保留兼容0。估算拒绝负值/非整数/NaN用量，generation usage新增totalsKnown，只有输入/输出/总token完整且自洽才为true，原计数字段保持兼容。Deep两处估算检查开始/完成调用数及totalsKnown，失败或缺失用量报告usage_incomplete，不伪装零费用。全量2workers下1371通过/40既有跳过，typecheck/lint/build通过；测试使用假fetcher，无真实报价或模型。当前pricing仍在planner之后读取，首次调用前的金额审批、模型锁定与累计费用预留仍未实现，不能据此放行真实批处理。
 
 2026-09-08Deep执行占位节点：reserveDeepResearchExecution在有效租约行锁下INSERT唯一agent_run，on conflict不创建，仅返回一行才允许模型工作；替代会吞创建错误的通用createAgentRunRecord。元数据只记录question-message引用及modelWorkReserved，不写原始问题。未取得占位的执行器不更新既有Run审计。新capability snapshot带reservationVersion=1；租约恢复仅重试v1且无Run记录的任务，已有Run或旧协议保守失败，避免把未知费用当零。该方案牺牲已开始模型任务的自动恢复，仍需后续金额预算/阶段级持久授权，不宣称完整累计费用治理。SQL形状/唯一冲突/连接关闭和旧新协议测试通过，全量2workers下1365通过/40既有跳过，typecheck/lint/build通过；真实PG原子性/并发未验收，未运行生产Job或模型。

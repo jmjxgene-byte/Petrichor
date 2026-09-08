@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm"
 
-import { callChatCompletion, type ChatCompletionResult } from "@/server/ai/generation"
+import { callChatCompletion, resolveChatModel, type ChatCompletionResult } from "@/server/ai/generation"
+import { chatModelFingerprint } from "@/server/ai/model-identity"
 import { getDb } from "@/server/db/client"
 import { agentRuns, assistantMessages, assistantThreads, deepResearchJobs, users } from "@/server/db/schema"
 import { sourceTools } from "./agent-runtime/tools/sources"
@@ -119,9 +120,21 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
         }
         executionReserved = true
         controller.signal.throwIfAborted()
+        const selectedModel = await resolveChatModel({ userId: job.userId })
+        const fixedModelRefId = selectedModel.model.id
+        const expectedModelFingerprint = chatModelFingerprint(selectedModel)
+        pricingSnapshot = await fetchDeepResearchPricingSnapshot({
+            providerKey: selectedModel.provider.providerKey,
+            baseUrl: selectedModel.provider.baseUrl,
+            modelId: selectedModel.model.modelId,
+        })
+        if (pricingSnapshot.status !== "available" || Object.keys(pricingSnapshot.groupRatios).length === 0) throw new DeepResearchExecutionError("validation_failed", "模型价格无法核验，未开始模型调用")
+        controller.signal.throwIfAborted()
         modelCallsStarted += 1
         const planner = await callModelOrThrow({
             userId: job.userId,
+            modelRefId: fixedModelRefId,
+            expectedModelFingerprint,
             maxOutputTokens: DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.planner,
             maxRetries: DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.maxRetriesPerCall,
             systemPrompt: [
@@ -138,11 +151,6 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
         inputTokens += planner.usage.inputTokens
         outputTokens += planner.usage.outputTokens
         await db.update(agentRuns).set({ model: modelName }).where(eq(agentRuns.runKey, job.runKey))
-        pricingSnapshot = await fetchDeepResearchPricingSnapshot({
-            providerKey: planner.resolved.provider.providerKey,
-            baseUrl: planner.resolved.provider.baseUrl,
-            modelId: planner.modelName,
-        })
 
         const result = await runDeepResearchPipeline({ question, modes, signal: controller.signal }, {
             planQueries: async () => parseQueryPlan(planner.answer),
@@ -185,6 +193,8 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
                 modelCallsStarted += 1
                 const completion = await callModelOrThrow({
                     userId: job.userId,
+                    modelRefId: fixedModelRefId,
+                    expectedModelFingerprint,
                     maxOutputTokens: DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.synthesis,
                     maxRetries: DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.maxRetriesPerCall,
                     systemPrompt: [

@@ -15,6 +15,7 @@ import {
 } from "@/server/ai/resolution"
 import { guessContextWindow } from "@/server/ai/provider-catalog"
 import type { AiPurpose } from "@/server/ai/config-logic"
+import { chatModelFingerprint } from "./model-identity"
 
 const log = createLogger("ai-generation")
 
@@ -52,6 +53,7 @@ export async function callChatCompletion(input: {
     userId: number
     purpose?: AiPurpose
     modelRefId?: number | null
+    expectedModelFingerprint?: string
     maxOutputTokens?: number
     maxRetries?: number
     systemPrompt?: string | null
@@ -69,6 +71,7 @@ export async function callChatCompletion(input: {
             modelRefId: input.modelRefId ?? null,
         })
         modelName = resolved.model.modelId
+        if (input.expectedModelFingerprint && chatModelFingerprint(resolved) !== input.expectedModelFingerprint) throw new Error("模型配置已变化，本次调用已拒绝")
 
         const { system, messages } = buildPrompt(input)
         const maxOutputTokens = resolveMaxOutputTokens(
