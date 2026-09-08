@@ -105,6 +105,18 @@ function baseRequest(model: unknown, goal: string) {
 }
 
 describe("Agent Runtime 集成", () => {
+    it.each(["简短但有引用的结论[1]", "没有引用的短结论"])("丰富资料也不因答案短而自动扩写：%s", async (answer) => {
+        tools.register(makeTool("source.lookup", "lookup_sources", "source", async () => ({}), { core: true,
+            normalize: () => ({ summary: "合成深读", evidence: [{ source: "document", sourceId: "fixture-rich", title: "合成", content: "合成资料说明适用条件。".repeat(100) }] }),
+        }))
+        const result = await new PetrichorAgentRuntime({ tools, skills }).run({ ...baseRequest(scriptedModel([
+            { kind: "text", text: answer }, { kind: "text", text: "不应出现的额外扩写[1]" },
+        ]), "合成规则是什么？"), focus: { libraryId: "3" } })
+        expect(result.state.tokenUsage.total).toBe(15)
+        expect(result.answer).not.toContain("额外扩写")
+        if (answer.endsWith("[1]")) expect(result.answer).toBe(answer)
+        else expect(result.answer).toContain("未通过资料引用核验")
+    })
     it("资料数量问题只走范围统计，不搜索正文或调用模型猜数", async () => {
         tools.register(makeTool("source.overview", "source_overview", "source", async () => ({ rows: [{ name: "合成", kind: "doc-library", total: 7, ready: 5, available: true }] }), { core: true }))
         tools.register(makeTool("source.lookup", "lookup_sources", "source", async () => { throw new Error("不应正文检索") }, { core: true }))

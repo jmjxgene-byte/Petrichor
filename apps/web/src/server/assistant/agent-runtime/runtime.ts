@@ -628,7 +628,9 @@ export class PetrichorAgentRuntime {
             // 主 Agent 在同一 Mastra 段内完成工具调用后可以直接输出答案；过去只要非空就交付，
             // 导致“读了多个章节，最后只压成一句话”。质量门只在证据丰富且回答明显不足时重写，
             // 正常答案和用户明确要求简短的场景都不会增加一次 LLM 调用。
-            if (answer && evidence.size > 0 && (stopReason === "goal_completed" || stopReason === "enough_evidence")) {
+            // 资料问答不能以字数/段落数代替支持度，也不能为补长度额外扩写。
+            // 其引用门在收尾执行；语义支持度仍由独立的证据评测验收。
+            if (!requiresGrounding && answer && evidence.size > 0 && (stopReason === "goal_completed" || stopReason === "enough_evidence")) {
                 const quality = assessAnswerQuality({
                     goal: request.goal,
                     answer,
