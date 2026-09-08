@@ -23,6 +23,10 @@ describe("resolveMaxOutputTokens", () => {
 })
 
 describe("normalizeChatCompletionUsage", () => {
+    it("缺失或不一致的总量不能视为已知零费用", () => {
+        expect(normalizeChatCompletionUsage({ inputTokenDetails: {}, outputTokenDetails: {} }).totalsKnown).toBe(false)
+        expect(normalizeChatCompletionUsage({ inputTokens: 10, outputTokens: 5, totalTokens: 16, inputTokenDetails: {}, outputTokenDetails: {} }).totalsKnown).toBe(false)
+    })
     it("保留text/reasoning和缓存token明细，未知字段使用null", () => {
         expect(normalizeChatCompletionUsage({
             inputTokens: 100,
@@ -31,6 +35,7 @@ describe("normalizeChatCompletionUsage", () => {
             inputTokenDetails: { noCacheTokens: 80, cacheReadTokens: 20 },
             outputTokenDetails: { textTokens: 30, reasoningTokens: 5 },
         })).toEqual({
+            totalsKnown: true,
             inputTokens: 100,
             outputTokens: 35,
             totalTokens: 135,

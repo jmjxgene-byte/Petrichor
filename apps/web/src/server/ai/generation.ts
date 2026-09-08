@@ -29,6 +29,7 @@ export interface ChatCompletionResult {
     modelName: string
     reasoning: string | null
     usage: {
+        totalsKnown?: boolean
         inputTokens: number
         outputTokens: number
         totalTokens: number
@@ -126,6 +127,8 @@ export function normalizeChatCompletionUsage(usage: {
     }
 }): ChatCompletionResult["usage"] {
     return {
+        totalsKnown: [usage.inputTokens, usage.outputTokens, usage.totalTokens].every((value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0)
+            && usage.totalTokens === (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
         inputTokens: usage.inputTokens ?? 0,
         outputTokens: usage.outputTokens ?? 0,
         totalTokens: usage.totalTokens ?? 0,

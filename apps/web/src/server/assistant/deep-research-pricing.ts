@@ -9,9 +9,9 @@ const pricingResponseSchema = z.object({
     data: z.array(z.object({
         model_name: z.string().max(200),
         quota_type: z.number().int(),
-        model_ratio: z.number().finite().nonnegative().max(1_000_000).optional().default(0),
-        completion_ratio: z.number().finite().nonnegative().max(1_000_000).optional().default(0),
-        model_price: z.number().finite().nonnegative().max(1_000_000).optional().default(0),
+        model_ratio: z.number().finite().nonnegative().max(1_000_000).optional(),
+        completion_ratio: z.number().finite().nonnegative().max(1_000_000).optional(),
+        model_price: z.number().finite().nonnegative().max(1_000_000).optional(),
         enable_groups: z.array(z.string().max(64)).max(50).optional(),
         enable_group: z.array(z.string().max(64)).max(50).optional(),
     }).passthrough()),
@@ -77,6 +77,9 @@ export async function fetchDeepResearchPricingSnapshot(input: {
         }
         const model = parsed.data.data.find((item) => item.model_name === input.modelId)
         if (!model) return { status: "unavailable", reason: "model_missing" }
+        if ((model.quota_type !== 0 && model.quota_type !== 1)
+            || (model.quota_type === 0 && (model.model_ratio == null || model.completion_ratio == null))
+            || (model.quota_type === 1 && model.model_price == null)) return { status: "unavailable", reason: "invalid_response" }
         const enabledGroups = model.enable_groups ?? model.enable_group ?? []
         const groupRatios = Object.fromEntries(Object.entries(parsed.data.group_ratio)
             .filter(([group]) => group.length <= 64
@@ -88,9 +91,9 @@ export async function fetchDeepResearchPricingSnapshot(input: {
             capturedAt: (input.now ?? new Date()).toISOString(),
             modelId: input.modelId,
             quotaType: model.quota_type,
-            modelRatio: model.model_ratio,
-            completionRatio: model.completion_ratio,
-            modelPrice: model.model_price,
+            modelRatio: model.model_ratio ?? 0,
+            completionRatio: model.completion_ratio ?? 0,
+            modelPrice: model.model_price ?? 0,
             groupRatios,
         }
     } catch {
@@ -103,9 +106,13 @@ export function estimateDeepResearchCost(input: {
     inputTokens: number
     outputTokens: number
     modelCalls: number
+    usageComplete?: boolean
 }): DeepResearchCostEstimate {
     if (input.snapshot.status !== "available") return input.snapshot
+    if (input.usageComplete === false) return { status: "unavailable", reason: "usage_incomplete" }
+    if (![input.inputTokens, input.outputTokens, input.modelCalls].every((value) => Number.isSafeInteger(value) && value >= 0)) return { status: "unavailable", reason: "invalid_usage" }
     const snapshot = input.snapshot
+    if (snapshot.quotaType !== 0 && snapshot.quotaType !== 1) return { status: "unavailable", reason: "unsupported_quota_type" }
     const ratios = Object.values(snapshot.groupRatios)
     if (ratios.length === 0) {
         return { status: "unavailable", reason: "group_ratio_missing" }
