@@ -37,6 +37,7 @@ const log = createLogger("agent-runtime-store")
  */
 
 export type PersistRunInput = {
+    redactAuxiliaryText?: boolean
     runKey: string
     conversationId: string
     threadId?: number | null
@@ -81,7 +82,7 @@ export async function createAgentRunRecord(input: PersistRunInput): Promise<void
             threadId: input.threadId ?? null,
             userId: input.userId,
             model: input.model,
-            goal: input.goal.slice(0, 4_000),
+            goal: input.redactAuxiliaryText ? "[redacted]" : input.goal.slice(0, 4_000),
             complexity: input.complexity,
             status: "running",
             retryOfRunKey: input.retryOfRunKey ?? null,
@@ -93,6 +94,7 @@ export async function createAgentRunRecord(input: PersistRunInput): Promise<void
 }
 
 export async function finishAgentRunRecord(input: {
+    redactAuxiliaryText?: boolean
     runKey: string
     questionMessageId?: number | null
     state: AgentState
@@ -101,14 +103,20 @@ export async function finishAgentRunRecord(input: {
     evaluation?: AgentRunEval
 }): Promise<void> {
     const { state, trace } = input
+    const redactAuxiliaryText = input.redactAuxiliaryText || traceContainsExternalSource(trace)
+    const plan = redactAuxiliaryText ? state.plan.map((step) => ({ id: step.id, goal: "[redacted]", status: step.status,
+        ...(step.dependsOn ? { dependsOn: step.dependsOn } : {}) })) : state.plan
+    const routing = trace.routingHint && redactAuxiliaryText
+        ? { domains: trace.routingHint.domains, confidence: trace.routingHint.confidence } : trace.routingHint
     try {
         await getDb().update(agentRuns).set({
             status: state.status,
+            ...(redactAuxiliaryText ? { goal: "[redacted]" } : {}),
             stopReason: state.stopReason ?? null,
             answer: input.answer.slice(0, 100_000),
             complexity: state.complexity,
-            routingHintJson: trace.routingHint ? JSON.stringify(trace.routingHint) : null,
-            planJson: state.plan.length > 0 ? JSON.stringify(state.plan) : null,
+            routingHintJson: routing ? JSON.stringify(routing) : null,
+            planJson: plan.length > 0 ? JSON.stringify(plan) : null,
             loadedSkillsJson: state.loadedSkills.length > 0 ? JSON.stringify(state.loadedSkills) : null,
             metricsJson: JSON.stringify({ latency: trace.latency, ...(input.questionMessageId == null ? {} : { questionMessageId: String(input.questionMessageId) }) }),
             evalJson: input.evaluation ? JSON.stringify(input.evaluation) : null,
@@ -255,6 +263,7 @@ export async function persistSubtasks(runKey: string, trace: AgentTrace): Promis
 
 /** Run 结束后一次性落库；调用方不应 await 阻塞流式响应关闭 */
 export async function persistAgentRun(input: {
+    redactAuxiliaryText?: boolean
     questionMessageId?: number | null
     state: AgentState
     trace: AgentTrace
@@ -264,6 +273,7 @@ export async function persistAgentRun(input: {
 }): Promise<void> {
     await Promise.allSettled([
         finishAgentRunRecord({
+            redactAuxiliaryText: input.redactAuxiliaryText,
             runKey: input.state.runId,
             questionMessageId: input.questionMessageId,
             state: input.state,
