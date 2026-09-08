@@ -1,4 +1,5 @@
 import type postgres from "postgres"
+import type { CreateDeepResearchJobInput } from "../src/server/assistant/deep-research-job-store"
 
 /** 由已验证身份的隔离PG客户端调用；不导入Worker、模型或真实环境文件。 */
 export async function verifyDeepFixture(runtime: ReturnType<typeof postgres>, userId: number, url: string, checks: string[]) {
@@ -18,11 +19,12 @@ export async function verifyDeepFixture(runtime: ReturnType<typeof postgres>, us
   try {
     const [thread] = await runtime`insert into petrichor_assistant_thread(user_id,title) values(${userId},'synthetic deep') returning id`
     const [question] = await runtime`insert into petrichor_assistant_message(thread_id,role,content_json) values(${thread.id},'user','{"parts":[]}') returning id`
-    const make = async (key: string) => {
+    const make = async (key: string, overrides: Partial<CreateDeepResearchJobInput> = {}) => {
       const created = await store.createDeepResearchJob({
       runKey: key, idempotencyKey: key, threadId: Number(thread.id), userId,
       questionMessageId: Number(question.id), sourceScopeHash: "synthetic",
       capabilitySnapshot: { reservationVersion: 1, contractVersion: 2, sourceCutoffs: {}, allowedModes: ["exact"], wikiReady: false, graphReady: false, qualityStale: false, capturedAt: new Date().toISOString() },
+      ...overrides,
       })
       // PostgreSQL now()含微秒，JS Date仅毫秒；显式构造已到期队列，避免即时领取的时钟竞态。
       await runtime`update petrichor_deep_research_job set available_at='2020-01-01T00:00:00Z' where id=${created.id}`
@@ -30,7 +32,7 @@ export async function verifyDeepFixture(runtime: ReturnType<typeof postgres>, us
     }
     const [one, duplicate] = await Promise.all([make("fixture_deep_one"), make("fixture_deep_one")])
     check(one.id === duplicate.id, "deep_concurrent_create_idempotent")
-    for (let index = 0; index < 12; index++) {
+    for (let index = 0; index < 200; index++) {
       const key = `fixture_deep_race_${index}`
       const batch = await Promise.allSettled([make(key), make(key), make(key)])
       const failed = batch.find((result) => result.status === "rejected")
@@ -39,7 +41,17 @@ export async function verifyDeepFixture(runtime: ReturnType<typeof postgres>, us
       if (new Set(ids).size !== 1) throw new Error("deep_repeated_create_id_mismatch")
       await store.requestDeepResearchJobCancellation(key, userId)
     }
-    check(true, "deep_twelve_concurrent_create_batches")
+    check(true, "deep_200_concurrent_create_batches")
+    for (const [label, overrides] of [
+      ["deep_run_key_collision_rejected", { idempotencyKey: "different-idempotency-key" }],
+      ["deep_scope_collision_rejected", { sourceScopeHash: "different-scope" }],
+      ["deep_fast_run_collision_rejected", { fastRunKey: "different-fast-run" }],
+    ] as const) {
+      let rejected = false
+      try { await make(one.runKey, overrides) }
+      catch (error) { rejected = error instanceof Error && error.message === "深度检索幂等键冲突" }
+      check(rejected, label)
+    }
     check(await store.getDeepResearchJob(one.runKey, userId + 10000) === null, "deep_foreign_user_denied")
     const claimed = await Promise.all([store.claimDeepResearchJob({ workerId: "a" }), store.claimDeepResearchJob({ workerId: "b" })])
     const job = claimed.find((row) => row != null)

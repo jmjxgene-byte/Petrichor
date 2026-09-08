@@ -112,7 +112,9 @@ export async function createDeepResearchJob(input: CreateDeepResearchJobInput) {
             sourceScopeHash: input.sourceScopeHash,
             capabilitySnapshotJson: JSON.stringify(capabilitySnapshot),
         })
-        .onConflictDoNothing({ target: deepResearchJobs.idempotencyKey })
+        // 同一请求同时命中run_key与idempotency_key；仅指定后者不能覆盖并发时前者的23505。
+        // 不限定冲突索引，随后严格核验幂等身份；真正的run_key碰撞仍拒绝。
+        .onConflictDoNothing()
         .returning()
     if (created) return created
 
@@ -122,6 +124,12 @@ export async function createDeepResearchJob(input: CreateDeepResearchJobInput) {
         .where(and(
             eq(deepResearchJobs.idempotencyKey, input.idempotencyKey),
             eq(deepResearchJobs.userId, input.userId),
+            eq(deepResearchJobs.threadId, input.threadId),
+            eq(deepResearchJobs.questionMessageId, input.questionMessageId),
+            eq(deepResearchJobs.sourceScopeHash, input.sourceScopeHash),
+            input.fastRunKey == null
+                ? isNull(deepResearchJobs.fastRunKey)
+                : eq(deepResearchJobs.fastRunKey, input.fastRunKey),
         ))
         .limit(1)
     if (!existing) throw new Error("深度检索幂等键冲突")
