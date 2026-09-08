@@ -230,43 +230,42 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
                 agentRunId: job.runKey,
                 deepResearch: { runKey: job.runKey, fastRunKey: job.fastRunKey, references },
             },
+            runCompletion: {
+                answer: answer.slice(0, 100_000),
+                metricsJson: JSON.stringify({
+                    queryCount: result.queries.length,
+                    candidateCount: result.candidates.length,
+                    evidenceCount: result.evidence.length,
+                    rawEvidenceCount: result.rawEvidenceCount,
+                    failedSearchCount: result.failedSearchCount,
+                    failedReadCount: result.failedReadCount,
+                    degradedSourceChecks: result.degradedSourceChecks,
+                    modelCalls: {
+                        started: modelCallsStarted,
+                        completed: countCompletedModelCalls(plannerUsage, synthesisUsage),
+                        planner: plannerUsage,
+                        synthesis: synthesisUsage,
+                    },
+                    pricingSnapshot,
+                    costEstimate: pricingSnapshot == null ? null : estimateDeepResearchCost({
+                        snapshot: pricingSnapshot,
+                        inputTokens,
+                        outputTokens,
+                        modelCalls: modelCallsStarted,
+                        usageComplete: countCompletedModelCalls(plannerUsage, synthesisUsage) === modelCallsStarted && [plannerUsage, synthesisUsage].filter(Boolean).every((usage) => usage?.totalsKnown === true),
+                    }),
+                }),
+                inputTokens,
+                outputTokens,
+                totalTokens: inputTokens + outputTokens,
+                durationMs: Date.now() - startedAt,
+            },
         })
         if (!completed) throw new DeepResearchExecutionError("validation_failed", "任务租约已失效")
-        await db.update(agentRuns).set({
-            status: "completed",
-            answer: answer.slice(0, 100_000),
-            metricsJson: JSON.stringify({
-                queryCount: result.queries.length,
-                candidateCount: result.candidates.length,
-                evidenceCount: result.evidence.length,
-                rawEvidenceCount: result.rawEvidenceCount,
-                failedSearchCount: result.failedSearchCount,
-                failedReadCount: result.failedReadCount,
-                degradedSourceChecks: result.degradedSourceChecks,
-                modelCalls: {
-                    started: modelCallsStarted,
-                    completed: countCompletedModelCalls(plannerUsage, synthesisUsage),
-                    planner: plannerUsage,
-                    synthesis: synthesisUsage,
-                },
-                pricingSnapshot,
-                costEstimate: pricingSnapshot == null ? null : estimateDeepResearchCost({
-                    snapshot: pricingSnapshot,
-                    inputTokens,
-                    outputTokens,
-                    modelCalls: modelCallsStarted,
-                    usageComplete: countCompletedModelCalls(plannerUsage, synthesisUsage) === modelCallsStarted && [plannerUsage, synthesisUsage].filter(Boolean).every((usage) => usage?.totalsKnown === true),
-                }),
-            }),
-            inputTokens,
-            outputTokens,
-            totalTokens: inputTokens + outputTokens,
-            durationMs: Date.now() - startedAt,
-            completedAt: new Date(),
-        }).where(eq(agentRuns.runKey, job.runKey))
         return completed.job
     } catch (error) {
         const current = await getDeepResearchJob(job.runKey, job.userId)
+        if (current?.status === "succeeded") return current
         const cancelled = current?.status === "cancel_requested" || current?.status === "cancelled"
         const code = cancelled ? "cancelled" : classifyExecutionError(error, { leaseLost, aborted: controller.signal.aborted })
         if (executionReserved) await db.update(agentRuns).set({

@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08Deep完成一致性节点：新executor将最终Run answer/安全metrics/token计数放入completeDeepResearchJob同一事务，与消息和Job成功状态一起提交；Run归属/状态更新未命中则抛错，不先交付消息再单独写Run。完成入口及CAS检查租约未过期，重复succeeded只返回已有消息；异常路径若读到Job已succeeded则保留成功，不降级为失败。runCompletion为旧内部调用保留可选兼容，新executor总是提供；旧历史不一致Run本轮不批量修复。全量2workers下1396通过/40既有跳过，typecheck/lint/build通过，修正测试隔离后3项定向通过。测试证明事务回调顺序与拒绝路径，不是实际PG回滚/并发验收；本轮未访问生产或模型。
+
 2026-09-08过期取消收口节点：恢复事务补cancel_requested且租约过期/缺失分支，终态cancelled，保留首次取消时间并清理租约；同一数据修改CTE只更新相同runKey/userId且仍running的Agent Run，返回cancelled数量，不重排队。执行器对cancel_requested或已cancelled统一取消分类，在保留可获得的用量元数据后确认取消，避免迟到结果覆盖成普通失败。全量2workers下1393通过/40既有跳过，typecheck/lint/build通过；当前为SQL契约/合成回归，真实PG并发与网络取消未验收。G-PRICE-IDENTITY仍待新增只读授权，本轮未访问账号或模型。
 
 2026-09-08金额授权前置核验门：本轮只读研究官方New API资料，未访问用户账号。官方[倍率文档](https://docs.newapi.pro/en/docs/guide/console/settings/rate-settings)说明预扣与实际用量结算分离；[text_quota实现](https://github.com/QuantumNous/new-api/blob/main/service/text_quota.go)还涉及缓存写入倍率/工具附加费，[quota_math](https://github.com/QuantumNous/new-api/blob/main/common/quota_math.go)存在配额舍入。不能以当前基础公式覆盖所有计费路径，也不能假设用户部署等同当前main。签名金额凭据暂停在G-PRICE-IDENTITY门：需独立允许只读核验new.genejm.one部署版本、当前模型计费路径、账号/凭据所属分组与现有限额；不读取/导出API Key、不调用模型、不改配置。然后确定可验证的最坏费用策略或供应商硬额度支持，才接签名报价、输入/输出上界与逐调用持久预留。不得把预算改为仅事后估算而声称实现硬上限。本轮无功能代码或测试变更。

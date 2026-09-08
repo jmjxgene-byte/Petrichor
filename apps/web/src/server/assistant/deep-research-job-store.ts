@@ -1,10 +1,10 @@
-import { and, eq, inArray } from "drizzle-orm"
+import { and, eq, gt, inArray } from "drizzle-orm"
 import { z } from "zod"
 import { normalizeDeepEvidenceUrl } from "@/lib/deep-evidence-url"
 import { assistantSourceRefSchema } from "@/lib/assistant-source-contract"
 
 import { getDb, getSqlClient } from "@/server/db/client"
-import { assistantMessages, deepResearchJobs, type DeepResearchJobRecord } from "@/server/db/schema"
+import { agentRuns, assistantMessages, deepResearchJobs, type DeepResearchJobRecord } from "@/server/db/schema"
 
 export const DEEP_RESEARCH_JOB_STATUSES = [
     "queued",
@@ -335,6 +335,7 @@ export async function completeDeepResearchJob(input: {
     jobId: number
     workerId: string
     message: DeepResearchFinalMessage
+    runCompletion?: { answer: string; metricsJson: string; inputTokens: number; outputTokens: number; totalTokens: number; durationMs: number }
     now?: Date
 }) {
     const message = deepResearchFinalMessageSchema.parse(input.message)
@@ -349,6 +350,8 @@ export async function completeDeepResearchJob(input: {
             return existingMessage ? { job: current, message: existingMessage } : null
         }
         if (current.status !== "running" || current.leaseOwner !== input.workerId) return null
+        if (!current.leaseExpiresAt || current.leaseExpiresAt <= now) return null
+        if (input.runCompletion && message.agentRunId !== current.runKey) throw new Error("深度检索Run关联不匹配")
 
         const [createdMessage] = await tx.insert(assistantMessages).values({
             threadId: current.threadId,
@@ -368,8 +371,15 @@ export async function completeDeepResearchJob(input: {
             eq(deepResearchJobs.id, current.id),
             eq(deepResearchJobs.status, "running"),
             eq(deepResearchJobs.leaseOwner, input.workerId),
+            gt(deepResearchJobs.leaseExpiresAt, now),
         )).returning()
         if (!completed) throw new Error("深度检索完成状态竞争")
+        if (input.runCompletion) {
+            const [run] = await tx.update(agentRuns).set({ ...input.runCompletion, status: "completed", completedAt: now })
+                .where(and(eq(agentRuns.runKey, current.runKey), eq(agentRuns.userId, current.userId), eq(agentRuns.threadId, current.threadId), eq(agentRuns.status, "running")))
+                .returning({ id: agentRuns.id })
+            if (!run) throw new Error("深度检索Run完成状态竞争")
+        }
         return { job: completed, message: createdMessage }
     })
 }
