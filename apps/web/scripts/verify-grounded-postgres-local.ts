@@ -1,5 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
+import os from "node:os"
 
 // 只允许本机OrbStack；双容器内部网络，无端口发布、业务挂载或持久卷。
 const pgImage = "pgvector/pgvector@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f"
@@ -10,6 +11,8 @@ const name = `petrichor-qa-${owner.slice(0, 8)}`
 const clientName = `${name}-client`
 const network = `${name}-net`
 const checks: string[] = []
+const baselineSha = "b6eac4c729658c04655edc535367f4c7c51c6189"
+let baselineDirectory: string | null = null
 let stage = "preflight"
 let failure: string | null = null
 let cleanupOk = true
@@ -39,7 +42,29 @@ try {
   for (const [kind, resource] of [["container", name], ["container", clientName], ["network", network]]) {
     assert(command(["docker", kind, "inspect", resource], true).code !== 0, "resource_name_unused")
   }
+  // 仅从固定Git对象导出迁移白名单，不复制工作区配置或业务文件。
+  const baselineFiles = ["apps/web/scripts/migrate-database.ts", "apps/web/src/server/db/full-migration.ts",
+    "apps/web/src/server/db/migration-utils.ts", "docs/migrations/manifest.json"]
+  const baselineManifest = JSON.parse(command(["git", "-C", root, "show", `${baselineSha}:docs/migrations/manifest.json`]).output)
+  assert(baselineManifest.version === 1 && baselineManifest.migrations.length === 8, "fixed_baseline_manifest")
+  for (const entry of baselineManifest.migrations) {
+    assert(typeof entry.file === "string" && /^[0-9-]+[a-z0-9-]+\.sql$/.test(entry.file) && !entry.file.includes("/"), "baseline_migration_path")
+    baselineFiles.push(`docs/migrations/${entry.file}`)
+  }
+  baselineDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "petrichor-qa-baseline-"))
+  // Bun非root客户端需要遍历该纯源码目录；不含任何凭据或数据。
+  fs.chmodSync(baselineDirectory, 0o755)
+  fs.mkdirSync(path.join(baselineDirectory, "apps/web/node_modules/postgres"), { recursive: true })
+  for (const file of baselineFiles) {
+    const result = Bun.spawnSync(["git", "-C", root, "show", `${baselineSha}:${file}`], { stdout: "pipe", stderr: "pipe" })
+    assert(result.exitCode === 0, "baseline_source_available")
+    const target = path.join(baselineDirectory, file)
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    fs.writeFileSync(target, result.stdout, { mode: 0o644 })
+  }
   const mounts = [
+    "--mount", `type=bind,src=${baselineDirectory},dst=/baseline,readonly`,
+    ...mount("apps/web/node_modules/postgres", "/baseline/apps/web/node_modules/postgres"),
     ...[
       "tsconfig.json", "scripts/verify-deep-postgres-fixture.ts",
       "src/server/assistant/deep-research-job-store.ts", "src/server/db/client.ts",
@@ -94,6 +119,10 @@ try {
     if (inspected.output !== owner) { cleanupOk = false; continue }
     if (command(kind === "container" ? ["docker", "rm", "-f", "-v", resource] : ["docker", "network", "rm", resource], true).code !== 0) cleanupOk = false
     if (command(["docker", kind, "inspect", resource], true).code === 0) cleanupOk = false
+  }
+  if (baselineDirectory) {
+    try { fs.rmSync(baselineDirectory, { recursive: true }); assert(!fs.existsSync(baselineDirectory), "baseline_export_cleaned") }
+    catch { cleanupOk = false }
   }
   console.log(JSON.stringify({ scope: "local-synthetic-postgres-host", pgImage, bunImage, stage, passed: !failure && cleanupOk, checks, failure, cleanupOk }, null, 2))
   if (failure || !cleanupOk) process.exitCode = 1

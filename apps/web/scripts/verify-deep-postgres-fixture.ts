@@ -30,6 +30,16 @@ export async function verifyDeepFixture(runtime: ReturnType<typeof postgres>, us
     }
     const [one, duplicate] = await Promise.all([make("fixture_deep_one"), make("fixture_deep_one")])
     check(one.id === duplicate.id, "deep_concurrent_create_idempotent")
+    for (let index = 0; index < 12; index++) {
+      const key = `fixture_deep_race_${index}`
+      const batch = await Promise.allSettled([make(key), make(key), make(key)])
+      const failed = batch.find((result) => result.status === "rejected")
+      if (failed?.status === "rejected") throw failed.reason
+      const ids = batch.map((result) => result.status === "fulfilled" ? result.value.id : null)
+      if (new Set(ids).size !== 1) throw new Error("deep_repeated_create_id_mismatch")
+      await store.requestDeepResearchJobCancellation(key, userId)
+    }
+    check(true, "deep_twelve_concurrent_create_batches")
     check(await store.getDeepResearchJob(one.runKey, userId + 10000) === null, "deep_foreign_user_denied")
     const claimed = await Promise.all([store.claimDeepResearchJob({ workerId: "a" }), store.claimDeepResearchJob({ workerId: "b" })])
     const job = claimed.find((row) => row != null)

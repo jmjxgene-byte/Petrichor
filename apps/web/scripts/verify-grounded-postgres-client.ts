@@ -1,4 +1,5 @@
 import path from "node:path"
+import fs from "node:fs"
 import postgres from "postgres"
 const name = process.env.QA_PG_HOST ?? ""
 const cwd = path.resolve(import.meta.dir, "..")
@@ -15,9 +16,9 @@ async function rejected(label: string, sqlstate: string, run: () => Promise<unkn
   try { await run() } catch (error) { code = error && typeof error === "object" && "code" in error ? error.code : null }
   assert(code === sqlstate, label)
 }
-async function migrate(url: string, bootstrap: boolean) {
+async function migrate(url: string, bootstrap: boolean, workingDirectory = cwd) {
   const child = Bun.spawn([process.execPath, "run", "scripts/migrate-database.ts", ...(bootstrap ? ["--bootstrap"] : [])], {
-    cwd, env: { ...process.env, MIGRATION_DATABASE_URL: url, DATABASE_URL: url }, stdout: "pipe", stderr: "pipe",
+    cwd: workingDirectory, env: { ...process.env, MIGRATION_DATABASE_URL: url, DATABASE_URL: url }, stdout: "pipe", stderr: "pipe",
   })
   const timer = setTimeout(() => child.kill(), 60_000)
   try {
@@ -44,12 +45,51 @@ try {
     alter role petrichor_migrator set search_path=public,extensions;
     alter role petrichor_runtime set search_path=public,extensions;`)
   stage = "bootstrap"
-  const first = await migrate(dbUrl("petrichor_migrator"), true)
+  const first = await migrate(dbUrl("petrichor_migrator"), true, "/baseline/apps/web")
   if (first.code !== 0) {
     // 全为固定DDL/合成库，无生产数据；只返回错误类别与简短首行。
     console.log(JSON.stringify({ stage, migrationError: first.error.split("\n").filter((line) => /error:|code:|message:/.test(line)).slice(0, 4) }))
   }
   assert(first.code === 0, "bootstrap_success")
+  const [baseline] = await admin`select count(*)::int as n from petrichor_schema_migration`
+  assert(baseline.n === 8, "baseline_eight_migrations")
+  const [absent] = await admin`select to_regclass('public.petrichor_doc_index_generation') is null as absent`
+  assert(absent.absent, "baseline_has_no_new_index")
+  const [retained] = await admin`insert into petrichor_user(email,password_hash) values('upgrade@example.invalid','synthetic-old-hash') returning id`
+  const beforeLedger = await admin`select filename,checksum,applied_at,execution_ms from petrichor_schema_migration order by filename`
+  stage = "upgrade_failure_rollback"
+  // 在容器tmpfs中物化失败清单；工作区和历史迁移挂载仍只读。
+  const faultRoot = fs.mkdtempSync("/tmp/petrichor-qa-fault-")
+  try {
+    for (const file of ["scripts/migrate-database.ts", "src/server/db/full-migration.ts", "src/server/db/doc-index-schema.ts", "src/server/db/migration-utils.ts"]) {
+      const target = path.join(faultRoot, "apps/web", file)
+      fs.mkdirSync(path.dirname(target), { recursive: true })
+      fs.copyFileSync(path.join(cwd, file), target)
+    }
+    fs.mkdirSync(path.join(faultRoot, "apps/web/node_modules"), { recursive: true })
+    fs.symlinkSync(path.join(cwd, "node_modules/postgres"), path.join(faultRoot, "apps/web/node_modules/postgres"))
+    fs.cpSync("/workspace/docs/migrations", path.join(faultRoot, "docs/migrations"), { recursive: true })
+    const manifestPath = path.join(faultRoot, "docs/migrations/manifest.json")
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+    manifest.migrations.push({ file: "2099-01-01-fixture-write.sql" }, { file: "2099-01-02-fixture-failure.sql" })
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest))
+    fs.writeFileSync(path.join(faultRoot, "docs/migrations/2099-01-01-fixture-write.sql"), "create table petrichor_qa_rollback_marker(id int);\nupdate petrichor_user set password_hash='synthetic-changed' where email='upgrade@example.invalid';")
+    fs.writeFileSync(path.join(faultRoot, "docs/migrations/2099-01-02-fixture-failure.sql"), "select 1/0;")
+    const failed = await migrate(dbUrl("petrichor_migrator"), false, path.join(faultRoot, "apps/web"))
+    assert(failed.code !== 0 && failed.error.includes("22012") && failed.output.includes("完成 2099-01-01-fixture-write.sql"), "upgrade_injected_failure_after_ddl_and_dml")
+    const [rolledBack] = await admin`select to_regclass('public.petrichor_doc_index_generation') is null as index_absent,
+      to_regclass('public.petrichor_qa_rollback_marker') is null as marker_absent`
+    assert(rolledBack.index_absent && rolledBack.marker_absent, "upgrade_all_pending_ddl_rolled_back")
+    const [oldUser] = await admin`select password_hash from petrichor_user where id=${retained.id}`
+    assert(oldUser.password_hash === "synthetic-old-hash", "upgrade_existing_data_rolled_back")
+    const afterLedger = await admin`select filename,checksum,applied_at,execution_ms from petrichor_schema_migration order by filename`
+    assert(JSON.stringify(beforeLedger) === JSON.stringify(afterLedger), "upgrade_ledger_rolled_back")
+  } finally { fs.rmSync(faultRoot, { recursive: true }); assert(!fs.existsSync(faultRoot), "fault_fixture_cleaned") }
+  stage = "baseline_upgrade"
+  const upgraded = await migrate(dbUrl("petrichor_migrator"), false)
+  assert(upgraded.code === 0 && upgraded.output.includes("新执行 1 个迁移"), "baseline_upgrade_exactly_one_migration")
+  const [preserved] = await admin`select password_hash from petrichor_user where id=${retained.id}`
+  assert(preserved.password_hash === "synthetic-old-hash", "upgrade_preserves_existing_user")
   const second = await migrate(dbUrl("petrichor_migrator"), true)
   assert(second.code !== 0 && second.error.includes("bootstrap 只允许空库"), "bootstrap_repeat_rejected")
   const repeat = await migrate(dbUrl("petrichor_migrator"), false)
@@ -89,6 +129,11 @@ try {
   stage = "done"
 } catch (error) {
   failure = error instanceof Error ? error.message.slice(0, 160) : "unknown_failure"
+  const cause = error instanceof Error && error.cause ? error.cause : error
+  if (cause && typeof cause === "object" && "code" in cause) {
+    const detail = cause as { code?: unknown; column_name?: unknown; constraint_name?: unknown }
+    failure = JSON.stringify({ sqlstate: detail.code, column: detail.column_name, constraint: detail.constraint_name })
+  }
 } finally {
   await Promise.allSettled(clients.map((client) => client.end({ timeout: 2 })))
   console.log(JSON.stringify({ scope: "local-synthetic-postgres-client", stage, passed: !failure, checks, failure }, null, 2))
