@@ -3,6 +3,16 @@ import { describe, expect, it, vi } from "vitest"
 import { estimateDeepResearchCost, fetchDeepResearchPricingSnapshot } from "./deep-research-pricing"
 
 describe("deep research pricing snapshot", () => {
+    it("以十进制公式向上取整微美元，保留极小非零费用并拒绝溢出", () => {
+        const snapshot = { status: "available" as const, source: "new-api-public" as const, capturedAt: "2026-09-08T00:00:00Z", modelId: "fixture",
+            quotaType: 1, modelPrice: 0.1, modelRatio: 0, completionRatio: 0, groupRatios: { default: 0.2 } }
+        const estimate = (price: number, group = 1) => estimateDeepResearchCost({ snapshot: { ...snapshot, modelPrice: price, groupRatios: { default: group } }, inputTokens: 0, outputTokens: 0, modelCalls: 1 })
+        expect(estimate(0.1, 0.2)).toMatchObject({ formulaCeilingMicrousd: 20000 })
+        expect(estimate(1e-12)).toMatchObject({ formulaCeilingMicrousd: 1 })
+        expect(estimate(0)).toMatchObject({ formulaCeilingMicrousd: 0 })
+        expect(estimate(1e6, 1e6)).toEqual({ status: "unavailable", reason: "cost_overflow" })
+        expect(estimateDeepResearchCost({ snapshot: { ...snapshot, quotaType: 0, modelRatio: 1.25, completionRatio: 6, groupRatios: { default: 0.3 } }, inputTokens: 1, outputTokens: 1, modelCalls: 1 })).toMatchObject({ formulaCeilingMicrousd: 6 })
+    })
     it("分块响应超字节上限立即取消，不等整包载入", async () => {
         const cancel = vi.fn()
         const body = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array(500_000)); controller.enqueue(new Uint8Array(500_001)) }, cancel })
@@ -80,6 +90,7 @@ describe("deep research pricing snapshot", () => {
             status: "available",
             minUsd: 0.0741775,
             maxUsd: 0.0741775,
+            formulaCeilingMicrousd: 74178,
             groupRatios: { default: 1 },
         })
     })

@@ -40,6 +40,7 @@ export type DeepResearchCostEstimate = {
     status: "available"
     minUsd: number
     maxUsd: number
+    formulaCeilingMicrousd: number
     groupRatios: Record<string, number>
 } | {
     status: "unavailable"
@@ -148,12 +149,45 @@ export function estimateDeepResearchCost(input: {
         ? snapshot.modelPrice * input.modelCalls * groupRatio
         : ((input.inputTokens + input.outputTokens * snapshot.completionRatio)
             * snapshot.modelRatio * groupRatio) / QUOTA_PER_USD)
+    let formulaCeilingMicrousd: number
+    try {
+        const ceilings = ratios.map((group) => formulaCeiling(snapshot, input.inputTokens, input.outputTokens, input.modelCalls, group))
+        const maximum = ceilings.reduce((a, b) => a > b ? a : b, 0n)
+        if (maximum > BigInt(Number.MAX_SAFE_INTEGER)) return { status: "unavailable", reason: "cost_overflow" }
+        formulaCeilingMicrousd = Number(maximum)
+    } catch { return { status: "unavailable", reason: "invalid_pricing" } }
     return {
         status: "available",
         minUsd: Math.min(...costs),
         maxUsd: Math.max(...costs),
+        formulaCeilingMicrousd,
         groupRatios: snapshot.groupRatios,
     }
+}
+
+/** Number已解析的公开十进制值按有理数运算，不把浮点乘积用于预算比较。 */
+function decimal(value: number) {
+    if (!Number.isFinite(value) || value < 0) throw new Error("invalid_rate")
+    const match = String(value).match(/^(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/)
+    if (!match) throw new Error("invalid_rate")
+    const fraction = match[2] ?? ""
+    const exponent = Number(match[3] ?? 0) - fraction.length
+    const digits = BigInt(match[1] + fraction)
+    return exponent >= 0 ? { n: digits * 10n ** BigInt(exponent), d: 1n } : { n: digits, d: 10n ** BigInt(-exponent) }
+}
+function formulaCeiling(snapshot: Extract<DeepResearchPricingSnapshot, { status: "available" }>, input: number, output: number, calls: number, group: number) {
+    const g = decimal(group)
+    let numerator: bigint, denominator: bigint
+    if (snapshot.quotaType === 1) {
+        const price = decimal(snapshot.modelPrice)
+        numerator = price.n * BigInt(calls) * g.n * 1_000_000n
+        denominator = price.d * g.d
+    } else {
+        const model = decimal(snapshot.modelRatio), completion = decimal(snapshot.completionRatio)
+        numerator = (BigInt(input) * completion.d + BigInt(output) * completion.n) * model.n * g.n * 1_000_000n
+        denominator = completion.d * model.d * g.d * BigInt(QUOTA_PER_USD)
+    }
+    return (numerator + denominator - 1n) / denominator
 }
 
 function pricingEndpoint(baseUrl: string | null) {

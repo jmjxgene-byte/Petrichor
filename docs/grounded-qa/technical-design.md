@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08微美元公式节点：Deep费用估算新增formulaCeilingMicrousd，按已经解析的公开十进制价格转换有理数，以BigInt计算并向上取整，避免用浮点乘积判断金额；极小正费用至少1微美元，超过安全整数拒绝，旧minUsd/maxUsd显示字段保留。全量2workers下1392通过/40既有跳过，typecheck/lint/build通过。此字段仅是当前估算公式的整数上界，不包括尚未核验的供应商每请求扣费舍入、额外费或锁价，不是实际账单保证。用户金额确认、签名报价与持久预算预留仍未接通。只读复查GitHub登录仍无效，orbstack socket仍不存在，无真实服务请求。
+
 2026-09-08Run具体问题复验节点：复用agent_run.metrics_json记录questionMessageId，创建与正常收尾均由chat-handler传同一服务器ID，防止latency更新覆盖关联；既有Run detail及hydrate返回该字段，无需新表/迁移或扫描回答正文。Deep start除用户/会话归属外，要求Run记录的questionMessageId等于已验证的用户问题ID；同会话错题、旧缺关联和损坏JSON均拒绝，不猜最近一条。未传fastRunKey的独立任务路径仍按原有问题归属校验保留。全量2workers下1391通过/40既有跳过，typecheck/lint/build通过；测试涵盖创建/收尾元数据、错误轮次和不可用旧关联，真实PG与UI金额入口仍未验收。
 
 2026-09-08问题身份节点：persistAssistantMessage返回数据库生成的ID，无返回行则失败；chat-handler捕获本轮新保存user消息ID，写入回答根元数据questionMessageId、响应Question-Id header，并经Runtime agent_started事件传到前端Run状态。历史toInitialMessages保留经过正整数/安全整数检查的questionMessageId；不从nanoid、消息位置或客户端自报字段推断。无本轮新保存用户消息的旧/重放场景暂不补猜关联。全量2workers下1386通过/40既有跳过，typecheck/lint/build通过，合成测试验证数据库ID、保存失败、实时与历史恢复。Deep报价/启动仍需服务端复验回答根元数据、Run和questionId的具体关系，UI操作栏及金额确认尚未接通；无真实生产或模型验收。
