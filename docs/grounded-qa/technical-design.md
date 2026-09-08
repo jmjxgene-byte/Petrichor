@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08Deep取消与降级节点：pipeline在规划/检索/深读/综合各阶段前后检查AbortSignal，取消后不开始下一阶段，综合返回后取消也不交付草稿；无可用模式在executor实际规划调用前拒绝。区分失败搜索次数、失败深读次数及统一搜索内部来源降级次数，计数进入metadata metrics，最终回答固定提示仅覆盖成功读取的资料，不输出异常正文。合成回归覆盖四个阶段取消、预取消、空模式及部分失败/内部降级；全量1351通过/40既有跳过，typecheck/lint/build通过。未启动Worker或模型；实际网络中止/180秒端到端、逐源模式、租约/费用与PG仍待验收。只读检查发现本机无postgres/psql，orbstack socket不存在，已请求用户启动本机Docker后再建立隔离测试库，不能以SQLite证明PG通过。
+
 2026-09-08去除长度伪质量门：requiresGrounding路径不再因answer-quality的字数/段落阈值自动调用模型扩写，非资料问答保持旧行为。丰富正文不代表有更多受支持结论；短答案引用合法则保留，无引用仍由最终引用门拒绝。真实Runtime+假模型两用例验证均只用一轮生成（15合成tokens），不会消费脚本中的第二段扩写。全量1335通过/40既有跳过，typecheck/lint/build通过。该修正减少无必要生成，不证明语义充分；下一阶段需按60题相关证据与人工结论—引用支持关系建立评测，不能用字符数、合法ID或模型自评代替95%支持precision。
 
 2026-09-08范围统计节点：新增非core的source.overview，复用resolveAssistantSources解析权限/范围，在受限只读事务按userId及选定library/knowledgeBase聚合文件/ready/文章数量，不选取正文。外部源无总量接口返回null未知，停用源不查询正文或计数。Runtime对明确全库数量问法直接通过ToolExecutor读取并校验统计结构后生成固定文案，不调用检索或模型；异常不以搜索命中数兜底。工具活动单独显示读取统计；不增加常驻核心工具数量。合成SQL参数/权限门、外部单选和真实Runtime测试已通过，全量1333通过/40既有跳过，typecheck/lint/build通过；未连接真实PG验收，不声称外部总量已支持。

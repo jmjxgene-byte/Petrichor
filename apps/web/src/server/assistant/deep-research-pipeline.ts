@@ -31,7 +31,7 @@ export type DeepResearchEvidence = {
 
 export type DeepResearchPipelineDeps = {
     planQueries(question: string, signal: AbortSignal): Promise<string[]>
-    search(query: string, mode: SearchMode): Promise<DeepResearchCandidate[]>
+    search(query: string, mode: SearchMode): Promise<DeepResearchCandidate[] | { candidates: DeepResearchCandidate[]; degradedSourceChecks: number }>
     read(candidate: DeepResearchCandidate): Promise<DeepResearchEvidence[]>
     synthesize(question: string, evidence: DeepResearchEvidence[], signal: AbortSignal): Promise<string>
 }
@@ -47,19 +47,26 @@ export async function runDeepResearchPipeline(input: {
     modes: SearchMode[]
     signal: AbortSignal
 }, deps: DeepResearchPipelineDeps) {
-    const planned = await deps.planQueries(input.question, input.signal)
-    const queries = [...new Set([input.question, ...planned].map((item) => item.trim()).filter(Boolean))]
-        .slice(0, MAX_QUERIES)
+    input.signal.throwIfAborted()
     const modes = [...new Set(input.modes)]
     if (modes.length === 0) throw new DeepResearchExecutionError("validation_failed", "没有可用检索模式")
+    const planned = await deps.planQueries(input.question, input.signal)
+    input.signal.throwIfAborted()
+    const queries = [...new Set([input.question, ...planned].map((item) => item.trim()).filter(Boolean))]
+        .slice(0, MAX_QUERIES)
 
     const searched = await Promise.allSettled(
-        queries.flatMap((query) => modes.map(async (mode) => await deps.search(query, mode))),
+        queries.flatMap((query) => modes.map(async (mode) => { input.signal.throwIfAborted(); return await deps.search(query, mode) })),
     )
+    input.signal.throwIfAborted()
+    const failedSearchCount = searched.filter((result) => result.status === "rejected").length
+    let degradedSourceChecks = 0
     const byKey = new Map<string, DeepResearchCandidate>()
     for (const result of searched) {
         if (result.status !== "fulfilled") continue
-        for (const candidate of result.value) {
+        const hits = Array.isArray(result.value) ? result.value : result.value.candidates
+        if (!Array.isArray(result.value)) degradedSourceChecks += result.value.degradedSourceChecks
+        for (const candidate of hits) {
             const existing = byKey.get(candidate.candidateKey)
             if (!existing || candidate.score > existing.score) byKey.set(candidate.candidateKey, candidate)
         }
@@ -67,7 +74,9 @@ export async function runDeepResearchPipeline(input: {
     const candidates = [...byKey.values()].sort((left, right) => right.score - left.score).slice(0, MAX_CANDIDATES)
     if (candidates.length === 0) throw new DeepResearchExecutionError("validation_failed", "检索没有候选")
 
-    const reads = await Promise.allSettled(candidates.map(async (candidate) => await deps.read(candidate)))
+    const reads = await Promise.allSettled(candidates.map(async (candidate) => { input.signal.throwIfAborted(); return await deps.read(candidate) }))
+    input.signal.throwIfAborted()
+    const failedReadCount = reads.filter((result) => result.status === "rejected").length
     const evidence: DeepResearchEvidence[] = []
     let totalChars = 0
     for (const result of reads) {
@@ -88,8 +97,11 @@ export async function runDeepResearchPipeline(input: {
         throw new DeepResearchExecutionError("validation_failed", "候选没有可引用证据")
     }
     const answer = (await deps.synthesize(input.question, citableEvidence, input.signal)).trim()
+    input.signal.throwIfAborted()
     if (!answer) throw new DeepResearchExecutionError("validation_failed", "深度综合没有生成答案")
-    return { queries, candidates, evidence: citableEvidence, rawEvidenceCount, answer }
+    const warning = failedSearchCount || failedReadCount || degradedSourceChecks
+        ? `部分检索未完成：${failedSearchCount} 次搜索、${failedReadCount} 次深读失败；${degradedSourceChecks} 次来源检查降级。以下仅依据成功读取的资料，不代表完整覆盖。\n\n` : ""
+    return { queries, candidates, evidence: citableEvidence, rawEvidenceCount, failedSearchCount, failedReadCount, degradedSourceChecks, answer: warning + answer }
 }
 
 /**

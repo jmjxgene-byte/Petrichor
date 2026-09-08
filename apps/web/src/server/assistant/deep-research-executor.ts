@@ -76,6 +76,7 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
         return await failDeepResearchJob({ jobId, workerId, errorCode: "validation_failed" })
     }
     const modes = snapshot.allowedModes.filter((mode): mode is SearchMode => mode === "exact" || mode === "fuzzy")
+    if (modes.length === 0) return await failDeepResearchJob({ jobId, workerId, errorCode: "validation_failed" })
     const controller = new AbortController()
     let leaseLost = false
     const deadline = setTimeout(() => controller.abort(), DEADLINE_MS)
@@ -151,8 +152,8 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
                     query,
                     limit: 20,
                     geneOpsMode: mode,
-                }) as { candidates?: DeepResearchCandidate[] }
-                return output.candidates ?? []
+                }) as { candidates?: DeepResearchCandidate[]; degradedSources?: unknown[] }
+                return { candidates: output.candidates ?? [], degradedSourceChecks: output.degradedSources?.length ?? 0 }
             },
             read: async (candidate) => {
                 const output = await readTool.execute(toolContext, candidate.read)
@@ -227,6 +228,9 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
                 candidateCount: result.candidates.length,
                 evidenceCount: result.evidence.length,
                 rawEvidenceCount: result.rawEvidenceCount,
+                failedSearchCount: result.failedSearchCount,
+                failedReadCount: result.failedReadCount,
+                degradedSourceChecks: result.degradedSourceChecks,
                 modelCalls: {
                     started: modelCallsStarted,
                     completed: countCompletedModelCalls(plannerUsage, synthesisUsage),
