@@ -1,5 +1,7 @@
 # Petrichor 可信问答 MVP 开发台账
 
+第四十六节点：提交前HEAD 6601ed28f；主Agent/Deep各自Run内新增按文档库的内存generation pin，并发首轮串行确定；后续允许同一ready/retired代际，版本/原文失效则降级且禁止改用另一索引，source.read同步校验pin。首次legacy模式不会静默升级。1422测试通过/40既有跳过，typecheck/lint/build/diff通过；未做真实PG/模型/生产验证。跨子代理、跨进程恢复、旧关键词正文与GeneOps版本仍未固定，金额审批/Deep UI/语义充分性/评测和PG门继续未完成。原型README/v3独立未提交，远端认证阻塞未解除。下一步优先完善仍缺的全回答版本一致性与真实检索评测，不把本节点局部验证当完整MVP验收。
+
 第四十五节点继续完整MVP目标：已修复本地来源摘要固定截取前280字、挤掉实际命中的问题。旧chunk和新generation reader均保留窗口内锚点偏移，公开摘要优先核心命中；验证范围、整数和边界，不混用原文偏移，GeneOps不消费本地坐标。不额外保存正文副本。全量1417通过/40既有跳过，typecheck/lint/build/diff通过；这是本地契约与回归验证，不是生产或人工支持度验收。提交前HEAD为7b91ecd1e，GitHub认证阻塞仍未解除。本地原型03 v3及README改动另留，视觉已贴近现有布局，未部署。下一步仍需推进实际检索评测、语义充分性、generation一致性及费用门后的手动Deep；其他未完成门如下。
 
 2026-09-08完整目标active，docs/grounded-qa/及实际UI v2不变；分支codex/grounded-qa-mvp，基线b6eac4c72/tag baseline/pre-grounded-qa-20260908保留。远程上一确认1605c89f，本地上一提交37375e237b674b47636b19efb302bb7f22527b89未推送；本地bundle只覆盖aa52实现，位置与校验见技术文档/backup README。第四十四节点核对本分支v1 GeneOps契约：无完整命中位置/generation，read无reply_id，不能推断锚点；未改外部RPC。去掉连接类型固定0.9质量/置信度，改中性排序基线；anchorVerified=false贯通模型输入、来源卡、实时与安全历史/Deep引用恢复，明确仅游标读取，正文仍不落GeneOps持久化。全量2workers下1406通过/40既有跳过，typecheck/lint/build/diff通过，无真实数据源/模型/Worker/生产操作。外部锚点功能未完成，需要契约支持；本地摘要核心位置也待复核。其他待办仍为G-PRICE-IDENTITY账号只读授权及金额/Deep UI、固定generation、语义充分性/60题实跑人工支持、日志审计、PG/RLS/vector/Staging。GitHub默认SSH也失败，Docker最近不可用；不把自动续行当授权，不改其他工作树/GeneOps/FNS或原文。

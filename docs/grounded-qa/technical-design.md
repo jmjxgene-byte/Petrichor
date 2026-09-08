@@ -2,6 +2,8 @@
 
 日期：2026-09-08。本文件描述待实现契约，不表示迁移、模型调用或部署已执行。
 
+最新代际一致性节点：普通主Agent与Deep各自Run内，source工具通过同一state关联内存DocumentIndexReadSession，按库保存首次generation或legacy模式；并发搜索串行确立pin，后续查询按指定ID及ready/retired读取，仍校验user/library与当前文档版本。固定版本缺失、原文变化或查询失败时返回降级，不切新版或旧chunk；source.read拒绝与既有pin不符的generation。首次无索引/失败后的legacy不会在下一查询自动升级。pin只含ID且随Run释放，不缓存正文。此节点推进了下文旧记录中的“跨查询固定generation”待办，但不证明跨子代理/跨进程恢复、旧关键词正文版本或GeneOps generation已固定；这些仍未完成。1422项全量测试及类型/Lint/构建通过，SQL构造与模拟并发不替代真实PG验收。
+
 ## 基线与参考
 
 开发基线 b6eac4c729658c04655edc535367f4c7c51c6189；远端回滚 tag baseline/pre-grounded-qa-20260908。应用代码与此前部署0344a485f一致，差异仅台账/部署文档；生产当前身份仍需发布前实时核验。

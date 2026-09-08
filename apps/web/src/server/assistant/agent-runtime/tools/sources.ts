@@ -6,7 +6,7 @@ import { searchDocuments, readDocument } from "@/server/assistant/tools/doc-libr
 import { resolveAssistantSources } from "@/server/assistant/source-catalog"
 import { readSourceStatistics } from "@/server/assistant/source-statistics"
 import { buildEvidenceWindow } from "@/server/doc-library/evidence-window"
-import { searchDocumentIndex, readDocumentIndexPassage } from "@/server/doc-library/index-retrieval"
+import { searchDocumentIndex, readDocumentIndexPassage, createDocumentIndexReadSession, type DocumentIndexReadSession } from "@/server/doc-library/index-retrieval"
 import { badRequest } from "@/server/http/response"
 import { defineTool, toAssistantContext } from "./adapter"
 import { geneOpsTools } from "./geneops"
@@ -203,17 +203,26 @@ async function searchDocumentLibrary(
     return searchDocumentsAcross(ctx, [source], query, degraded)
 }
 
+const documentIndexSessions = new WeakMap<ToolExecutionContext["state"], DocumentIndexReadSession>()
+
 async function searchDocumentsAcross(
     ctx: ToolExecutionContext, sources: AssistantSourceCatalogItem[], query: string,
     degraded?: (source: AssistantSourceCatalogItem, message: string) => void,
 ): Promise<SourceCandidate[]> {
+    let session = documentIndexSessions.get(ctx.state)
+    if (!session) { session = createDocumentIndexReadSession(); documentIndexSessions.set(ctx.state, session) }
     let indexed: Awaited<ReturnType<typeof searchDocumentIndex>> = { hits: [], indexedLibraryIds: [], degraded: [] }
     try {
         indexed = await searchDocumentIndex({ userId: ctx.userId, libraryIds: sources.map((source) => Number(source.id)),
-            query, limit: 12, abortSignal: ctx.abortSignal, queryDeadlineAt: ctx.queryDeadlineAt })
+            query, limit: 12, abortSignal: ctx.abortSignal, queryDeadlineAt: ctx.queryDeadlineAt, session })
         if (indexed.degraded.length) for (const source of sources) degraded?.(source, "增强检索部分不可用，已使用可用词法结果")
     } catch {
         if (ctx.abortSignal?.aborted) throw new Error("文档检索已取消")
+        if (sources.some((source) => session.pins.get(Number(source.id)) != null)) {
+            for (const source of sources) degraded?.(source, "本轮固定索引检索失败，未切换资料版本")
+            return []
+        }
+        for (const source of sources) if (!session.pins.has(Number(source.id))) session.pins.set(Number(source.id), null)
         for (const source of sources) degraded?.(source, "增强索引不可用，回退关键词检索")
     }
     const fallback = sources.filter((source) => !indexed.indexedLibraryIds.includes(Number(source.id)))
@@ -400,6 +409,10 @@ async function executeSourceRead(ctx: ToolExecutionContext, raw: unknown): Promi
     }
 
     const documentId = Number(input.documentId)
+    const pins = documentIndexSessions.get(ctx.state)?.pins
+    if (pins?.has(Number(source.id)) && pins.get(Number(source.id)) !== (input.generationId ?? null)) {
+        throw badRequest("读取目标与本轮固定索引版本不一致")
+    }
     if (input.passageId != null && input.generationId != null && input.contentHash != null) {
         const output = await readDocumentIndexPassage({ userId: ctx.userId, libraryId: Number(source.id), documentId,
             passageId: input.passageId, generationId: input.generationId, contentHash: input.contentHash,

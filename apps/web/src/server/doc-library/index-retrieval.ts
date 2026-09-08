@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm"
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm"
 import { isSqliteDatabase } from "@/server/db/client"
 import { withReadBudget, type ReadBudget } from "@/server/db/read-budget"
 import { docDocuments, docIndexGenerations, docPassages } from "@/server/db/schema"
@@ -12,24 +12,56 @@ import { documentHitSnippet, documentSearchTerms } from "./search-query"
 import { buildEvidenceWindow } from "./evidence-window"
 import { hashDocumentText } from "./passage-builder"
 
-type IndexInput = ReadBudget & { userId: number; libraryIds: number[]; query: string; limit?: number }
+export type DocumentIndexReadSession = { pins: Map<number, number | null>; queue: Promise<void> }
+export function createDocumentIndexReadSession(): DocumentIndexReadSession {
+    return { pins: new Map(), queue: Promise.resolve() }
+}
+type IndexInput = ReadBudget & { userId: number; libraryIds: number[]; query: string; limit?: number; session?: DocumentIndexReadSession }
 export type IndexedDocumentHit = {
     passageId: number; generationId: number; documentId: number; libraryId: number; title: string; text: string
     contentHash: string; sourceHash: string; locator: string | null; passageIndex: number
 }
 
 export async function searchDocumentIndex(input: IndexInput) {
+    if (!input.session) return searchPinnedDocumentIndex(input)
+    // 同一Run并发查询串行确立版本，不能各自选择不同current再合并。
+    const previous = input.session.queue
+    let release!: () => void
+    input.session.queue = new Promise<void>((resolve) => { release = resolve })
+    await previous
+    try { return await searchPinnedDocumentIndex(input) }
+    catch (error) {
+        // 在释放队列前固定首次失败的fallback，避免下一查询抢先切入新索引。
+        for (const id of input.libraryIds) if (!input.session.pins.has(id)) input.session.pins.set(id, null)
+        throw error
+    } finally { release() }
+}
+
+async function searchPinnedDocumentIndex(input: IndexInput) {
+    const pins = input.session?.pins
+    const pinLegacy = () => { for (const id of input.libraryIds) if (pins && !pins.has(id)) pins.set(id, null) }
     const degraded: string[] = []
     const empty = { hits: [] as Array<IndexedDocumentHit & { snippet: string; href: string; mode: string }>, indexedLibraryIds: [] as number[], degraded }
-    if (process.env.PETRICHOR_DOC_INDEX_ENABLED !== "true" || isSqliteDatabase() || !input.libraryIds.length) return empty
+    if (process.env.PETRICHOR_DOC_INDEX_ENABLED !== "true" || isSqliteDatabase() || !input.libraryIds.length) {
+        if (input.libraryIds.some((id) => pins?.get(id) != null)) throw new Error("本轮固定索引版本不可用")
+        pinLegacy()
+        return empty
+    }
     const deadline = Math.min(input.queryDeadlineAt ?? Infinity, Date.now() + 8_000)
     const signal = AbortSignal.any([AbortSignal.timeout(Math.max(1, deadline - Date.now())), ...(input.abortSignal ? [input.abortSignal] : [])])
     const budget = { abortSignal: signal, queryDeadlineAt: deadline }
+    const unpinned = input.libraryIds.filter((id) => !pins?.has(id))
+    const pinnedIds = input.libraryIds.flatMap((id) => { const value = pins?.get(id); return value == null ? [] : [value] })
+    if (!unpinned.length && !pinnedIds.length) return empty
     const generations = await withReadBudget((reader) => reader.select().from(docIndexGenerations).where(and(
         eq(docIndexGenerations.userId, input.userId), inArray(docIndexGenerations.libraryId, input.libraryIds),
-        eq(docIndexGenerations.isCurrent, true), eq(docIndexGenerations.status, "ready"),
+        or(
+            unpinned.length ? and(inArray(docIndexGenerations.libraryId, unpinned), eq(docIndexGenerations.isCurrent, true), eq(docIndexGenerations.status, "ready")) : sql`false`,
+            pinnedIds.length ? and(inArray(docIndexGenerations.id, pinnedIds), inArray(docIndexGenerations.status, ["ready", "retired"])) : sql`false`,
+        ),
     )), budget)
-    if (!generations.length) return empty
+    if (pinnedIds.some((id) => !generations.some((g) => g.id === id))) throw new Error("本轮固定索引版本已失效")
+    if (!generations.length) { pinLegacy(); return empty }
     const documents = await withReadBudget((reader) => reader.select({ id: docDocuments.id, libraryId: docDocuments.libraryId, updatedAt: docDocuments.updatedAt }).from(docDocuments)
         .where(and(eq(docDocuments.userId, input.userId), inArray(docDocuments.libraryId, input.libraryIds), eq(docDocuments.status, "ready"))).limit(10_001), budget)
     if (documents.length > 10_000) throw new Error("索引范围超过检索上限")
@@ -38,9 +70,13 @@ export async function searchDocumentIndex(input: IndexInput) {
         const current = documents.filter((doc) => doc.libraryId === generation.libraryId)
         const versions = new Map(current.map((doc) => [doc.id, doc.updatedAt.toISOString()]))
         const valid = current.length === manifest.documents.length && manifest.documents.every((doc) => versions.get(doc.documentId) === doc.updatedAt)
+        if (!valid && pins?.get(generation.libraryId) != null) throw new Error("本轮固定索引原文已变化")
         if (!valid) degraded.push("index_snapshot_stale")
         return valid
     })
+    for (const id of input.libraryIds) {
+        if (pins && !pins.has(id)) pins.set(id, eligible.find((g) => g.libraryId === id)?.id ?? null)
+    }
     if (!eligible.length) return empty
     const filters = [eq(docPassages.userId, input.userId), eq(docDocuments.userId, input.userId), eq(docDocuments.status, "ready"),
         inArray(docPassages.generationId, eligible.map((g) => g.id)), inArray(docPassages.libraryId, input.libraryIds)]

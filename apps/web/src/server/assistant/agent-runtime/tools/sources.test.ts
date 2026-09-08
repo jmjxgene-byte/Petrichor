@@ -11,7 +11,8 @@ const mocks = vi.hoisted(() => ({
     readIndex: vi.fn(),
 }))
 
-vi.mock("@/server/doc-library/index-retrieval", () => ({ searchDocumentIndex: mocks.searchIndex, readDocumentIndexPassage: mocks.readIndex }))
+vi.mock("@/server/doc-library/index-retrieval", () => ({ searchDocumentIndex: mocks.searchIndex, readDocumentIndexPassage: mocks.readIndex,
+    createDocumentIndexReadSession: () => ({ pins: new Map(), queue: Promise.resolve() }) }))
 
 vi.mock("@/server/assistant/tools/doc-library", () => ({
     searchDocuments: mocks.searchDocuments,
@@ -117,6 +118,32 @@ beforeEach(() => {
 })
 
 describe("unified source tools", () => {
+    it("已固定代际失败不回退旧chunk；同Run共享session，新Run隔离", async () => {
+        const local = { ...source, ref: "doc-library:3", kind: "doc-library", id: "3" }
+        mocks.resolveSources.mockResolvedValue({ scope: { mode: "selected", refs: [local.ref] }, selected: [local], unavailable: [] })
+        const sessions: unknown[] = []
+        mocks.searchIndex.mockImplementation(async ({ session }) => {
+            sessions.push(session)
+            session.pins.set(3, 5)
+            throw new Error("fixture failure")
+        })
+        const tool = sourceTools.find((item) => item.id === "source.search")!
+        const ctx = context()
+        const result = await tool.execute(ctx, { query: "合成" })
+        expect(result).toMatchObject({ candidates: [], degradedSources: [expect.objectContaining({ message: "本轮固定索引检索失败，未切换资料版本" })] })
+        await tool.execute({ ...ctx }, { query: "第二轮" })
+        await tool.execute(context(), { query: "新Run" })
+        expect(sessions[0]).toBe(sessions[1])
+        expect(sessions[0]).not.toBe(sessions[2])
+        expect(mocks.searchDocuments).not.toHaveBeenCalled()
+        const read = sourceTools.find((item) => item.id === "source.read")!
+        await expect(read.execute(ctx, { kind: "document", sourceRef: local.ref, documentId: 12,
+            generationId: 6, passageId: 9, contentHash: "a".repeat(64) })).rejects.toThrow("固定索引版本不一致")
+        await expect(read.execute(ctx, { kind: "document", sourceRef: local.ref, documentId: 12,
+            anchorChunkId: 9 })).rejects.toThrow("固定索引版本不一致")
+        expect(mocks.readIndex).not.toHaveBeenCalled()
+        expect(mocks.readDocument).not.toHaveBeenCalled()
+    })
     it("已就绪索引走代际锚点，不重复读取旧chunk，并保留实际检索模式", async () => {
         const local = { ...source, ref: "doc-library:3", kind: "doc-library", id: "3" }
         mocks.resolveSources.mockResolvedValue({ scope: { mode: "selected", refs: [local.ref] }, selected: [local], unavailable: [] })

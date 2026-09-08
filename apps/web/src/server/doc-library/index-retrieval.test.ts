@@ -7,7 +7,7 @@ vi.mock("@/server/db/read-budget", () => ({ withReadBudget: async (run: (reader:
     mocks.budget(); return run(mocks.reader, async () => {})
 } }))
 vi.mock("./index-provider", () => ({ resolveDocumentIndexProvider: mocks.provider }))
-import { searchDocumentIndex, readDocumentIndexPassage } from "./index-retrieval"
+import { searchDocumentIndex, readDocumentIndexPassage, createDocumentIndexReadSession } from "./index-retrieval"
 import { prepareIndexManifest } from "./index-contract"
 import { hashDocumentText } from "./passage-builder"
 const date = new Date(0), profile = { modelRefId: 1, model: "synthetic", dimensions: 2, version: 1, key: "fixture" }
@@ -30,6 +30,47 @@ function fixture(results: unknown[][]) {
 beforeEach(() => { vi.clearAllMocks(); vi.stubEnv("PETRICHOR_DOC_INDEX_ENABLED", "true"); vi.stubEnv("PETRICHOR_DOC_HYBRID_ENABLED", "false") })
 afterEach(() => vi.unstubAllEnvs())
 describe("代际检索与引用", () => {
+    it("第二轮使用固定代际并允许retired，不再读取current", async () => {
+        const session = createDocumentIndexReadSession()
+        fixture([[generation], [document], [hit]])
+        await searchDocumentIndex({ userId: 7, libraryIds: [2], query: "翻新", session })
+        expect(session.pins.get(2)).toBe(3)
+        const predicates = fixture([[{ ...generation, status: "retired" }], [document], [hit]])
+        const result = await searchDocumentIndex({ userId: 7, libraryIds: [2], query: "条件", session })
+        expect(result.hits[0].generationId).toBe(3)
+        const query = new PgDialect().sqlToQuery(predicates[0])
+        expect(query.sql).not.toContain("is_current")
+        expect(query.params).toEqual(expect.arrayContaining([7, 2, 3, "retired"]))
+    })
+    it("首次无索引固定legacy，后续不自动切换新generation", async () => {
+        const session = createDocumentIndexReadSession()
+        fixture([[]])
+        await searchDocumentIndex({ userId: 7, libraryIds: [2], query: "翻新", session })
+        expect(session.pins.get(2)).toBeNull()
+        mocks.budget.mockClear()
+        expect((await searchDocumentIndex({ userId: 7, libraryIds: [2], query: "条件", session })).hits).toEqual([])
+        expect(mocks.budget).not.toHaveBeenCalled()
+    })
+    it("已固定版本失效或原文变化时拒绝，不改写pin", async () => {
+        const session = createDocumentIndexReadSession()
+        session.pins.set(2, 3)
+        fixture([[]])
+        await expect(searchDocumentIndex({ userId: 7, libraryIds: [2], query: "条件", session })).rejects.toThrow("版本已失效")
+        fixture([[generation], [{ ...document, updatedAt: new Date(1) }]])
+        await expect(searchDocumentIndex({ userId: 7, libraryIds: [2], query: "条件", session })).rejects.toThrow("原文已变化")
+        expect(session.pins.get(2)).toBe(3)
+    })
+    it("并发调用首次确定版本后，下一次才执行；失败不会卡住队列", async () => {
+        const session = createDocumentIndexReadSession()
+        const predicates = fixture([[generation], [document], [hit], [generation], [document], [hit]])
+        const input = { userId: 7, libraryIds: [2], query: "翻新", session }
+        const results = await Promise.all([searchDocumentIndex(input), searchDocumentIndex(input)])
+        expect(results.map((r) => r.hits[0].generationId)).toEqual([3, 3])
+        expect(new PgDialect().sqlToQuery(predicates[3]).sql).not.toContain("is_current")
+        fixture([[], [generation], [document], [hit]])
+        const settled = await Promise.allSettled([searchDocumentIndex(input), searchDocumentIndex(input)])
+        expect(settled.map((r) => r.status)).toEqual(["rejected", "fulfilled"])
+    })
     it("关闭开关不查询索引或调用provider", async () => {
         vi.stubEnv("PETRICHOR_DOC_INDEX_ENABLED", "false")
         expect((await searchDocumentIndex({ userId: 7, libraryIds: [2], query: "翻新" })).hits).toEqual([])
