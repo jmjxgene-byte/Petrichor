@@ -82,8 +82,8 @@ export const geneOpsTools: AgentToolDefinition[] = [
                     content: row.content,
                     sourceId: `${row.document_id}:${row.chunk_position}`,
                     url: row.source_url,
-                    confidence: 0.9,
                     metadata: {
+                        anchorVerified: false,
                         ephemeral: true,
                         documentId: row.document_id,
                         chunkPosition: row.chunk_position,

@@ -25,6 +25,14 @@ const evidence: DeepResearchEvidence[] = [{
 }]
 
 describe("deep research output contract", () => {
+    it("位置未核验标记随Deep历史恢复，正文不随引用保存", () => {
+        const items = [{ ...evidence[0], anchorVerified: false as const }]
+        const references = toDeepResearchReferences(items)
+        const message = deepResearchFinalMessageSchema.parse({ parts: [{ type: "text", text: "合成回答[1]" }], agentRunId: "deep-fixture", deepResearch: { runKey: "deep-fixture", fastRunKey: null, references } })
+        expect(persistedDeepResearchEvidence(extractPersistedMessageMetadata(message))[0].anchorVerified).toBe(false)
+        expect(toMetadataOnlyAgentEvidence(items)[0].metadata?.anchorVerified).toBe(false)
+        expect(JSON.stringify(references)).not.toContain("仅在当前Run内使用的正文")
+    })
     it("已消耗模型调用的失败不重新排队", () => {
         expect(deepResearchRetryPlan(1, 3, false)).toEqual({ status: "failed", delaySeconds: 0 })
         expect(deepResearchRetryPlan(1, 3, true).status).toBe("retry_wait")

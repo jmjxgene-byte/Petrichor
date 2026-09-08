@@ -180,6 +180,7 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
                             url,
                             fallbackKey: candidate.candidateKey,
                         }),
+                        ...(metadata.anchorVerified === false ? { anchorVerified: false as const } : {}),
                         title,
                         content: item.content,
                         source: item.source,
@@ -397,6 +398,7 @@ function renderSynthesisInput(question: string, evidence: DeepResearchEvidence[]
     const blocks = evidence.map((item, index) => [
         `[${indices[index]}] ${item.title}`,
         `来源：${item.source}`,
+        item.anchorVerified === false ? "限制：未核验搜索命中位置，不能把文档游标片段当成已定位的回复。" : "",
         item.url ? `链接：${item.url}` : "",
         `查询时间：${item.queriedAt}`,
         item.content,

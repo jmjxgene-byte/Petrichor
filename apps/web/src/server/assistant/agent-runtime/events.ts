@@ -123,6 +123,7 @@ export type PublicObservation = {
 
 /** 对普通 UI 暴露的证据（§162.14） */
 export type PublicEvidence = {
+    anchorVerified?: false
     id: string
     source: AgentEvidence["source"]
     title: string
@@ -194,6 +195,7 @@ export function toPublicEvidence(evidence: AgentEvidence, citationIndex?: number
     return {
         id: evidence.id,
         source: evidence.source,
+        ...(metadata.anchorVerified === false ? { anchorVerified: false as const } : {}),
         title: evidence.title ?? evidence.content.slice(0, 60),
         ...(evidence.content ? { snippet: evidence.content.slice(0, 280) } : {}),
         ...(evidence.url ? { url: evidence.url } : {}),

@@ -196,6 +196,7 @@ export function evidenceForPersistence(item: AgentEvidence): AgentEvidence | nul
                 ? { citationIndex: metadata.citationIndex }
                 : {}),
             persistedMetadataOnly: true,
+            ...(metadata?.anchorVerified === false ? { anchorVerified: false } : {}),
         },
     }
 }

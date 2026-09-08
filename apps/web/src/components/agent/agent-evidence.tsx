@@ -134,9 +134,10 @@ export function AgentEvidenceCard({
                     {evidence.path.join(" / ")}
                 </p>
             ) : null}
+            {evidence.anchorVerified === false ? <p className="mt-1 text-[11px] text-muted-foreground">仅按文档游标读取，未校验搜索命中位置。</p> : null}
             {evidence.snippet ? (
                 <div className="mt-1.5 text-[12px] leading-5 text-muted-foreground">
-                    <p className="text-[11px] font-medium text-foreground/65">命中内容：</p>
+                    <p className="text-[11px] font-medium text-foreground/65">{evidence.anchorVerified === false ? "已读取内容：" : "命中内容："}</p>
                     <p className="line-clamp-4">{evidence.snippet}</p>
                 </div>
             ) : null}

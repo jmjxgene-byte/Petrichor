@@ -54,6 +54,11 @@ describe("知识库章节溯源", () => {
 })
 
 describe("GeneOps 实时来源", () => {
+    it("旧式游标读取明确标出位置未经核验", () => {
+        render(<AgentEvidenceCard evidence={{ id: "legacy", source: "geneops", title: "合成", snippet: "合成内容", citationIndex: 1, anchorVerified: false }} />)
+        expect(screen.getByText("仅按文档游标读取，未校验搜索命中位置。")).toBeTruthy()
+        expect(screen.getByText("已读取内容：")).toBeTruthy()
+    })
     it("展示来源名称和查询时间，并在新窗口打开原文", () => {
         render(<AgentEvidenceCard evidence={{
             id: "g1",

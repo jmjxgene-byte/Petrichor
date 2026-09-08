@@ -68,6 +68,7 @@ export const deepResearchFinalMessageSchema = z.object({
         runKey: z.string().trim().min(1).max(64),
         fastRunKey: z.string().trim().min(1).max(64).nullable(),
         references: z.array(z.object({
+            anchorVerified: z.literal(false).optional(),
             title: z.string().trim().min(1).max(500),
             url: z.string().max(2_000).nullable(),
             citationIndex: z.number().int().min(1).max(40).optional(),

@@ -60,6 +60,7 @@ export function toDeepResearchReferences(
         url: normalizeDeepEvidenceUrl(item.url, item.source),
         source: (item.sourceName?.trim() || item.source).slice(0, 100),
         sourceKind: normalizeAgentEvidenceSource(item.source),
+        ...(item.anchorVerified === false ? { anchorVerified: false as const } : {}),
         ...(hasLocal ? { citationIndex: indices[index] } : {}),
         queriedAt: item.queriedAt,
     }))
@@ -77,6 +78,7 @@ export function toMetadataOnlyAgentEvidence(
         content: "",
         ...(normalizeDeepEvidenceUrl(item.url, item.source) ? { url: normalizeDeepEvidenceUrl(item.url, item.source)! } : {}),
         metadata: {
+            ...(item.anchorVerified === false ? { anchorVerified: false } : {}),
             sourceName: item.sourceName?.trim() || item.source,
             queriedAt: item.queriedAt,
             citationIndex: indices[index],

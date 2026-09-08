@@ -275,6 +275,7 @@ export function renderEvidence(evidence: AgentEvidence, index: number): string {
     const location = evidence.url ?? (evidence.metadata?.path as string[] | undefined)?.join(" / ")
     if (location) parts.push(`  来源：${location}`)
     if (evidence.metadata?.publishedAt) parts.push(`  时间：${String(evidence.metadata.publishedAt)}`)
+    if (evidence.metadata?.anchorVerified === false) parts.push("  限制：仅按文档游标读取，未校验搜索命中位置。不得把它当作已定位的回答或评论；正文不支持的问题应说明不足。")
     // Wiki 页面证据直接给出可复制的内联引用格式，模型照抄即可
     const pageKey = evidence.metadata?.pageKey
     if (typeof pageKey === "string" && pageKey) {

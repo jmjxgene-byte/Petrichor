@@ -2647,6 +2647,7 @@ export interface AgentRunActivityResponse {
 }
 
 export interface AgentRunEvidenceResponse {
+  anchorVerified?: false
   id: string
   source: "knowledge" | "document" | "wiki" | "web" | "graph" | "memory" | "subagent" | "tool" | "geneops"
   title: string

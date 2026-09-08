@@ -126,6 +126,7 @@ function sanitizeExternalAgentEventPart(part: unknown) {
             return {
                 id: evidence.id,
                 source: evidence.source,
+                ...(evidence.anchorVerified === false ? { anchorVerified: false } : {}),
                 title: evidence.title,
                 ...(typeof evidence.url === "string" ? { url: evidence.url } : {}),
                 ...(typeof evidence.sourceName === "string" ? { sourceName: evidence.sourceName } : {}),

@@ -21,6 +21,7 @@ export type DeepResearchCandidate = {
 }
 
 export type DeepResearchEvidence = {
+    anchorVerified?: false
     referenceKey: string
     title: string
     content: string
@@ -136,6 +137,7 @@ export function prepareCitableEvidence(evidence: DeepResearchEvidence[]): DeepRe
 
         const existing = byKey.get(key)
         if (existing) {
+            if (item.anchorVerified === false) existing.anchorVerified = false
             if (existing.content.includes(content)) continue
             const remainingForSource = MAX_CITABLE_SOURCE_CHARS - existing.content.length
             const remainingTotal = MAX_EVIDENCE_TOTAL_CHARS - totalChars

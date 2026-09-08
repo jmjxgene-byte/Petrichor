@@ -363,6 +363,7 @@ function appendEvidence(existing: EvidenceViewModel[], incoming: unknown): Evide
             id,
             source: (record.source as EvidenceViewModel["source"]) ?? "tool",
             title: typeof record.title === "string" ? record.title : "未命名来源",
+            ...(record.anchorVerified === false ? { anchorVerified: false as const } : {}),
             ...(typeof record.snippet === "string" ? { snippet: record.snippet } : {}),
             ...(typeof record.url === "string" ? { url: record.url } : {}),
             ...(typeof record.nodeKey === "string" ? { nodeKey: record.nodeKey } : {}),

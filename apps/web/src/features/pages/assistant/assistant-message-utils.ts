@@ -14,6 +14,7 @@ export type AssistantUIMessage = NonNullable<UseChatRuntimeOptions["messages"]>[
 export type AssistantFocusSelection = AssistantSourceScope
 
 export type PersistedDeepResearchReference = {
+  anchorVerified?: false
   citationIndex?: number
   title: string
   url: string | null
@@ -317,6 +318,7 @@ export function persistedDeepResearchEvidence(metadata: unknown): EvidenceViewMo
   return readPersistedDeepResearchReferences(metadata).map((reference, index) => ({
     id: `deep-reference-${index + 1}`,
     source: reference.sourceKind ?? "geneops",
+    ...(reference.anchorVerified === false ? { anchorVerified: false as const } : {}),
     title: reference.title,
     ...(reference.url ? { url: reference.url } : {}),
     sourceName: reference.source,
@@ -350,7 +352,7 @@ function normalizePersistedReferences(value: unknown): PersistedDeepResearchRefe
     const url = record.url == null ? null : normalizeDeepEvidenceUrl(record.url, sourceKind ?? undefined)
     if (!title || !source || !queriedAt || (record.url != null && url == null)) return []
     const citationIndex = typeof record.citationIndex === "number" && Number.isInteger(record.citationIndex) && record.citationIndex >= 1 && record.citationIndex <= 40 ? record.citationIndex : undefined
-    return [{ title, source, queriedAt, url, ...(sourceKind ? { sourceKind } : {}), ...(citationIndex ? { citationIndex } : {}) }]
+    return [{ title, source, queriedAt, url, ...(sourceKind ? { sourceKind } : {}), ...(citationIndex ? { citationIndex } : {}), ...(record.anchorVerified === false ? { anchorVerified: false as const } : {}) }]
   }).slice(0, 40)
 }
 

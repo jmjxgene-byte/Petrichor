@@ -66,6 +66,7 @@ export type SubAgentViewModel = {
 export type EvidenceSource = "knowledge" | "document" | "wiki" | "web" | "graph" | "memory" | "subagent" | "tool" | "geneops"
 
 export type EvidenceViewModel = {
+    anchorVerified?: false
     id: string
     source: EvidenceSource
     title: string
