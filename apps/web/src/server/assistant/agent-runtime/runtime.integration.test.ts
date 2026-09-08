@@ -105,6 +105,18 @@ function baseRequest(model: unknown, goal: string) {
 }
 
 describe("Agent Runtime 集成", () => {
+    it("首轮空结果只改写一次并补检，改写用量纳入Run而不成为答案", async () => {
+        const queries: unknown[] = []
+        tools.register(makeTool("source.lookup", "lookup_sources", "source", async (_ctx, input) => { queries.push(input); return { found: queries.length > 1 } }, {
+            core: true, normalize: (output) => ({ summary: "合成检索", evidence: (output as { found: boolean }).found ? [{ source: "document", sourceId: "d1", content: "合成依据", title: "合成" }] : [] }),
+        }))
+        const result = await new PetrichorAgentRuntime({ tools, skills }).run({ ...baseRequest(scriptedModel([
+            { kind: "text", text: '{"query":"Listing 翻新"}' }, { kind: "text", text: "合成依据[1]" },
+        ]), "翻新怎么翻？"), focus: { libraryId: "3" } })
+        expect(queries).toEqual([{ query: "翻新怎么翻？" }, { query: "Listing 翻新" }])
+        expect(result.answer).toBe("合成依据[1]")
+        expect(result.state.tokenUsage.total).toBe(30)
+    })
     it.each(["没有引用的合成结论", "伪造引用的合成结论[99]", "已读合成结论[1]"])("资料答案先核验再发出：%s", async (answer) => {
         tools.register(makeTool("source.lookup", "lookup_sources", "source", async () => ({}), {
             core: true, normalize: () => ({ summary: "已读", evidence: [{ source: "document", sourceId: "synthetic", title: "合成", content: "已读合成结论" }] }),

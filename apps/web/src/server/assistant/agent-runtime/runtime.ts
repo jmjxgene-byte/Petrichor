@@ -10,6 +10,7 @@ import { AgentEventEmitter, type AgentEventSink } from "./events"
 import { buildFinalAnswerPlan } from "./final-answer"
 import { groundingPolicy, groundingQueries, GROUNDED_ANSWER_GUIDANCE, insufficientGroundingAnswer } from "./grounding-policy"
 import { validateGroundedCitations, UNVERIFIED_CITATION_ANSWER } from "./grounded-citations"
+import { rewriteGroundingQuery } from "./grounding-rewrite"
 import { newRunId } from "./ids"
 import { LoopDetector } from "./loop-detector"
 import { runAgentSegment, SegmentController } from "./mastra-bridge"
@@ -403,7 +404,9 @@ export class PetrichorAgentRuntime {
             const deadline = Date.now() + 8_000
             groundingDeadline = deadline
             let failed = false
-            for (const query of groundingQueries(request.goal)) {
+            const queries = groundingQueries(request.goal)
+            let rewriteAttempted = false
+            for (const query of queries) {
                 if (Date.now() >= deadline || request.abortSignal?.aborted) break
                 if (!this.tools.has("source.lookup")) { failed = true; break }
                 const controller = new AbortController()
@@ -416,6 +419,15 @@ export class PetrichorAgentRuntime {
                     if (outcome.evidence.some((item) => item.content?.trim())) {
                         simpleKnowledgeFastPath = true
                         break
+                    }
+                    if (!rewriteAttempted) {
+                        rewriteAttempted = true
+                        const rewriteStarted = Date.now()
+                        const rewrite = await rewriteGroundingQuery({ model: request.model, goal: request.goal, deadline, signal: controller.signal })
+                        if (rewrite.usage) { state.addTokenUsage(rewrite.usage); trace.addTokenUsage(rewrite.usage) }
+                        trace.addLlmLatency(Date.now() - rewriteStarted)
+                        trace.event("observation", { strategy: "bounded_grounding_rewrite", status: rewrite.status, usageKnown: !!rewrite.usage })
+                        if (rewrite.query && rewrite.query !== queries[0]) queries.splice(1, 1, rewrite.query)
                     }
                 } finally {
                     clearTimeout(timer)
