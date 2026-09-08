@@ -267,12 +267,10 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
         return completed.job
     } catch (error) {
         const current = await getDeepResearchJob(job.runKey, job.userId)
-        if (current?.status === "cancel_requested") {
-            return await acknowledgeDeepResearchJobCancellation({ jobId, workerId })
-        }
-        const code = classifyExecutionError(error, { leaseLost, aborted: controller.signal.aborted })
+        const cancelled = current?.status === "cancel_requested" || current?.status === "cancelled"
+        const code = cancelled ? "cancelled" : classifyExecutionError(error, { leaseLost, aborted: controller.signal.aborted })
         if (executionReserved) await db.update(agentRuns).set({
-            status: "failed",
+            status: cancelled ? "cancelled" : "failed",
             stopReason: code,
             metricsJson: JSON.stringify({
                 modelCalls: {
@@ -296,6 +294,8 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
             durationMs: Date.now() - startedAt,
             completedAt: new Date(),
         }).where(eq(agentRuns.runKey, job.runKey))
+        if (current?.status === "cancel_requested") return await acknowledgeDeepResearchJobCancellation({ jobId, workerId })
+        if (current?.status === "cancelled") return current
         return await failDeepResearchJob({ jobId, workerId, errorCode: code, retryable: modelCallsStarted === 0 })
     } finally {
         clearTimeout(deadline)

@@ -279,7 +279,25 @@ export async function recoverExpiredDeepResearchJobs(now = new Date()) {
                        or exists (select 1 from petrichor_agent_run r where r.run_key = petrichor_deep_research_job.run_key))
                 returning id
             `
-            return { retried: retryRows.length, failed: failedRows.length }
+            const cancelledRows = await sql<Array<{ id: number }>>`
+                with cancelled as (
+                    update petrichor_deep_research_job
+                    set status = 'cancelled', lease_owner = null, lease_expires_at = null,
+                        heartbeat_at = null, error_code = 'cancelled',
+                        cancelled_at = coalesce(cancelled_at, ${now}), completed_at = ${now}, updated_at = ${now}
+                    where status = 'cancel_requested'
+                      and (lease_expires_at <= ${now} or lease_expires_at is null)
+                    returning id, run_key, user_id
+                ), closed_runs as (
+                    update petrichor_agent_run r
+                    set status = 'cancelled', stop_reason = 'cancelled', completed_at = coalesce(completed_at, ${now})
+                    where r.status = 'running'
+                      and exists (select 1 from cancelled c where c.run_key = r.run_key and c.user_id = r.user_id)
+                    returning r.id
+                )
+                select id from cancelled
+            `
+            return { retried: retryRows.length, failed: failedRows.length, cancelled: cancelledRows.length }
         })
     } finally {
         await client.end({ timeout: 5 })

@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08过期取消收口节点：恢复事务补cancel_requested且租约过期/缺失分支，终态cancelled，保留首次取消时间并清理租约；同一数据修改CTE只更新相同runKey/userId且仍running的Agent Run，返回cancelled数量，不重排队。执行器对cancel_requested或已cancelled统一取消分类，在保留可获得的用量元数据后确认取消，避免迟到结果覆盖成普通失败。全量2workers下1393通过/40既有跳过，typecheck/lint/build通过；当前为SQL契约/合成回归，真实PG并发与网络取消未验收。G-PRICE-IDENTITY仍待新增只读授权，本轮未访问账号或模型。
+
 2026-09-08金额授权前置核验门：本轮只读研究官方New API资料，未访问用户账号。官方[倍率文档](https://docs.newapi.pro/en/docs/guide/console/settings/rate-settings)说明预扣与实际用量结算分离；[text_quota实现](https://github.com/QuantumNous/new-api/blob/main/service/text_quota.go)还涉及缓存写入倍率/工具附加费，[quota_math](https://github.com/QuantumNous/new-api/blob/main/common/quota_math.go)存在配额舍入。不能以当前基础公式覆盖所有计费路径，也不能假设用户部署等同当前main。签名金额凭据暂停在G-PRICE-IDENTITY门：需独立允许只读核验new.genejm.one部署版本、当前模型计费路径、账号/凭据所属分组与现有限额；不读取/导出API Key、不调用模型、不改配置。然后确定可验证的最坏费用策略或供应商硬额度支持，才接签名报价、输入/输出上界与逐调用持久预留。不得把预算改为仅事后估算而声称实现硬上限。本轮无功能代码或测试变更。
 
 2026-09-08微美元公式节点：Deep费用估算新增formulaCeilingMicrousd，按已经解析的公开十进制价格转换有理数，以BigInt计算并向上取整，避免用浮点乘积判断金额；极小正费用至少1微美元，超过安全整数拒绝，旧minUsd/maxUsd显示字段保留。全量2workers下1392通过/40既有跳过，typecheck/lint/build通过。此字段仅是当前估算公式的整数上界，不包括尚未核验的供应商每请求扣费舍入、额外费或锁价，不是实际账单保证。用户金额确认、签名报价与持久预算预留仍未接通。只读复查GitHub登录仍无效，orbstack socket仍不存在，无真实服务请求。
