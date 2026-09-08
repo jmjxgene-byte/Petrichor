@@ -410,7 +410,8 @@ async function executeSourceRead(ctx: ToolExecutionContext, raw: unknown): Promi
                 sourceId: `${documentId}:generation:${input.generationId}:passage:${input.passageId}`, url: output.href,
                 metadata: { sourceRef: source.ref, sourceName: source.name, documentId: String(documentId),
                     generationId: String(input.generationId), passageId: String(input.passageId), contentHash: input.contentHash,
-                    sourceHash: output.anchor.sourceHash, startOffset: output.anchor.startOffset, endOffset: output.anchor.endOffset },
+                    sourceHash: output.anchor.sourceHash, startOffset: output.anchor.startOffset, endOffset: output.anchor.endOffset,
+                    windowAnchorStart: output.anchorStart, windowAnchorEnd: output.anchorEnd },
             }],
         } }
     }
@@ -429,9 +430,9 @@ async function executeSourceRead(ctx: ToolExecutionContext, raw: unknown): Promi
         chunks: Array<{ chunkIndex: number; locator: string | null; text: string }>
     }
     if (input.anchorChunkId != null && output.anchorIndex == null) throw badRequest("命中片段已失效")
-    const content = output.anchorIndex != null
-        ? buildEvidenceWindow(output.chunks, output.anchorIndex).content
-        : output.chunks.map((chunk) => `${chunk.locator ? `[${chunk.locator}]\n` : ""}${chunk.text}`).join("\n\n")
+    const window = output.anchorIndex != null ? buildEvidenceWindow(output.chunks, output.anchorIndex) : null
+    const content = window?.content
+        ?? output.chunks.map((chunk) => `${chunk.locator ? `[${chunk.locator}]\n` : ""}${chunk.text}`).join("\n\n")
     return {
         normalized: {
             progress: content.length > 0,
@@ -445,6 +446,7 @@ async function executeSourceRead(ctx: ToolExecutionContext, raw: unknown): Promi
                 confidence: 0.8,
                 metadata: {
                     sourceRef: source.ref, sourceName: source.name, documentId: output.documentId,
+                    ...(window ? { windowAnchorStart: window.anchorStart, windowAnchorEnd: window.anchorEnd } : {}),
                     ...(input.anchorChunkId == null ? {} : { anchorChunkId: String(input.anchorChunkId), anchorIndex: output.anchorIndex }),
                 },
             }] : [],

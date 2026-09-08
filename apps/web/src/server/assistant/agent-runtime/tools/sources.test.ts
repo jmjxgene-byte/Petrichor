@@ -38,6 +38,8 @@ vi.mock("@/server/external-source/geneops-query", async (importOriginal) => {
 
 import type { ToolExecutionContext } from "../types"
 import { sourceTools } from "./sources"
+import { EvidenceStore } from "../evidence"
+import { toPublicEvidence } from "../events"
 
 const source = {
     ref: "external-source:1" as const,
@@ -120,7 +122,7 @@ describe("unified source tools", () => {
         mocks.resolveSources.mockResolvedValue({ scope: { mode: "selected", refs: [local.ref] }, selected: [local], unavailable: [] })
         mocks.searchIndex.mockResolvedValue({ hits: [{ documentId: 12, libraryId: 3, generationId: 5, passageId: 6,
             contentHash: "a".repeat(64), title: "合成文档", snippet: "合成", href: "/document/12", mode: "hybrid" }], indexedLibraryIds: [3], degraded: [] })
-        mocks.readIndex.mockResolvedValue({ title: "合成文档", content: "合成命中", href: "/document/12?generationId=5&passageId=6",
+        mocks.readIndex.mockResolvedValue({ title: "合成文档", content: "前".repeat(500) + "合成命中", anchorStart: 500, anchorEnd: 504, href: "/document/12?generationId=5&passageId=6",
             anchor: { sourceHash: "b".repeat(64), startOffset: 10, endOffset: 20 } })
         const tool = sourceTools.find((item) => item.id === "source.lookup")!
         const output = await tool.execute(context(), { query: "合成" })
@@ -129,6 +131,7 @@ describe("unified source tools", () => {
         expect(mocks.readDocument).not.toHaveBeenCalled()
         expect(mocks.readIndex).toHaveBeenCalledWith(expect.objectContaining({ userId: 1, libraryId: 3, documentId: 12, generationId: 5, passageId: 6 }))
         expect(normalized.evidence?.[0].metadata).toMatchObject({ generationId: "5", passageId: "6", documentId: "12" })
+        expect(toPublicEvidence(new EvidenceStore().add(normalized.evidence![0])).snippet).toBe("合成命中")
         expect(normalized.data).toMatchObject({ retrievalModes: ["hybrid"] })
     })
 
@@ -163,6 +166,7 @@ describe("unified source tools", () => {
         expect(normalized.evidence?.map((e) => e.sourceId)).toEqual(["12:chunk:900", "12:chunk:950"])
         expect(normalized.evidence?.[0].content).toContain("尾部证据900")
         expect(normalized.evidence?.[1].content).toContain("尾部证据950")
+        expect(normalized.evidence?.map((item) => toPublicEvidence(new EvidenceStore().add(item)).snippet)).toEqual(["尾部证据900", "尾部证据950"])
         expect(normalized.evidence?.every((e) => (e.content?.length ?? 0) <= 4_000)).toBe(true)
     })
 

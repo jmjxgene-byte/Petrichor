@@ -192,12 +192,19 @@ export function toPublicObservation(observation: AgentObservation): PublicObserv
 
 export function toPublicEvidence(evidence: AgentEvidence, citationIndex?: number): PublicEvidence {
     const metadata = evidence.metadata ?? {}
+    const start = metadata.windowAnchorStart
+    const end = metadata.windowAnchorEnd
+    // 仅使用已读窗口的偏移；原文偏移不能直接用于裁剪窗口正文。
+    const anchored = evidence.source === "document" && metadata.anchorVerified !== false
+        && typeof start === "number" && Number.isSafeInteger(start) && start >= 0
+        && typeof end === "number" && Number.isSafeInteger(end) && end > start && end <= evidence.content.length
+    const snippet = anchored ? evidence.content.slice(start, Math.min(end, start + 280)) : evidence.content.slice(0, 280)
     return {
         id: evidence.id,
         source: evidence.source,
         ...(metadata.anchorVerified === false ? { anchorVerified: false as const } : {}),
         title: evidence.title ?? evidence.content.slice(0, 60),
-        ...(evidence.content ? { snippet: evidence.content.slice(0, 280) } : {}),
+        ...(snippet ? { snippet } : {}),
         ...(evidence.url ? { url: evidence.url } : {}),
         ...(typeof metadata.nodeKey === "string" ? { nodeKey: metadata.nodeKey } : {}),
         ...(typeof metadata.pageKey === "string" ? { pageKey: metadata.pageKey } : {}),
