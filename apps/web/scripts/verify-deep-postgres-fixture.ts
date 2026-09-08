@@ -104,6 +104,8 @@ export async function verifyDeepFixture(runtime: ReturnType<typeof postgres>, us
     check(rejected, "deep_missing_run_completion_rejected")
     const [afterRollback] = await runtime`select count(*)::int as n from petrichor_assistant_message where thread_id=${thread.id} and role='assistant'`
     check(afterRollback.n === 1 && (await store.getDeepResearchJob(rollback.runKey, userId))?.status === "running", "deep_failed_completion_transaction_rollback")
+    const { verifyIndexFixture } = await import("./verify-index-postgres-fixture")
+    await verifyIndexFixture(runtime, userId, checks)
   } finally {
     // Drizzle公开的底层客户端；仅结束此测试模块建立的应用连接池。
     await (getDb() as ReturnType<typeof getDb> & { $client: ReturnType<typeof postgres> }).$client.end({ timeout: 2 })

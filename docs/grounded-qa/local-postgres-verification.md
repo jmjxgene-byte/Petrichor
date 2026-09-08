@@ -43,6 +43,14 @@
 
 ## 失败路线与范围
 
+### 实际索引搜索、阅读和任务函数（2026-09-08）
+
+用户选择完整MVP验收后再部署，不发布单独热修。新增 `verify-index-postgres-fixture.ts`，沿用同一隔离库及必要源码白名单；嵌入provider改为Hybrid分支内惰性导入，关键词路径不加载模型SDK。测试未挂载provider或配置模型，仍保持Hybrid=false，不模拟语义质量。
+
+最新完整终验 **75项通过**：原51项加24项索引检查。使用真实passage builder与manifest builder建立500段合成前文及末尾校验码，在原生tsvector上调用实际searchDocumentIndex/readDocumentIndexPassage，确认末尾命中、≤4000字符窗口保留完整anchor、引用身份、外用户无法搜索/读取、错hash拒绝、原Run固定retired代际/新Run读取current、旧引用可读、原文更新后旧引用拒绝与新会话明确降级、取消与过期预算停止、删除后不可阅读。实际index-jobs函数另验证并发单槽、heartbeat归属/成功、预算越界、预占一次、过期heartbeat拒绝、已预占租约不重放及generation失败终态。合成预算仅验证嵌入队列约束，不恢复CPA聊天/Deep的美元限制。
+
+typecheck/lint/build/diff通过，回归1483通过/40既有跳过，宿主cleanupOk=true。这是实际函数+原生PG合成验收，不是HTTP完整身份链、真实文件索引构建、真实embedding/rerank、Worker进程崩溃、人工引用支持度或性能P95验收。真实模型小样本与Staging仍是下一阶段。
+
 ### 固定旧基线升级与故障回滚（2026-09-08）
 
 当前入口改为先从固定 Git 对象 `b6eac4c729658c04655edc535367f4c7c51c6189` 导出迁移白名单，使用该版本真实 bootstrap 创建8条迁移的旧结构；确认没有新 generation 表，写入合成旧用户。临时导出仅包含迁移代码和清单，数据库只在 tmpfs 中存在，不使用生产备份。

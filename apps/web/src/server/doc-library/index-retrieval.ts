@@ -7,7 +7,6 @@ import { reciprocalRankFusion, toRecallHits } from "@/server/retrieval/fusion"
 import { LocalLexicalReranker } from "@/server/retrieval/reranker"
 import { docLibraryDocumentPath } from "@/lib/dashboard-routes"
 import { parseStoredIndexManifest, serializeIndexVectors } from "./index-contract"
-import { resolveDocumentIndexProvider } from "./index-provider"
 import { documentHitSnippet, documentSearchTerms } from "./search-query"
 import { buildEvidenceWindow } from "./evidence-window"
 import { hashDocumentText } from "./passage-builder"
@@ -102,6 +101,7 @@ async function searchPinnedDocumentIndex(input: IndexInput) {
                 const semanticDeadline = Math.min(deadline - 2_000, Date.now() + 2_500)
                 const semanticSignal = AbortSignal.any([signal, AbortSignal.timeout(Math.max(1, semanticDeadline - Date.now()))])
                 const profile = parseStoredIndexManifest(group[0].manifestJson, group[0].manifestHash).profile
+                const { resolveDocumentIndexProvider } = await import("./index-provider")
                 const provider = await resolveDocumentIndexProvider(input.userId, JSON.parse(process.env.PETRICHOR_DOC_INDEX_PROVIDER_POLICY ?? "null"), profile)
                 const vectors = await provider.embed([input.query], semanticSignal)
                 const [vector] = serializeIndexVectors(vectors, 1, profile.dimensions)
