@@ -15,7 +15,7 @@ import { docLibraryDocumentPath } from "@/lib/dashboard-routes"
 import { deleteS3Objects, type S3DeleteFailure } from "@/server/upload/s3-delete"
 import { stripS4KeyPrefix } from "@/server/upload/s3-presign"
 import { readUploadedMarkdown } from "./markdown-source"
-import { documentSearchTerms, documentHitSnippet, literalLikePattern } from "./search-query"
+import { documentSearchTerms, documentHitSnippet, documentLexicalExpressions } from "./search-query"
 
 export const idSchema = z.union([z.string(), z.number()]).transform((value, ctx) => {
     const raw = String(value).trim()
@@ -487,12 +487,9 @@ export async function searchChunks(input: {
     if (input.libraryId != null) filters.push(eq(docChunks.libraryId, input.libraryId))
     if (input.libraryIds != null) filters.push(inArray(docChunks.libraryId, input.libraryIds))
     if (input.documentId != null) filters.push(eq(docChunks.documentId, input.documentId))
-    const matches = terms.map((term) =>
-        sql`lower(${docChunks.text}) like ${literalLikePattern(term)} escape ${"\\"}`)
-    filters.push(sql`(${sql.join(matches, sql` or `)})`)
+    const { predicate, score } = documentLexicalExpressions(docChunks.text, terms)
+    filters.push(predicate)
     // 两种数据库都在 LIMIT 前打分，避免无序预截断丢失后部高相关候选。
-    const score = sql<number>`(${sql.join(matches.map((match, index) =>
-        sql`case when ${match} then ${Math.min(terms[index].length, 16)} else 0 end`), sql` + `)})`
     const rows = await withReadBudget((reader) => reader
         .select({
             chunkId: docChunks.id, documentId: docChunks.documentId, libraryId: docChunks.libraryId,
