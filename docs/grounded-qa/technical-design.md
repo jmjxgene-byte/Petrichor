@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08本地版本保护节点：HTTPS凭据问题未恢复；默认SSH最初缺主机键，按[GitHub官方公钥](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints)在任务临时文件核验Ed25519指纹后，认证仍返回Permission denied(publickey)。未改用户SSH配置、未新增凭据，临时公钥和裸仓库验证目录已清理。项目根的`.codex-worktrees/grounded-qa-backups/grounded-qa-aa52c81ad.bundle`为0600、19,676,706字节，SHA-256为`11b10c39091ed2ae20c5aa874e7d7149d7c1653ed5701b9a8295702d04fdf6ae`，只包含功能分支截至aa52c81ad5320340b2b421751fc541d2b4544368的完整Git历史。bundle verify及显式--branch独立裸仓库恢复/HEAD/fsck通过，恢复说明在同目录README。它不含未提交文件、生产配置/数据库或Codex聊天记录，也不替代远程推送；后续提交不自动进入此包。本轮没有功能代码变更，未重跑应用测试。
+
 2026-09-08会话编辑/删除联动节点：PG历史截断按user/thread锁定会话，在同事务中取消被移除问题的Deep再删除消息；软删除会话只取消实际归属的目标会话任务。排队任务cancelled，运行任务cancel_requested，关联Run先停止且保留已有费用元数据。Deep启动拒绝软删除会话，完成事务锁同一会话并检查用户问题仍存在，避免编辑后追加旧答案；Job被级联删除时执行器停止而非重试。已执行迁移对question_message_id有ON DELETE CASCADE，本轮未改它，完整Job审计保留仍需单独增量设计。
 
 本地实测发现Bun SQLite异步事务在await后抛错仍留两条写入，因此新增thread-sqlite-mutations同步事务，不改全局驱动。verify-thread-sqlite.ts只用内存合成表，11项实际验证包括故障回滚、范围隔离、级联删除与Run元数据保留；无磁盘数据库/网络/凭据。全量2workers下1403通过/40既有跳过，typecheck/lint/build通过。对话框测试曾出现卸载后Radix 0ms焦点回调跨jsdom环境错误，核对本地依赖代码后等待清理回调，重跑无错误，未屏蔽异常。PG锁/并发仍待真实验收，SQLite此测试不替代PG。
