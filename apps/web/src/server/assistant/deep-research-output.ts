@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import { normalizeDeepEvidenceUrl } from "@/lib/deep-evidence-url"
-import { validateGroundedCitations } from "./agent-runtime/grounded-citations"
+import { validateGroundedCitations, isGroundingSourceEvidence } from "./agent-runtime/grounded-citations"
 
 import type { AgentEvidence, AgentEvidenceSource } from "./agent-runtime/types"
 import type { DeepResearchFinalMessage } from "./deep-research-job-store"
@@ -40,7 +40,8 @@ export function deepResearchCitationIndices(evidence: DeepResearchEvidence[]) {
 
 export function validateDeepResearchCitations(answer: string, evidence: DeepResearchEvidence[]) {
     const indices = deepResearchCitationIndices(evidence)
-    return validateGroundedCitations(answer, new Set(indices.filter((_index, position) => evidence[position].content.trim().length > 0)))
+    return validateGroundedCitations(answer, new Set(indices.filter((_index, position) =>
+        isGroundingSourceEvidence({ source: normalizeAgentEvidenceSource(evidence[position].source), content: evidence[position].content }))))
 }
 
 export function normalizeDeepResearchAnswer(value: string) {

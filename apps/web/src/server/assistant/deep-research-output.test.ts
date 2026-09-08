@@ -25,6 +25,12 @@ const evidence: DeepResearchEvidence[] = [{
 }]
 
 describe("deep research output contract", () => {
+    it("Deep引用也不允许以辅助总结代替资料原文", () => {
+        for (const source of ["subagent", "memory", "tool", "graph", "web"]) {
+            expect(validateDeepResearchCitations("总结结论[1]", [{ ...evidence[0], source }]).valid).toBe(false)
+        }
+        expect(validateDeepResearchCitations("资料结论[1]", evidence).valid).toBe(true)
+    })
     it("位置未核验标记随Deep历史恢复，正文不随引用保存", () => {
         const items = [{ ...evidence[0], anchorVerified: false as const }]
         const references = toDeepResearchReferences(items)

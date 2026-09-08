@@ -10,6 +10,30 @@ import { DEEP_RESEARCH_MODEL_OUTPUT_LIMITS } from "./deep-research-limits"
 const signal = new AbortController().signal
 
 describe("deep research pipeline", () => {
+    it.each(["insufficient", "clarification", "time_unknown", "conflict"])("Deep安全弃答%s保持一次综合及降级提示", async (status) => {
+        const synthesize = vi.fn(async () => JSON.stringify({ groundingStatus: status }))
+        const result = await runDeepResearchPipeline({ question: "合成", modes: ["exact"], signal }, {
+            planQueries: async () => [],
+            search: async () => ({ candidates: [{ candidateKey: "fixture", title: "合成", sourceName: "本地", url: null, score: 1, read: {} }], degradedSourceChecks: 1 }),
+            read: async () => [{ referenceKey: "fixture", title: "合成", content: "已读但不足以结论的正文", source: "document", url: null, queriedAt: "2026-09-08T00:00:00Z" }],
+            synthesize,
+        })
+        expect(result.resolution).toBe(status)
+        expect(result.answer).not.toContain("groundingStatus")
+        expect(result.answer).not.toContain("已读但不足以结论的正文")
+        expect(result.answer).toContain("1 次来源检查降级")
+        expect(result.evidence).toHaveLength(1)
+        expect(synthesize).toHaveBeenCalledOnce()
+    })
+    it("夹带正文的弃答JSON不能获得跳过引用门的状态", async () => {
+        const result = await runDeepResearchPipeline({ question: "合成", modes: ["exact"], signal }, {
+            planQueries: async () => [],
+            search: async () => [{ candidateKey: "fixture", title: "合成", sourceName: "本地", url: null, score: 1, read: {} }],
+            read: async () => [{ referenceKey: "fixture", title: "合成", content: "合成", source: "document", url: null, queriedAt: "2026-09-08T00:00:00Z" }],
+            synthesize: async () => '{"groundingStatus":"insufficient","answer":"私自结论"}',
+        })
+        expect(result.resolution).toBeNull()
+    })
     it("不同文档库各自的generation不互相冲突", async () => {
         const result = await runDeepResearchPipeline({ question: "合成", modes: ["exact"], signal }, {
             planQueries: async () => ["另一个問法"],

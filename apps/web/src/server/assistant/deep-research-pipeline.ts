@@ -1,5 +1,6 @@
 import type { DeepResearchErrorCode } from "./deep-research-job-store"
 import { reciprocalRankFusion, type RecallHit } from "@/server/retrieval/fusion"
+import { parseGroundedResolution } from "./agent-runtime/grounded-resolution"
 
 const MAX_QUERIES = 6
 const MAX_CANDIDATES = 12
@@ -117,9 +118,12 @@ export async function runDeepResearchPipeline(input: {
     const answer = (await deps.synthesize(input.question, citableEvidence, input.signal)).trim()
     input.signal.throwIfAborted()
     if (!answer) throw new DeepResearchExecutionError("validation_failed", "深度综合没有生成答案")
+    // 必须在附加降级前缀前解析，不能把JSON状态当成用户可见正文。
+    const resolution = parseGroundedResolution(answer)
     const warning = failedSearchCount || failedReadCount || degradedSourceChecks
         ? `部分检索未完成：${failedSearchCount} 次搜索、${failedReadCount} 次深读失败；${degradedSourceChecks} 次来源检查降级。以下仅依据成功读取的资料，不代表完整覆盖。\n\n` : ""
-    return { queries, candidates, evidence: citableEvidence, rawEvidenceCount, failedSearchCount, failedReadCount, degradedSourceChecks, answer: warning + answer }
+    return { queries, candidates, evidence: citableEvidence, rawEvidenceCount, failedSearchCount, failedReadCount, degradedSourceChecks,
+        resolution: resolution?.status ?? null, answer: warning + (resolution?.answer ?? answer) }
 }
 
 /**

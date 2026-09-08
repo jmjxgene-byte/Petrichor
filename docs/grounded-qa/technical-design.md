@@ -2,6 +2,8 @@
 
 日期：2026-09-08。本文件描述待实现契约，不表示迁移、模型调用或部署已执行。
 
+第五十一节点：Deep综合复用严格四状态弃答，pipeline先解析再追加技术降级提示，返回服务端固定正文和独立resolution；executor只有该内部已验证状态才免除正常答案的引用要求，仍走同一最终消息/Job/Run完成事务，并在metrics保存groundingResolution。已查阅来源保留安全引用元数据，不复制正文，不增模型调用或改变重试。Deep读取与引用类型门同快速路径。1450测试及类型/Lint/构建通过；未运行真实Worker、模型或数据库。零候选/零可读证据仍是validation_failed，正常无结果与技术失败的区分、实际端到端完成状态和人工充分性准确率仍待验证。
+
 第五十节点：快速问答支持严格弃答契约，仅允许JSON对象中的groundingStatus为insufficient/clarification/time_unknown/conflict；无额外字段或正文，服务端输出固定提示并记录状态元数据，正常答案仍走引用门。该契约通过同一次已有生成调用选择，不另增充分性模型调用；格式不符仍被正常引用门处理，不能借弃答标记夹带无依据结论。1444项测试及类型/Lint/构建通过，四状态Runtime测试只用模拟模型。此处不是独立语义分类器，真实识别准确率、人工支持度、Deep对应行为和不足后的追加补检仍待验证/实现。组件probe中的missing-5是总量提问，产品已有source.overview，因此不能由组件返回候选断言最终答案错误。
 
 第四十八节点：资料问答补检和最终引用共同使用isGroundingSourceEvidence，允许非空knowledge/document/wiki/geneops，拒绝以subagent总结、memory、tool、graph或范围外web代替资料原文。泛化研究路径仍可保留这些辅助Evidence，本轮不删除历史结果。URL去重键和引用分组加来源类型，避免同URL的总结覆盖原文并借用编号；同类型URL仍正常归一去重。1428测试及类型/Lint/构建通过，含真实Runtime配模拟模型的纯总结与混合依据回归。这里只建立来源类型和引用身份门，未证明命题被正文支持、所有候选当前权限有效或人工引用precision达标。
