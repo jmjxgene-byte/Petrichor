@@ -83,6 +83,9 @@ try {
   await runtime`delete from petrichor_doc_document where id=${document.id}`
   const [removed] = await runtime`select count(*)::int as total from petrichor_doc_passage where document_id=${document.id}`
   assert(removed.total === 0, "document_passage_cascade")
+  stage = "deep_application_store"
+  const { verifyDeepFixture } = await import("./verify-deep-postgres-fixture")
+  await verifyDeepFixture(runtime, Number(user.id), dbUrl("petrichor_runtime"), checks)
   stage = "done"
 } catch (error) {
   failure = error instanceof Error ? error.message.slice(0, 160) : "unknown_failure"

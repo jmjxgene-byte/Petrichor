@@ -31,8 +31,18 @@
 
 同时typecheck/lint/build/diff通过，全量1479测试通过、40既有跳过。没有真实模型、Worker或生产操作。
 
+## Deep 应用状态机追加验证
+
+2026-09-08：同一隔离入口增加只读 allowlist 挂载：实际 job-store、db client/schema、配置解析与其必要纯模块、tsconfig、Drizzle/Zod 依赖和合成 fixture。没有挂载整个源码树或环境文件。fixture 在检查本机容器地址后注入合成配置，调用真实应用函数，不启动 Worker 或模型；使用 runtime 角色和三个应用池连接。
+
+最新终验共 **38 项客户端检查通过**（原15项及23项 Deep 检查），宿主 passed/cleanupOk 均为 true；独立 Docker 检查确认容器、网络及卷无残留。Deep 覆盖并发幂等创建、用户 ID 过滤、两个 worker 并发领取唯一任务、heartbeat 所有者、执行占位唯一、并发完成后只有一条结果消息且重复调用可恢复、Agent Run 同事务完成、排队/运行取消、取消所有者、未占位租约可恢复且 attempt 增加、已占位租约失败不重放、真实行锁下 SKIP LOCKED 跳过及释放后可领取、缺失 Run 时完成事务回滚（消息数不增加、Job 保持 running）。并发完成竞争允许失败方回滚，不等于所有竞争调用均成功。
+
+首次追加测试在 deep_recovery_claim 停止，资源清理成功；测试原先在创建后立即领取，PG 默认时间含微秒而 JS Date 为毫秒。改为显式设置合成任务 available_at 为过去，消除测试对即时到期边界的依赖，随后19项及补强后的23项均通过；未据此修改生产调度逻辑。回归1479通过/40既有跳过，typecheck/lint通过。
+
+这不是 HTTP/Worker 端到端或任意故障组合证明：没有真正杀死 Worker，也未执行真实模型、跨进程重启、全部 API 归属路径或旧库升级。应用角色 RLS 不是每用户 RLS；用户过滤仅验证了 job-store 查询的一条路径。
+
 ## 失败路线与范围
 
 此前宿主机连接方案在内部网络下无发布端口，两次均在迁移前失败并清理；第二次确认PG已正常启动、无OOM，Ports中的5432/tcp为null。没有改用开放网络；获新增Bun镜像授权后使用同网客户端解决。
 
-此结果不等于Supabase托管服务验收：RLS策略允许服务端runtime角色访问，用户级隔离仍需应用接口验证；未测试security-definer等全部间接访问路径。当前bootstrap从最新初始化SQL运行，尚未模拟旧生产版本升级或失败迁移的完整回滚。Deep状态机并发/租约、索引API/查询性能、真实语义质量及Staging仍待后续验证。合成向量不代表已执行embedding。
+此结果不等于Supabase托管服务验收：RLS策略允许服务端runtime角色访问，用户级隔离仍需应用接口验证；未测试security-definer等全部间接访问路径。当前bootstrap从最新初始化SQL运行，尚未模拟旧生产版本升级或失败迁移的完整回滚。索引API/查询性能、真实语义质量及Staging仍待后续验证。合成向量不代表已执行embedding。

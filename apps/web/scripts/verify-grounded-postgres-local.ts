@@ -40,6 +40,13 @@ try {
     assert(command(["docker", kind, "inspect", resource], true).code !== 0, "resource_name_unused")
   }
   const mounts = [
+    ...[
+      "tsconfig.json", "scripts/verify-deep-postgres-fixture.ts",
+      "src/server/assistant/deep-research-job-store.ts", "src/server/db/client.ts",
+      "src/server/db/schema.ts", "src/server/db/sqlite-migration.ts", "src/config/server.ts",
+      "src/lib/deep-evidence-url.ts", "src/lib/assistant-source-contract.ts",
+      "node_modules/drizzle-orm", "node_modules/zod",
+    ].flatMap((file) => mount(`apps/web/${file}`, `/workspace/apps/web/${file}`)),
     ...mount("apps/web/scripts/verify-grounded-postgres-client.ts", "/workspace/apps/web/scripts/verify-grounded-postgres-client.ts"),
     ...mount("apps/web/scripts/migrate-database.ts", "/workspace/apps/web/scripts/migrate-database.ts"),
     ...mount("apps/web/src/server/db/full-migration.ts", "/workspace/apps/web/src/server/db/full-migration.ts"),
