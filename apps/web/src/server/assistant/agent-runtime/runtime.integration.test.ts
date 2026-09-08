@@ -138,6 +138,22 @@ describe("Agent Runtime 集成", () => {
         expect(result.answer).toContain("未通过资料引用核验")
         expect(result.answer).not.toContain("未经原文支持的说法")
     })
+    it.each([
+        ["insufficient", "还没有读到足够依据"], ["clarification", "对象或含义还不够明确"],
+        ["time_unknown", "时间信息不足"], ["conflict", "尚未核实的冲突"],
+    ])("非空召回仍可安全弃答，无新增模型调用：%s", async (status, expected) => {
+        tools.register(makeTool("source.lookup", "lookup_sources", "source", async () => ({}), { core: true,
+            normalize: () => ({ summary: "读到一些内容", evidence: [{ source: "document", sourceId: "fixture", content: "与具体问题无充分关联的合成资料" }] }),
+        }))
+        const events: AgentStreamEvent[] = []
+        const result = await new PetrichorAgentRuntime({ tools, skills }).run({ ...baseRequest(scriptedModel([{ kind: "text", text: JSON.stringify({ groundingStatus: status }) }]), "费用变更需要什么条件？"), focus: { libraryId: "3" }, onEvent: (event) => events.push(event) })
+        expect(result.answer).toContain(expected)
+        expect(result.answer).not.toContain("引用核验失败")
+        expect(result.answer).not.toContain("groundingStatus")
+        expect(result.state.tokenUsage.total).toBe(15)
+        expect(result.trace.toolCalls.filter((call) => call.toolId === "source.lookup")).toHaveLength(1)
+        expect(events.some((event) => event.type === "final_answer_delta")).toBe(false)
+    })
     it("资料数量问题只走范围统计，不搜索正文或调用模型猜数", async () => {
         tools.register(makeTool("source.overview", "source_overview", "source", async () => ({ rows: [{ name: "合成", kind: "doc-library", total: 7, ready: 5, available: true }] }), { core: true }))
         tools.register(makeTool("source.lookup", "lookup_sources", "source", async () => { throw new Error("不应正文检索") }, { core: true }))

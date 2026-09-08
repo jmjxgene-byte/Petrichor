@@ -10,6 +10,7 @@ import { AgentEventEmitter, type AgentEventSink } from "./events"
 import { buildFinalAnswerPlan } from "./final-answer"
 import { groundingPolicy, groundingQueries, GROUNDED_ANSWER_GUIDANCE, insufficientGroundingAnswer, needsGroundingContext, GROUNDING_CLARIFICATION } from "./grounding-policy"
 import { validateGroundedCitations, UNVERIFIED_CITATION_ANSWER, isGroundingSourceEvidence } from "./grounded-citations"
+import { GROUNDED_RESOLUTION_GUIDANCE, parseGroundedResolution } from "./grounded-resolution"
 import { rewriteGroundingQuery } from "./grounding-rewrite"
 import { isSourceStatisticsQuestion, renderSourceStatistics } from "@/server/assistant/source-statistics"
 import { newRunId } from "./ids"
@@ -536,7 +537,7 @@ export class PetrichorAgentRuntime {
                     conversationSummary: request.conversationSummary ?? null,
                     conversationBackground: request.conversationBackground ?? null,
                     routingHint: actionableHint,
-                    ...(requiresGrounding ? { modeGuidance: GROUNDED_ANSWER_GUIDANCE } : {}),
+                    ...(requiresGrounding ? { modeGuidance: `${GROUNDED_ANSWER_GUIDANCE}\n${GROUNDED_RESOLUTION_GUIDANCE}` } : {}),
                     ...(request.qaMode === "wiki" ? { modeGuidance: WIKI_QA_MODE_GUIDANCE, qaMode: "wiki" as const } : {}),
                     remainingToolCalls: stopPolicy.remainingToolCalls(state.current),
                 })
@@ -705,10 +706,16 @@ export class PetrichorAgentRuntime {
         if (requiresGrounding && answer && !groundingFallback) {
             if (fatal || stopReason === "cancelled") answer = ""
             else {
-                const readable = new Set(evidence.all.filter(isGroundingSourceEvidence).map((item) => evidence.citationIndex(item.id)))
-                const validation = validateGroundedCitations(answer, readable)
-                trace.event("observation", { strategy: "grounded_citation_validation", reason: validation.reason, citationCount: validation.count })
-                if (!validation.valid) answer = UNVERIFIED_CITATION_ANSWER
+                const resolution = parseGroundedResolution(answer)
+                if (resolution) {
+                    answer = resolution.answer
+                    trace.event("observation", { strategy: "grounded_resolution", status: resolution.status })
+                } else {
+                    const readable = new Set(evidence.all.filter(isGroundingSourceEvidence).map((item) => evidence.citationIndex(item.id)))
+                    const validation = validateGroundedCitations(answer, readable)
+                    trace.event("observation", { strategy: "grounded_citation_validation", reason: validation.reason, citationCount: validation.count })
+                    if (!validation.valid) answer = UNVERIFIED_CITATION_ANSWER
+                }
             }
         }
 
