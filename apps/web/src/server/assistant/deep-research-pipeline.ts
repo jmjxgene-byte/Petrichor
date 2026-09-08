@@ -1,6 +1,7 @@
 import type { DeepResearchErrorCode } from "./deep-research-job-store"
 import { reciprocalRankFusion, type RecallHit } from "@/server/retrieval/fusion"
 import { parseGroundedResolution } from "./agent-runtime/grounded-resolution"
+import { insufficientGroundingAnswer } from "./agent-runtime/grounding-policy"
 
 const MAX_QUERIES = 6
 const MAX_CANDIDATES = 12
@@ -57,6 +58,7 @@ export async function runDeepResearchPipeline(input: {
     input.signal.throwIfAborted()
     const queries = [...new Set([input.question, ...planned].map((item) => item.trim()).filter(Boolean))]
         .slice(0, MAX_QUERIES)
+    if (!queries.length) throw new DeepResearchExecutionError("validation_failed", "没有有效检索查询")
 
     const searched = await Promise.allSettled(
         queries.flatMap((query) => modes.map(async (mode) => { input.signal.throwIfAborted(); return await deps.search(query, mode) })),
@@ -91,7 +93,16 @@ export async function runDeepResearchPipeline(input: {
     }
     const candidates = reciprocalRankFusion(rankingGroups, { topK: MAX_CANDIDATES })
         .map((rank) => ({ ...byKey.get(rank.nodeKey)!, score: rank.fusedScore }))
-    if (candidates.length === 0) throw new DeepResearchExecutionError("validation_failed", "检索没有候选")
+    const noReadableResult = (failedReadCount: number) => {
+        // 不完整检查不能证明资料无答案；失败路径不允许伪装成正常零结果。
+        if (failedSearchCount || failedReadCount || degradedSourceChecks) {
+            throw new DeepResearchExecutionError("connection_failed", "检索未完整完成，无法判断资料是否有足够依据")
+        }
+        return { queries, candidates, evidence: [] as DeepResearchEvidence[], rawEvidenceCount: 0,
+            failedSearchCount, failedReadCount, degradedSourceChecks, resolution: "insufficient" as const,
+            answer: insufficientGroundingAnswer(false) }
+    }
+    if (candidates.length === 0) return noReadableResult(0)
 
     const reads = await Promise.allSettled(candidates.map(async (candidate) => { input.signal.throwIfAborted(); return await deps.read(candidate) }))
     input.signal.throwIfAborted()
@@ -109,7 +120,7 @@ export async function runDeepResearchPipeline(input: {
             totalChars += content.length
         }
     }
-    if (evidence.length === 0) throw new DeepResearchExecutionError("validation_failed", "候选没有可读证据")
+    if (evidence.length === 0) return noReadableResult(failedReadCount)
     const rawEvidenceCount = evidence.length
     const citableEvidence = prepareCitableEvidence(evidence)
     if (citableEvidence.length === 0) {

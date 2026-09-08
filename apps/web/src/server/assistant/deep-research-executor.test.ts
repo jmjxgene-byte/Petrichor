@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
 import {
-    DeepResearchExecutionError,
     runDeepResearchPipeline,
     type DeepResearchCandidate,
 } from "./deep-research-pipeline"
@@ -115,6 +114,13 @@ describe("deep research pipeline", () => {
             .toBe(1_584)
         expect(DEEP_RESEARCH_MODEL_OUTPUT_LIMITS.maxRetriesPerCall).toBe(0)
     })
+    it("没有实际查询不能声称检索完成且无答案", async () => {
+        const search = vi.fn(async () => [])
+        await expect(runDeepResearchPipeline({ question: " ", modes: ["exact"], signal }, {
+            planQueries: async () => [], search, read: async () => [], synthesize: async () => "不应执行",
+        })).rejects.toMatchObject({ code: "validation_failed" })
+        expect(search).not.toHaveBeenCalled()
+    })
 
     it("多 query/mode 候选去重后深读并综合", async () => {
         const searches: string[] = []
@@ -152,7 +158,7 @@ describe("deep research pipeline", () => {
         expect(result.answer).toBe(`共${result.evidence.length}条证据`)
     })
 
-    it("部分来源失败时继续，全部无候选时 fail-closed", async () => {
+    it("部分来源失败时继续，正常无候选时明确不足", async () => {
         const candidate: DeepResearchCandidate = {
             candidateKey: "ok",
             title: "ok",
@@ -178,14 +184,42 @@ describe("deep research pipeline", () => {
         expect(result.answer.endsWith("回答")).toBe(true)
         expect(result.failedSearchCount).toBe(1)
 
-        await expect(runDeepResearchPipeline({ question: "问题", modes: ["exact"], signal }, {
+        const synthesize = vi.fn(async () => "不会执行")
+        const empty = await runDeepResearchPipeline({ question: "问题", modes: ["exact"], signal }, {
             planQueries: async () => [],
             search: async () => [],
             read: async () => [],
-            synthesize: async () => "不会执行",
-        })).rejects.toEqual(expect.objectContaining<Partial<DeepResearchExecutionError>>({
-            code: "validation_failed",
-        }))
+            synthesize,
+        })
+        expect(empty).toMatchObject({ resolution: "insufficient", evidence: [], candidates: [], failedSearchCount: 0 })
+        expect(empty.answer).toContain("还没有读到足够依据")
+        expect(synthesize).not.toHaveBeenCalled()
+    })
+
+    it.each(["search", "degraded", "nested-failure", "read"])("%s异常造成无证据仍失败，不伪装成正常不足", async (stage) => {
+        const synthesize = vi.fn(async () => "不会执行")
+        await expect(runDeepResearchPipeline({ question: "合成", modes: ["exact"], signal }, {
+            planQueries: async () => [],
+            search: async () => {
+                if (stage === "search") throw new Error("private error")
+                if (stage === "degraded") return { candidates: [], degradedSourceChecks: 1 }
+                if (stage === "nested-failure") return { candidates: [], degradedSourceChecks: 0, failedSearches: 1 }
+                return [{ candidateKey: "fixture", title: "合成", sourceName: "合成", url: null, score: 1, read: {} }]
+            },
+            read: async () => { throw new Error("private read error") }, synthesize,
+        })).rejects.toMatchObject({ code: "connection_failed", message: "检索未完整完成，无法判断资料是否有足够依据" })
+        expect(synthesize).not.toHaveBeenCalled()
+    })
+    it("读取正常但返回空内容，不调用综合模型", async () => {
+        const synthesize = vi.fn(async () => "不会执行")
+        const result = await runDeepResearchPipeline({ question: "合成", modes: ["exact"], signal }, {
+            planQueries: async () => [],
+            search: async () => [{ candidateKey: "fixture", title: "合成", sourceName: "合成", url: null, score: 1, read: {} }],
+            read: async () => [], synthesize,
+        })
+        expect(result.resolution).toBe("insufficient")
+        expect(result.failedReadCount).toBe(0)
+        expect(synthesize).not.toHaveBeenCalled()
     })
 
     it("综合前按稳定来源归并，模型证据与最终 references 使用同一顺序", async () => {
