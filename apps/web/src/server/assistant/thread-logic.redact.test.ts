@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest"
+import { replayEvents } from "@/features/agent-runs/reducer"
+import type { AgentStreamEvent } from "@/features/agent-runs/types"
 import {
     isExternalMetadataOnlyTool,
     redactAssistantStepInput,
@@ -99,12 +101,39 @@ describe("外部资料源 Assistant Message 脱敏", () => {
         const persisted = sanitizeAssistantMessageContentForPersistence(content)
         expect(JSON.stringify(persisted)).toContain("允许保存的最终回答")
         expect(JSON.stringify(persisted)).toContain("安全标题")
-        expect(JSON.stringify(persisted)).toContain("private query")
+        expect(JSON.stringify(persisted)).not.toContain("private query")
         expect(JSON.stringify(persisted)).not.toContain("private result")
     })
 
     it("没有外部资料事件时保持现有消息形状", () => {
         const content = { parts: [{ type: "text", text: "local" }] }
         expect(sanitizeAssistantMessageContentForPersistence(content)).toBe(content)
+    })
+    it("移除事件载荷与生成副本，保留正文、运行指标及计划状态", () => {
+        let sequence = 0
+        const event = (type: string, payload: Record<string, unknown>) => ({ type: "data-agent-event", extra: "private part", data: { runId: "run-1", sequence: ++sequence, timestamp: 1, type, payload, extra: "private envelope" } })
+        const content = { parts: [
+            { type: "text", text: "正常最终回答" },
+            event("tool_completed", { callId: "call-1", toolId: "source.lookup", summary: "private summary", input: { query: "private query" }, rawOutput: "private raw", alias: { text: "private alias" }, durationMs: 3, evidenceIds: ["e1"] }),
+            event("final_answer_delta", { delta: "private draft" }),
+            event("final_answer_completed", { text: "private copy" }),
+            event("plan_created", { steps: [{ id: "step-1", label: "private plan", status: "completed", extra: "private step" }] }),
+            event("wiki_mention_targets", { targets: [{ pageKey: "wiki-fixture", title: "安全标题", aliases: ["private alias"], kind: null, citationIndex: 1 }] }),
+            event("agent_completed", { status: "completed", metrics: { durationMs: 3, toolCalls: 1, evidenceCount: 1, subAgentCount: 0, iterations: 1, privateExtra: "private metrics" } }),
+        ] }
+        const persisted = sanitizeAssistantMessageContentForPersistence(content)
+        const serialized = JSON.stringify(persisted)
+        expect(serialized).not.toContain("private")
+        expect(serialized).toContain("正常最终回答")
+        expect(serialized).toContain('"toolCalls":1')
+        expect(serialized).toContain('"status":"completed"')
+        expect(serialized).toContain('"id":"step-1"')
+        expect(serialized).not.toContain("final_answer_delta")
+        expect(JSON.stringify(content)).toContain("private draft")
+        const parts = (persisted as { parts: Array<{ data?: AgentStreamEvent }> }).parts
+        const restored = replayEvents("run-1", parts.flatMap((part) => part.data ? [part.data] : []))
+        expect(restored.status).toBe("completed")
+        expect(restored.metrics?.toolCalls).toBe(1)
+        expect(restored.wikiMentionTargets?.[0].pageKey).toBe("wiki-fixture")
     })
 })

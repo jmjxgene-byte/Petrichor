@@ -2,6 +2,8 @@
 
 日期：2026-09-08。本文件描述待实现契约，不表示迁移、模型调用或部署已执行。
 
+第五十九节点：来源Run消息中的data-agent-event按恢复字段过滤，goal/summary/objective等自由文本替换，未知载荷不展开；不重复保存final_answer系列事件，最终用户可见正文仍保留正常text part。保留指标、受限身份、计划状态及Wiki pageKey/title/citationIndex（不保存别名副本），GeneOps安全引用仍去snippet。递归限深，实时内存事件不修改。1467全量测试与类型/Lint/构建通过；追加reducer重放测试确认完成状态/指标/Wiki定位，定向与类型/Lint再次通过。非来源旧消息和本地Evidence规则未改，Run头及全链路生产日志仍待核验，未清理任何历史数据。
+
 第五十八节点：Agent store错误日志仅保留固定错误类别/合法SQLSTATE/受限上下文，删除原始Error、cause详情和stack，避免失败SQL参数进入日志；保留42P01迁移提示。当前Agent的旧assistant_step回调显式metadataOnly，保留工具名/状态/耗时，input/output不落正文；步骤写入失败也不序列化原始异常。recordAssistantStep其他旧调用仍兼容，未清理历史。1466测试及类型/Lint/构建通过，含恶意错误字段和步骤插入边界mock。Run头、流式消息元数据及其他旧日志路径仍不在本节点的完整验证范围，不声称全系统脱敏完成。
 
 第五十七节点：Trace来源Run判定仍包含geneops.*与source.*，所以纯本地统一来源也采用metadata-only保护。persistTrace的事件及全部工具展开调用统一走白名单；自由文本替换、载荷redacted、未知字段不落库，只保留受限身份/状态/数值。persistSubtasks隐藏objective，避免主/子工具或任意别名绕过旧黑名单。1461测试与类型/Lint/构建通过，新增mock数据库边界测试验证落库不含合成私密串且内存数据不变。此处只覆盖Trace事件/工具展开/子任务目标，Run头、旧assistant_step回调、错误日志和历史数据仍未全面核验或清理；不改变最终会话回答的既有保存规则。

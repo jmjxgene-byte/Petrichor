@@ -100,7 +100,12 @@ export function sanitizeAssistantMessageContentForPersistence(content: unknown) 
     if (!externalRun) return content
     return {
         ...record,
-        parts: record.parts.map((part) => sanitizeExternalAgentEventPart(part)),
+        parts: record.parts.flatMap((part) => {
+            const event = readAgentEvent(part)
+            // 最终正文已有独立text part，事件副本/流式草稿不重复落库。
+            if (event?.type.startsWith("final_answer_")) return []
+            return [sanitizeExternalAgentEventPart(part)]
+        }),
     }
 }
 
@@ -118,9 +123,9 @@ function isExternalAgentEventPart(part: unknown) {
 function sanitizeExternalAgentEventPart(part: unknown) {
     const event = readAgentEvent(part)
     if (!event) return part
-    const payload = { ...event.payload }
-    if (event.type === "evidence_created" && Array.isArray(payload.evidence)) {
-        payload.evidence = payload.evidence.map((item) => {
+    const payload = safePersistedEventPayload(event.payload)
+    if (event.type === "evidence_created" && Array.isArray(event.payload.evidence)) {
+        payload.evidence = event.payload.evidence.map((item) => {
             if (!item || typeof item !== "object") return item
             const evidence = item as Record<string, unknown>
             if (evidence.source !== "geneops") return evidence
@@ -136,10 +141,38 @@ function sanitizeExternalAgentEventPart(part: unknown) {
             }
         })
     }
-    return {
-        ...(part as Record<string, unknown>),
-        data: { ...event, payload },
+    if (event.type === "wiki_mention_targets" && Array.isArray(event.payload.targets)) {
+        payload.targets = event.payload.targets.flatMap((item) => {
+            if (!item || typeof item !== "object") return []
+            const target = item as Record<string, unknown>
+            if (typeof target.pageKey !== "string" || typeof target.title !== "string") return []
+            return [{ pageKey: target.pageKey.slice(0, 200), title: target.title.slice(0, 500), aliases: [],
+                kind: typeof target.kind === "string" ? target.kind.slice(0, 50) : null,
+                citationIndex: typeof target.citationIndex === "number" && Number.isSafeInteger(target.citationIndex) && target.citationIndex > 0 ? target.citationIndex : null }]
+        })
     }
+    return {
+        type: "data-agent-event",
+        data: { runId: event.runId, sequence: event.sequence, type: event.type, timestamp: event.timestamp, payload },
+    }
+}
+
+/** 事件历史只保留恢复UI所需的状态；不展开未知对象或自由文本。 */
+function safePersistedEventPayload(value: Record<string, unknown>, depth = 0): Record<string, unknown> {
+    if (depth > 3) return {}
+    const result: Record<string, unknown> = {}
+    const ids = new Set(["id", "callId", "toolId", "namespace", "source", "taskId", "skillId", "model", "conversationId", "questionMessageId", "status", "stopReason", "errorCode", "complexity", "type"])
+    const numbers = new Set(["durationMs", "depth", "evidenceCount", "createdAt", "toolCalls", "subAgentCount", "iterations"])
+    for (const [key, item] of Object.entries(value)) {
+        if (ids.has(key) && typeof item === "string" && /^[a-zA-Z0-9_.:/-]{1,128}$/.test(item)) result[key] = item
+        else if (numbers.has(key) && typeof item === "number" && Number.isFinite(item) && item >= 0) result[key] = item
+        else if (["willRetry", "isError", "replace"].includes(key) && typeof item === "boolean") result[key] = item
+        else if (["goal", "summary", "objective", "message", "description", "title", "label", "name"].includes(key)) result[key] = "[redacted]"
+        else if (["evidenceIds", "toolIds", "changed", "dependsOn"].includes(key) && Array.isArray(item)) result[key] = item.filter((id) => typeof id === "string" && /^[a-zA-Z0-9_.:-]{1,128}$/.test(id))
+        else if (["metrics", "observation"].includes(key) && item && typeof item === "object" && !Array.isArray(item)) result[key] = safePersistedEventPayload(item as Record<string, unknown>, depth + 1)
+        else if (key === "steps" && Array.isArray(item)) result[key] = item.slice(0, 100).flatMap((step) => step && typeof step === "object" ? [safePersistedEventPayload(step as Record<string, unknown>, depth + 1)] : [])
+    }
+    return result
 }
 
 function readAgentEvent(part: unknown): { type: string; payload: Record<string, unknown>; [key: string]: unknown } | null {
