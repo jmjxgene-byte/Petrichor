@@ -6,8 +6,13 @@ import {
     normalizeDeepResearchUrl,
     toDeepResearchReferences,
     toMetadataOnlyAgentEvidence,
+    deepResearchCitationIndices,
+    validateDeepResearchCitations,
 } from "./deep-research-output"
 import type { DeepResearchEvidence } from "./deep-research-pipeline"
+import { deepResearchFinalMessageSchema } from "./deep-research-job-store"
+import { deepResearchRetryPlan } from "./deep-research-job-store"
+import { persistedDeepResearchEvidence, extractPersistedMessageMetadata } from "@/features/pages/assistant/assistant-message-utils"
 
 const evidence: DeepResearchEvidence[] = [{
     referenceKey: "url:example.com/source",
@@ -20,6 +25,38 @@ const evidence: DeepResearchEvidence[] = [{
 }]
 
 describe("deep research output contract", () => {
+    it("已消耗模型调用的失败不重新排队", () => {
+        expect(deepResearchRetryPlan(1, 3, false)).toEqual({ status: "failed", delaySeconds: 0 })
+        expect(deepResearchRetryPlan(1, 3, true).status).toBe("retry_wait")
+    })
+    it("本地多锚点与外部混合引用在保存、刷新后共享同一编号", () => {
+        const local = [1, 2].map((passage): DeepResearchEvidence => {
+            const url = `/dashboard/doc-library/3?documentId=9&generationId=4&passageId=${passage}&contentHash=${"a".repeat(64)}`
+            return { ...evidence[0], source: "document", sourceName: "本地", url, referenceKey: buildDeepResearchReferenceKey({ source: "document", title: "本地", url, fallbackKey: "fallback" }) }
+        })
+        expect(local[0].referenceKey).not.toBe(local[1].referenceKey)
+        const items = [...local, evidence[0]]
+        expect(deepResearchCitationIndices(items)).toEqual([1, 1, 2])
+        expect(validateDeepResearchCitations("合成结论[1][2]", items).valid).toBe(true)
+        expect(validateDeepResearchCitations("并不存在第三来源[3]", items).valid).toBe(false)
+        expect(validateDeepResearchCitations("不存在[99]", items).valid).toBe(false)
+        expect(validateDeepResearchCitations("无引用结论", items).valid).toBe(false)
+        const references = toDeepResearchReferences(items)
+        const message = deepResearchFinalMessageSchema.parse({ parts: [{ type: "text", text: "合成结论[1][2]" }], agentRunId: "deep-fixture", deepResearch: { runKey: "deep-fixture", fastRunKey: null, references } })
+        const restored = persistedDeepResearchEvidence(extractPersistedMessageMetadata(message))
+        expect(restored.map((item) => item.citationIndex)).toEqual([1, 1, 2])
+        expect(restored.map((item) => item.url)).toEqual(items.map((item) => item.url))
+        expect(toMetadataOnlyAgentEvidence(items).map((item) => item.metadata?.citationIndex)).toEqual([1, 1, 2])
+    })
+    it("仅允许已知本站路由，正文参数不落引用元数据", () => {
+        const raw = `/dashboard/doc-library/3?documentId=9&citeSnippet=private-body&hlText=private-body`
+        expect(normalizeDeepResearchUrl(raw, "document")).toBe("/dashboard/doc-library/3?documentId=9")
+        expect(normalizeDeepResearchUrl(raw, "geneops")).toBeNull()
+        for (const url of ["//external.invalid", "/admin", "javascript:alert(1)", "https://user:secret@example.invalid"]) expect(normalizeDeepResearchUrl(url, "document")).toBeNull()
+        const references = toDeepResearchReferences([{ ...evidence[0], source: "document", url: raw }])
+        expect(JSON.stringify(references)).not.toContain("private-body")
+        expect(JSON.stringify(toMetadataOnlyAgentEvidence([{ ...evidence[0], source: "document", url: raw }]))).not.toContain("private-body")
+    })
     it("规范化URL作为稳定引用键", () => {
         expect(buildDeepResearchReferenceKey({
             source: "geneops",

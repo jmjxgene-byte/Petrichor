@@ -2,6 +2,7 @@ import type { ToolCallMessagePartStatus } from "@assistant-ui/react"
 import type { ThreadTokenUsage, UseChatRuntimeOptions } from "@assistant-ui/react-ai-sdk"
 import type { AssistantFocus, AssistantThreadSummary } from "@/lib/api"
 import type { EvidenceViewModel } from "@/features/agent-runs/types"
+import { normalizeDeepEvidenceUrl } from "@/lib/deep-evidence-url"
 import {
   assistantSourceScopeFromFocus,
   assistantSourceScopeSchema,
@@ -13,6 +14,7 @@ export type AssistantUIMessage = NonNullable<UseChatRuntimeOptions["messages"]>[
 export type AssistantFocusSelection = AssistantSourceScope
 
 export type PersistedDeepResearchReference = {
+  citationIndex?: number
   title: string
   url: string | null
   source: string
@@ -316,7 +318,7 @@ export function persistedDeepResearchEvidence(metadata: unknown): EvidenceViewMo
     ...(reference.url ? { url: reference.url } : {}),
     sourceName: reference.source,
     queriedAt: reference.queriedAt,
-    citationIndex: index + 1,
+    citationIndex: reference.citationIndex ?? index + 1,
   }))
 }
 
@@ -342,9 +344,10 @@ function normalizePersistedReferences(value: unknown): PersistedDeepResearchRefe
     const source = typeof record.source === "string" ? record.source.trim() : ""
     const sourceKind = normalizeEvidenceSource(record.sourceKind)
     const queriedAt = typeof record.queriedAt === "string" ? record.queriedAt.trim() : ""
-    const url = record.url == null ? null : safeHttpUrl(record.url)
+    const url = record.url == null ? null : normalizeDeepEvidenceUrl(record.url, sourceKind ?? undefined)
     if (!title || !source || !queriedAt || (record.url != null && url == null)) return []
-    return [{ title, source, queriedAt, url, ...(sourceKind ? { sourceKind } : {}) }]
+    const citationIndex = typeof record.citationIndex === "number" && Number.isInteger(record.citationIndex) && record.citationIndex >= 1 && record.citationIndex <= 40 ? record.citationIndex : undefined
+    return [{ title, source, queriedAt, url, ...(sourceKind ? { sourceKind } : {}), ...(citationIndex ? { citationIndex } : {}) }]
   }).slice(0, 40)
 }
 
@@ -362,16 +365,6 @@ function normalizeEvidenceSource(value: unknown): EvidenceViewModel["source"] | 
       return value
     default:
       return null
-  }
-}
-
-function safeHttpUrl(value: unknown) {
-  if (typeof value !== "string") return null
-  try {
-    const url = new URL(value)
-    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null
-  } catch {
-    return null
   }
 }
 

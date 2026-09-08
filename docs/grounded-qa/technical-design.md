@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08Deep本地引用节点：共享deep-evidence-url只允许已知本地文档/文章路由（限document/knowledge/wiki来源），保留ID/hash/位置，清除citeSnippet/hlText/citeTerms，拒绝协议相对地址、未知内部路由、非HTTP(S)和userinfo。Deep final schema与历史恢复支持安全相对URL及显式citationIndex，同文档不同锚点保留独立referenceKey；模型prompt、metadata evidence与恢复后的引用统一编号，混合两个本地片段与一个外部来源为1/1/2。保存最终消息前验证实际已读引用范围，失效编号或无引用拒绝；validation_failed为终态，执行器开始模型调用后的失败不再自动整任务重试，尚不代表租约恢复累计费用已解决。全量1354通过/40既有跳过，typecheck/lint/build通过，测试仅合成契约；无真实Job/模型/PG或部署。
+
 2026-09-08Deep取消与降级节点：pipeline在规划/检索/深读/综合各阶段前后检查AbortSignal，取消后不开始下一阶段，综合返回后取消也不交付草稿；无可用模式在executor实际规划调用前拒绝。区分失败搜索次数、失败深读次数及统一搜索内部来源降级次数，计数进入metadata metrics，最终回答固定提示仅覆盖成功读取的资料，不输出异常正文。合成回归覆盖四个阶段取消、预取消、空模式及部分失败/内部降级；全量1351通过/40既有跳过，typecheck/lint/build通过。未启动Worker或模型；实际网络中止/180秒端到端、逐源模式、租约/费用与PG仍待验收。只读检查发现本机无postgres/psql，orbstack socket不存在，已请求用户启动本机Docker后再建立隔离测试库，不能以SQLite证明PG通过。
 
 2026-09-08去除长度伪质量门：requiresGrounding路径不再因answer-quality的字数/段落阈值自动调用模型扩写，非资料问答保持旧行为。丰富正文不代表有更多受支持结论；短答案引用合法则保留，无引用仍由最终引用门拒绝。真实Runtime+假模型两用例验证均只用一轮生成（15合成tokens），不会消费脚本中的第二段扩写。全量1335通过/40既有跳过，typecheck/lint/build通过。该修正减少无必要生成，不证明语义充分；下一阶段需按60题相关证据与人工结论—引用支持关系建立评测，不能用字符数、合法ID或模型自评代替95%支持precision。

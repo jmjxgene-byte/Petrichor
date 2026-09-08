@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm"
 import { z } from "zod"
+import { normalizeDeepEvidenceUrl } from "@/lib/deep-evidence-url"
 
 import { getDb, getSqlClient } from "@/server/db/client"
 import { assistantMessages, deepResearchJobs, type DeepResearchJobRecord } from "@/server/db/schema"
@@ -55,14 +56,15 @@ export const deepResearchFinalMessageSchema = z.object({
         fastRunKey: z.string().trim().min(1).max(64).nullable(),
         references: z.array(z.object({
             title: z.string().trim().min(1).max(500),
-            url: z.string().url().max(2_000).nullable(),
+            url: z.string().max(2_000).nullable(),
+            citationIndex: z.number().int().min(1).max(40).optional(),
             source: z.string().trim().min(1).max(100),
             sourceKind: z.enum([
                 "knowledge", "document", "wiki", "web", "memory",
                 "graph", "tool", "subagent", "geneops",
             ]).optional(),
             queriedAt: z.string().datetime(),
-        }).strict()).max(40),
+        }).strict().refine((reference) => reference.url == null || normalizeDeepEvidenceUrl(reference.url, reference.sourceKind) === reference.url, "unsafe_reference_url")).max(40),
     }).strict(),
 }).strict()
 
@@ -188,8 +190,8 @@ export async function heartbeatDeepResearchJob(input: {
     return job ?? null
 }
 
-export function deepResearchRetryPlan(attemptCount: number, maxAttempts: number) {
-    if (attemptCount >= maxAttempts) return { status: "failed" as const, delaySeconds: 0 }
+export function deepResearchRetryPlan(attemptCount: number, maxAttempts: number, retryable = true) {
+    if (!retryable || attemptCount >= maxAttempts) return { status: "failed" as const, delaySeconds: 0 }
     const index = Math.min(Math.max(attemptCount - 1, 0), DEEP_RESEARCH_RETRY_BACKOFF_SECONDS.length - 1)
     return { status: "retry_wait" as const, delaySeconds: DEEP_RESEARCH_RETRY_BACKOFF_SECONDS[index] }
 }
@@ -198,6 +200,7 @@ export async function failDeepResearchJob(input: {
     jobId: number
     workerId: string
     errorCode: DeepResearchErrorCode
+    retryable?: boolean
     now?: Date
 }) {
     const now = input.now ?? new Date()
@@ -209,7 +212,7 @@ export async function failDeepResearchJob(input: {
     )).limit(1)
     if (!current) return null
 
-    const plan = deepResearchRetryPlan(current.attemptCount, current.maxAttempts)
+    const plan = deepResearchRetryPlan(current.attemptCount, current.maxAttempts, input.retryable !== false && errorCode !== "validation_failed")
     const [job] = await getDb().update(deepResearchJobs).set({
         status: plan.status,
         availableAt: new Date(now.getTime() + plan.delaySeconds * 1_000),

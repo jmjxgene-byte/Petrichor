@@ -25,6 +25,8 @@ import {
 } from "./deep-research-pricing"
 import {
     buildDeepResearchReferenceKey,
+    deepResearchCitationIndices,
+    validateDeepResearchCitations,
     normalizeDeepResearchAnswer,
     normalizeDeepResearchUrl,
     toDeepResearchReferences,
@@ -161,7 +163,7 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
                 return (normalized?.evidence ?? []).flatMap((item): DeepResearchEvidence[] => {
                     if (!item.content?.trim()) return []
                     const metadata = item.metadata ?? {}
-                    const url = normalizeDeepResearchUrl(item.url ?? candidate.url)
+                    const url = normalizeDeepResearchUrl(item.url ?? candidate.url, item.source)
                     const title = item.title ?? candidate.title
                     return [{
                         referenceKey: buildDeepResearchReferenceKey({
@@ -194,7 +196,7 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
                         "只使用下方当前运行证据；冲突时说明差异与时间，不得编造。",
                         "只回答用户实际问题，不得把证据里的个案条件、数字或背景当成用户自身情况。",
                         "问题很短时先给简洁定义；证据案例只能明确标为案例，不得喧宾夺主。",
-                        `正文只能用 [1] 到 [${evidence.length}] 引用下方同编号来源，不得引用范围外编号。`,
+                        `正文只能用 [1] 到 [${Math.max(...deepResearchCitationIndices(evidence))}] 引用下方同编号来源，不得引用范围外编号。同一来源不同片段共享编号。`,
                     ].join("\n"),
                     message: renderSynthesisInput(goal, evidence),
                     signal,
@@ -208,6 +210,7 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
         })
         const answer = normalizeDeepResearchAnswer(result.answer)
         if (!answer) throw new DeepResearchExecutionError("validation_failed", "深度综合没有生成正文")
+        if (!validateDeepResearchCitations(answer, result.evidence).valid) throw new DeepResearchExecutionError("validation_failed", "深度综合引用未通过核验")
         const references = toDeepResearchReferences(result.evidence)
         await persistEvidence(job.runKey, toMetadataOnlyAgentEvidence(result.evidence))
         const completed = await completeDeepResearchJob({
@@ -282,7 +285,7 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
             durationMs: Date.now() - startedAt,
             completedAt: new Date(),
         }).where(eq(agentRuns.runKey, job.runKey))
-        return await failDeepResearchJob({ jobId, workerId, errorCode: code })
+        return await failDeepResearchJob({ jobId, workerId, errorCode: code, retryable: modelCallsStarted === 0 })
     } finally {
         clearTimeout(deadline)
         clearInterval(heartbeat)
@@ -388,8 +391,9 @@ async function callModelOrThrow(input: Parameters<typeof callChatCompletion>[0])
 }
 
 function renderSynthesisInput(question: string, evidence: DeepResearchEvidence[]) {
+    const indices = deepResearchCitationIndices(evidence)
     const blocks = evidence.map((item, index) => [
-        `[${index + 1}] ${item.title}`,
+        `[${indices[index]}] ${item.title}`,
         `来源：${item.source}`,
         item.url ? `链接：${item.url}` : "",
         `查询时间：${item.queriedAt}`,
