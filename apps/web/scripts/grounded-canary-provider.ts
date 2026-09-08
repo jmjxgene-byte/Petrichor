@@ -9,7 +9,8 @@ import { buildDocumentPassages } from "../src/server/doc-library/passage-builder
 const plan = planGroundedCanary()
 const expected = "61faa403c88032f3633e7b9a354101e8bdfe85a312c04dc8bca6d2f1a3f1f89d"
 const root = path.resolve(import.meta.dir, "../../..")
-const directory = path.join(root, ".data/canary-61faa403")
+const executionId = "20260909-b"
+const directory = path.join(root, `.data/canary-61faa403-${executionId}`)
 const phase = process.argv[2]
 if (plan.planHash !== expected || !["embed", "rerank"].includes(phase) || !["--execute-approved", "--preflight"].includes(process.argv[3])) throw new Error("canary_gate")
 const documents = plan.documents.map(p => {
@@ -20,8 +21,8 @@ const documents = plan.documents.map(p => {
 const cases = syntheticQaDataset.cases.filter(c => plan.caseIds.includes(c.id)).map(c => ({
     ...c, query: [...c.history.map(h => h.content), c.question].join("\n"),
 }))
-const input = phase === "embed" ? { planHash: expected, documents, cases } : JSON.parse(fs.readFileSync(path.join(directory, "candidates.json"), "utf8"))
-if (input.planHash !== expected) throw new Error("artifact_plan_gate")
+const input = phase === "embed" ? { planHash: expected, executionId, documents, cases } : JSON.parse(fs.readFileSync(path.join(directory, "candidates.json"), "utf8"))
+if (input.planHash !== expected || input.executionId !== executionId) throw new Error("artifact_plan_gate")
 if (phase === "rerank") {
     if (input.syntheticMock || input.cases.length !== 8 || new Set(input.cases.map((c: { id: string }) => c.id)).size !== 8) throw new Error("candidate_gate")
     for (const row of input.cases) {
@@ -38,14 +39,14 @@ const remote = `import postgres from "postgres";
 import {createHash} from "node:crypto";
 import {decodeApiKey} from "/app/apps/web/src/server/ai/config-logic.ts";
 const input=${JSON.stringify(input)},phase=${JSON.stringify(phase)};
-const report={planHash:input.planHash,phase,passed:false,calls:0,requests:[],documents:[],cases:[]};
+const report={planHash:input.planHash,executionId:input.executionId,phase,passed:false,calls:0,requests:[],documents:[],cases:[]};
 let key=""; const db=postgres(process.env.DATABASE_URL,{max:1,prepare:false,connect_timeout:10,onnotice:()=>{}});
 async function post(route,body){
- const max=phase==="embed"?22:8;if(report.calls>=max)throw Error("call_limit");report.calls++;
+ const max=phase==="embed"?22:8;if(report.calls>=max)throw Error("call_limit");report.calls++;console.error("CANARY_ATTEMPT "+phase+" "+report.calls);
  const start=Date.now();const r=await fetch("https://api.siliconflow.cn/v1/"+route,{method:"POST",redirect:"error",headers:{"content-type":"application/json",authorization:"Bearer "+key},body:JSON.stringify(body),signal:AbortSignal.timeout(20000)});
  if(!r.ok){await r.body?.cancel();throw Error("http_"+r.status)}
  const reader=r.body.getReader();let bytes=0;const parts=[];try{for(;;){const x=await reader.read();if(x.done)break;bytes+=x.value.length;if(bytes>262144)throw Error("response_limit");parts.push(x.value)}}finally{await reader.cancel()}
- const data=JSON.parse(Buffer.concat(parts).toString());report.requests.push({route,ms:Date.now()-start,tokens:Number.isSafeInteger(data.usage?.total_tokens)?data.usage.total_tokens:null});return data;
+ const data=JSON.parse(Buffer.concat(parts).toString());report.requests.push({route,ms:Date.now()-start,tokens:Number.isSafeInteger(data.usage?.total_tokens)?data.usage.total_tokens:null});console.error("CANARY_RESPONSE "+phase+" "+report.calls);return data;
 }
 async function embed(values){const data=await post("embeddings",{model:"BAAI/bge-m3",input:values,encoding_format:"float"});const rows=data.data;
  if(!Array.isArray(rows)||rows.length!==values.length||new Set(rows.map(x=>x.index)).size!==values.length||rows.some(x=>!Number.isInteger(x.index)||x.index<0||x.index>=values.length||!Array.isArray(x.embedding)||x.embedding.length!==1024||x.embedding.some(n=>!Number.isFinite(n))||!x.embedding.some(n=>n!==0)))throw Error("vector_contract");return rows.sort((a,b)=>a.index-b.index).map(x=>x.embedding.map(Math.fround));}
@@ -74,7 +75,7 @@ try{
 }catch(e){const m=e instanceof Error?e.message:"unknown";report.error=/^[a-z_]+(?:[0-9]+)?$/.test(m)?m:"provider_or_metadata_failed";process.exitCode=1}
 finally{key="";await db.end({timeout:2}).catch(()=>{});const payload=JSON.stringify(report);const hash=createHash("sha256").update(payload).digest("hex");await Bun.write(Bun.stdout,"PETRICHOR_CANARY_V1 "+Buffer.byteLength(payload)+" "+hash+"\\n"+payload+"\\nEND "+hash+"\\n")}`
 new Bun.Transpiler({ loader: "ts", target: "bun" }).transformSync(remote)
-if (process.argv[3] === "--preflight") { console.log(JSON.stringify({ preflight: true, phase, planHash: expected, documentRequests: 14, queryRequests: 8, rerankLimit: 8, modelCalls: 0 })); process.exit(0) }
+if (process.argv[3] === "--preflight") { console.log(JSON.stringify({ preflight: true, executionId, phase, planHash: expected, unused: !fs.existsSync(path.join(directory, `${phase}.started`)), documentRequests: 14, queryRequests: 8, rerankLimit: 8, modelCalls: 0 })); process.exit(0) }
 if (!sshTarget || !sshIdentity || !sshPort || !/^\d+$/.test(sshPort)) throw new Error("ssh_configuration_missing")
 fs.mkdirSync(directory, { recursive: true, mode: 0o700 })
 // 标记一经创建即消耗本阶段执行权；任何失败不自动删除标记或重跑。
@@ -85,13 +86,17 @@ child.stdin.write(remote); await child.stdin.end()
 const timer = setTimeout(() => child.kill(), 600000)
 try {
     const [output, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
+    const progress = stderr.split("\n").flatMap(line => {
+        const match = /^CANARY_(ATTEMPT|RESPONSE) (embed|rerank) (\d{1,2})$/.exec(line)
+        return match && match[2] === phase ? [{ event: match[1], call: Number(match[3]) }] : []
+    })
     fs.writeFileSync(path.join(directory, `${phase}.transport.json`), JSON.stringify({ exitCode: code, stdoutBytes: Buffer.byteLength(output), stderrBytes: Buffer.byteLength(stderr),
-        stdoutSha: createHash("sha256").update(output).digest("hex"), stderrSha: createHash("sha256").update(stderr).digest("hex") }), { flag: "wx", mode: 0o600 })
+        stdoutSha: createHash("sha256").update(output).digest("hex"), stderrSha: createHash("sha256").update(stderr).digest("hex"), progress }), { flag: "wx", mode: 0o600 })
     if (Buffer.byteLength(output) > 4 * 1024 * 1024 + 256) throw new Error("artifact_limit")
     // 先保留受限回传，再解析；截断也必须留有证据，不能因解析异常丢失全部终态。
     fs.writeFileSync(path.join(directory, `${phase}.received.frame`), output, { flag: "wx", mode: 0o600 })
     const report = JSON.parse(decodeCanaryFrame(output))
-    if (report.planHash !== expected || report.phase !== phase || !Number.isInteger(report.calls) || report.calls < 0 || report.calls > (phase === "embed" ? 22 : 8)) throw new Error("terminal_gate")
+    if (report.planHash !== expected || report.executionId !== executionId || report.phase !== phase || !Number.isInteger(report.calls) || report.calls < 0 || report.calls > (phase === "embed" ? 22 : 8)) throw new Error("terminal_gate")
     fs.writeFileSync(path.join(directory, `${phase}.json`), JSON.stringify(report), { flag: "wx", mode: 0o600 })
     console.log(JSON.stringify({ phase, passed: report.passed, calls: report.calls, error: report.error ?? null, requests: report.requests }))
     if (code !== 0 || !report.passed) process.exitCode = 1

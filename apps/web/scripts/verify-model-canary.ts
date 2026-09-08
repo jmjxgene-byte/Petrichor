@@ -12,6 +12,7 @@ export async function verifyModelCanary(db: ReturnType<typeof postgres>) {
     const artifact = JSON.parse(fs.readFileSync("/canary/embed.json", "utf8"))
     const plan = planGroundedCanary()
     if (Boolean(artifact.syntheticMock) !== (process.env.QA_CANARY_DRY_RUN === "true")) throw new Error("canary_mock_gate")
+    if (!artifact.syntheticMock && artifact.executionId !== "20260909-b") throw new Error("canary_execution_gate")
     if (!artifact.passed || artifact.calls !== 22 || artifact.planHash !== plan.planHash || artifact.documents.length !== 3 || artifact.cases.length !== 8) throw new Error("canary_artifact_gate")
     const passages: Passage[] = []
     const vector = (v: number[]) => {
@@ -49,5 +50,5 @@ export async function verifyModelCanary(db: ReturnType<typeof postgres>) {
         output.push({ id, query, expectedResolution: c.expectedResolution, expectedIds, lexicalIds: lexical.map(x => x.id), semanticIds: semantic.map(x => x.id), candidates })
     }
     await db`drop table qa_canary_passage`
-    return { planHash: plan.planHash, syntheticMock: Boolean(artifact.syntheticMock), componentOnly: true, documents: 3, passages: passages.length, cases: output }
+    return { planHash: plan.planHash, executionId: artifact.executionId ?? null, syntheticMock: Boolean(artifact.syntheticMock), componentOnly: true, documents: 3, passages: passages.length, cases: output }
 }

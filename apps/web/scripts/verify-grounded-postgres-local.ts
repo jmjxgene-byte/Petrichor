@@ -13,7 +13,7 @@ const network = `${name}-net`
 const checks: string[] = []
 const baselineSha = "b6eac4c729658c04655edc535367f4c7c51c6189"
 const canary = process.env.QA_CANARY === "true"
-const canaryDirectory = path.join(root, process.env.QA_CANARY_DRY_RUN === "true" ? ".data/canary-dry-run" : ".data/canary-61faa403")
+const canaryDirectory = path.join(root, process.env.QA_CANARY_DRY_RUN === "true" ? ".data/canary-dry-run" : ".data/canary-61faa403-20260909-b")
 let baselineDirectory: string | null = null
 let stage = "preflight"
 let failure: string | null = null
