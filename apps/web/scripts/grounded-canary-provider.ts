@@ -1,5 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
+import { createHash } from "node:crypto"
+import { decodeCanaryFrame } from "./canary-transport"
 import { planGroundedCanary } from "../src/server/retrieval/grounded-canary-plan"
 import { syntheticQaDataset } from "../src/server/retrieval/fixtures/grounded-qa-v1"
 import { buildDocumentPassages } from "../src/server/doc-library/passage-builder"
@@ -33,6 +35,7 @@ if (phase === "rerank") {
 }
 const sshTarget = process.env.QA_SSH_TARGET, sshIdentity = process.env.QA_SSH_IDENTITY, sshPort = process.env.QA_SSH_PORT
 const remote = `import postgres from "postgres";
+import {createHash} from "node:crypto";
 import {decodeApiKey} from "/app/apps/web/src/server/ai/config-logic.ts";
 const input=${JSON.stringify(input)},phase=${JSON.stringify(phase)};
 const report={planHash:input.planHash,phase,passed:false,calls:0,requests:[],documents:[],cases:[]};
@@ -69,7 +72,7 @@ try{
  }
  report.passed=true;
 }catch(e){const m=e instanceof Error?e.message:"unknown";report.error=/^[a-z_]+(?:[0-9]+)?$/.test(m)?m:"provider_or_metadata_failed";process.exitCode=1}
-finally{key="";await db.end({timeout:2}).catch(()=>{});await Bun.write(Bun.stdout,JSON.stringify(report)+"\\n")}`
+finally{key="";await db.end({timeout:2}).catch(()=>{});const payload=JSON.stringify(report);const hash=createHash("sha256").update(payload).digest("hex");await Bun.write(Bun.stdout,"PETRICHOR_CANARY_V1 "+Buffer.byteLength(payload)+" "+hash+"\\n"+payload+"\\nEND "+hash+"\\n")}`
 new Bun.Transpiler({ loader: "ts", target: "bun" }).transformSync(remote)
 if (process.argv[3] === "--preflight") { console.log(JSON.stringify({ preflight: true, phase, planHash: expected, documentRequests: 14, queryRequests: 8, rerankLimit: 8, modelCalls: 0 })); process.exit(0) }
 if (!sshTarget || !sshIdentity || !sshPort || !/^\d+$/.test(sshPort)) throw new Error("ssh_configuration_missing")
@@ -78,14 +81,17 @@ fs.mkdirSync(directory, { recursive: true, mode: 0o700 })
 fs.writeFileSync(path.join(directory, `${phase}.started`), new Date().toISOString(), { flag: "wx", mode: 0o600 })
 const child = Bun.spawn(["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=10", "-p", sshPort, "-i", sshIdentity, sshTarget,
     "docker exec -i -w /app/apps/web petrichor-web-1 bun run -"], { stdin: "pipe", stdout: "pipe", stderr: "pipe" })
-child.stdin.write(remote); child.stdin.end()
+child.stdin.write(remote); await child.stdin.end()
 const timer = setTimeout(() => child.kill(), 600000)
 try {
-    const [output, , code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
-    if (output.length > 4 * 1024 * 1024) throw new Error("artifact_limit")
+    const [output, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
+    fs.writeFileSync(path.join(directory, `${phase}.transport.json`), JSON.stringify({ exitCode: code, stdoutBytes: Buffer.byteLength(output), stderrBytes: Buffer.byteLength(stderr),
+        stdoutSha: createHash("sha256").update(output).digest("hex"), stderrSha: createHash("sha256").update(stderr).digest("hex") }), { flag: "wx", mode: 0o600 })
+    if (Buffer.byteLength(output) > 4 * 1024 * 1024 + 256) throw new Error("artifact_limit")
     // 先保留受限回传，再解析；截断也必须留有证据，不能因解析异常丢失全部终态。
-    fs.writeFileSync(path.join(directory, `${phase}.received.json`), output, { flag: "wx", mode: 0o600 })
-    const report = JSON.parse(output)
+    fs.writeFileSync(path.join(directory, `${phase}.received.frame`), output, { flag: "wx", mode: 0o600 })
+    const report = JSON.parse(decodeCanaryFrame(output))
+    if (report.planHash !== expected || report.phase !== phase || !Number.isInteger(report.calls) || report.calls < 0 || report.calls > (phase === "embed" ? 22 : 8)) throw new Error("terminal_gate")
     fs.writeFileSync(path.join(directory, `${phase}.json`), JSON.stringify(report), { flag: "wx", mode: 0o600 })
     console.log(JSON.stringify({ phase, passed: report.passed, calls: report.calls, error: report.error ?? null, requests: report.requests }))
     if (code !== 0 || !report.passed) process.exitCode = 1
