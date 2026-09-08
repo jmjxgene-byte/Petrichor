@@ -7,6 +7,7 @@ vi.mock("@/server/db/read-budget", () => ({
     withReadBudget: async (run: (reader: unknown, checkpoint: () => Promise<void>) => Promise<unknown>) => run(mocks.reader, mocks.checkpoint),
 }))
 import { readDocumentChunks } from "./library-logic"
+import { hashDocumentText } from "./passage-builder"
 
 function readerFixture(results: unknown[][]) {
     const predicates: SQL[] = []
@@ -27,13 +28,26 @@ function readerFixture(results: unknown[][]) {
 beforeEach(() => vi.clearAllMocks())
 
 describe("锚点reader权限与事务内检查", () => {
+    it("搜索后文档变化在读锚点前停止，chunk正文变化在读窗口前停止", async () => {
+        const doc = { id: 12, libraryId: 3, updatedAt: new Date(0) }
+        let fixture = readerFixture([[doc]])
+        await expect(readDocumentChunks({ userId: 7, libraryId: 3, documentId: 12, anchorChunkId: 901,
+            expectedUpdatedAt: new Date(1).toISOString() })).rejects.toThrow("文档版本已变化")
+        expect(fixture.select).toHaveBeenCalledTimes(1)
+        fixture = readerFixture([[doc], [{ chunkIndex: 900, text: "新内容" }]])
+        await expect(readDocumentChunks({ userId: 7, libraryId: 3, documentId: 12, anchorChunkId: 901,
+            expectedUpdatedAt: new Date(0).toISOString(), anchorContentHash: hashDocumentText("旧内容") })).rejects.toThrow("命中片段已变化")
+        expect(fixture.select).toHaveBeenCalledTimes(2)
+    })
     it("先核验用户/文档库，再核验锚点，最后才读取命中窗口", async () => {
         const fixture = readerFixture([
-            [{ id: 12, libraryId: 3, title: "合成文档", fileName: "demo.md", fileType: "markdown" }],
-            [{ chunkIndex: 900 }],
+            [{ id: 12, libraryId: 3, title: "合成文档", fileName: "demo.md", fileType: "markdown", updatedAt: new Date(0) }],
+            [{ chunkIndex: 900, text: "尾部证据" }],
             [{ chunkIndex: 900, text: "尾部证据", page: null, locator: "结尾" }],
         ])
-        const output = await readDocumentChunks({ userId: 7, libraryId: 3, documentId: 12, anchorChunkId: 901 })
+        const output = await readDocumentChunks({ userId: 7, libraryId: 3, documentId: 12, anchorChunkId: 901,
+            expectedUpdatedAt: new Date(0).toISOString(), anchorContentHash: hashDocumentText("尾部证据") })
+        expect(output.updatedAt).toBe(new Date(0).toISOString())
         expect(output.anchorIndex).toBe(900)
         expect(output.chunks[0].text).toBe("尾部证据")
         const dialect = new PgDialect()

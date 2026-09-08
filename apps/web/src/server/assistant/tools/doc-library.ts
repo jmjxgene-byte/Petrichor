@@ -21,6 +21,8 @@ const readDocumentSchema = z.object({
     fromIndex: z.number().int().min(0).optional(),
     limit: z.number().int().min(1).max(40).optional(),
     anchorChunkId: idSchema.optional(),
+    expectedUpdatedAt: z.string().datetime().optional(),
+    anchorContentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 })
 
 function focusId(value: string | null | undefined): number | null {
@@ -63,6 +65,8 @@ export async function readDocument(
         fromIndex: input.fromIndex,
         limit: input.limit,
         anchorChunkId: input.anchorChunkId,
+        expectedUpdatedAt: input.expectedUpdatedAt,
+        anchorContentHash: input.anchorContentHash,
         libraryId: focusId(ctx.focus?.libraryId),
         abortSignal: ctx.abortSignal,
         queryDeadlineAt: ctx.queryDeadlineAt,

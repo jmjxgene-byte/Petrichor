@@ -2,6 +2,8 @@
 
 日期：2026-09-08。本文件描述待实现契约，不表示迁移、模型调用或部署已执行。
 
+第五十四节点：旧关键词searchChunks候选携带文档updatedAt与原始chunk文本SHA256；read_document/source.read透传并在权限限定的同一只读事务核验，任一变化停止读取窗口。同回答主/子代理共用legacyVersions，固定首次搜索/读取的文档更新时间并拒绝后续漂移；核心hash额外保护搜索到深读。metadata记录documentVersion，无额外正文副本或迁移。旧无版本调用仍兼容，但不能冒称已经验证版本；正常应用写入更新时间是版本前提，不保证绕过应用直接修改邻接chunk的检测，也不保证跨进程恢复。1459测试、类型/Lint/构建通过，无实际PG/生产运行。
+
 第五十二节点：Deep正常零候选或读取成功但无正文，且failedSearchCount/failedReadCount/degradedSourceChecks均为0时，返回固定insufficient结果，不调用综合模型；已有规划调用仍计费/计数，不声称免费。任何失败或降级导致无证据则失败，不能据此断言资料没有答案；零有效查询与不合法引用身份不归为正常无结果。空references允许沿既有完成事务保存不足提示。1457测试与类型/Lint/构建通过；事务测试为模拟DB，真实Worker、费用与PG验收未执行。
 
 第五十一节点：Deep综合复用严格四状态弃答，pipeline先解析再追加技术降级提示，返回服务端固定正文和独立resolution；executor只有该内部已验证状态才免除正常答案的引用要求，仍走同一最终消息/Job/Run完成事务，并在metrics保存groundingResolution。已查阅来源保留安全引用元数据，不复制正文，不增模型调用或改变重试。Deep读取与引用类型门同快速路径。1450测试及类型/Lint/构建通过；未运行真实Worker、模型或数据库。零候选/零可读证据仍是validation_failed，正常无结果与技术失败的区分、实际端到端完成状态和人工充分性准确率仍待验证。

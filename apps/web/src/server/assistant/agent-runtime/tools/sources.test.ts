@@ -117,6 +117,25 @@ beforeEach(() => {
 })
 
 describe("unified source tools", () => {
+    it("旧关键词候选携带版本和hash，下一查询版本漂移不合并", async () => {
+        const local = { ...source, ref: "doc-library:3", kind: "doc-library", id: "3" }
+        mocks.resolveSources.mockResolvedValue({ scope: { mode: "selected", refs: [local.ref] }, selected: [local], unavailable: [] })
+        const date = new Date(0).toISOString()
+        const row = { documentId: "12", chunkId: "901", libraryId: "3", title: "合成", snippet: "内容", href: "/document/12",
+            expectedUpdatedAt: date, anchorContentHash: "a".repeat(64) }
+        mocks.searchDocuments.mockResolvedValue([row])
+        mocks.readDocument.mockResolvedValue({ documentId: "12", href: "/document/12", title: "合成", fileName: "demo.md",
+            updatedAt: date, anchorIndex: 900, chunks: [{ chunkIndex: 900, text: "合成正文", locator: null }] })
+        const ctx = context()
+        const lookup = sourceTools.find((item) => item.id === "source.lookup")!
+        const result = await lookup.execute(ctx, { query: "合成" })
+        expect(lookup.normalize!(result, {}).evidence?.[0].metadata?.documentVersion).toBe(date)
+        expect(mocks.readDocument).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ expectedUpdatedAt: date, anchorContentHash: row.anchorContentHash }))
+        mocks.searchDocuments.mockResolvedValue([{ ...row, expectedUpdatedAt: new Date(1).toISOString() }])
+        const search = sourceTools.find((item) => item.id === "source.search")!
+        expect(await search.execute(ctx, { query: "下一轮" })).toMatchObject({ candidates: [], degradedSources: [expect.objectContaining({ message: "本轮关键词文档版本已变化，未合并新旧内容" })] })
+        expect(mocks.readDocument).toHaveBeenCalledTimes(1)
+    })
     it("已固定代际失败不回退旧chunk；同Run共享session，新Run隔离", async () => {
         const local = { ...source, ref: "doc-library:3", kind: "doc-library", id: "3" }
         mocks.resolveSources.mockResolvedValue({ scope: { mode: "selected", refs: [local.ref] }, selected: [local], unavailable: [] })

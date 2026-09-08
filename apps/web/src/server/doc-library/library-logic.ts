@@ -16,6 +16,7 @@ import { deleteS3Objects, type S3DeleteFailure } from "@/server/upload/s3-delete
 import { stripS4KeyPrefix } from "@/server/upload/s3-presign"
 import { readUploadedMarkdown } from "./markdown-source"
 import { documentSearchTerms, documentHitSnippet, documentLexicalExpressions } from "./search-query"
+import { hashDocumentText } from "./passage-builder"
 
 export const idSchema = z.union([z.string(), z.number()]).transform((value, ctx) => {
     const raw = String(value).trim()
@@ -495,6 +496,7 @@ export async function searchChunks(input: {
             chunkId: docChunks.id, documentId: docChunks.documentId, libraryId: docChunks.libraryId,
             page: docChunks.page, locator: docChunks.locator, text: docChunks.text,
             title: docDocuments.title, fileName: docDocuments.fileName, fileType: docDocuments.fileType,
+            updatedAt: docDocuments.updatedAt,
         })
         .from(docChunks)
         .innerJoin(docDocuments, eq(docDocuments.id, docChunks.documentId))
@@ -505,6 +507,7 @@ export async function searchChunks(input: {
         chunkId: String(row.chunkId), documentId: String(row.documentId), libraryId: String(row.libraryId),
         href: docLibraryDocumentPath(String(row.libraryId), String(row.documentId)),
         title: row.title, fileName: row.fileName, fileType: row.fileType,
+        expectedUpdatedAt: row.updatedAt.toISOString(), anchorContentHash: hashDocumentText(row.text),
         locator: row.locator ?? (row.page != null ? `p.${row.page}` : null), page: row.page,
         snippet: documentHitSnippet(row.text, terms),
     }))
@@ -516,6 +519,8 @@ export async function readDocumentChunks(input: {
     fromIndex?: number
     limit?: number
     anchorChunkId?: number
+    expectedUpdatedAt?: string
+    anchorContentHash?: string
     libraryId?: number | null
     abortSignal?: AbortSignal
     queryDeadlineAt?: number
@@ -526,16 +531,18 @@ export async function readDocumentChunks(input: {
             ...(input.libraryId == null ? [] : [eq(docDocuments.libraryId, input.libraryId)]),
         )).limit(1)
         if (!doc) throw notFound("文档不存在或不属于当前文档库")
+        if (input.expectedUpdatedAt != null && doc.updatedAt.toISOString() !== input.expectedUpdatedAt) throw badRequest("搜索后文档版本已变化，请重新检索")
         let anchorIndex: number | null = null
         if (input.anchorChunkId != null) {
             await checkpoint()
-            const [anchor] = await reader.select({ chunkIndex: docChunks.chunkIndex })
+            const [anchor] = await reader.select({ chunkIndex: docChunks.chunkIndex, text: docChunks.text })
                 .from(docChunks).where(and(
                     eq(docChunks.id, input.anchorChunkId),
                     eq(docChunks.documentId, input.documentId),
                     eq(docChunks.userId, input.userId),
                 )).limit(1)
             if (!anchor) throw notFound("命中片段已失效或不属于当前文档")
+            if (input.anchorContentHash != null && hashDocumentText(anchor.text) !== input.anchorContentHash) throw badRequest("搜索后命中片段已变化，请重新检索")
             anchorIndex = anchor.chunkIndex
         }
         const from = Math.max(input.fromIndex ?? 0, 0)
@@ -567,6 +574,7 @@ export async function readDocumentChunks(input: {
             title: doc.title,
             fileName: doc.fileName,
             fileType: doc.fileType,
+            updatedAt: doc.updatedAt.toISOString(),
             fromIndex: anchorIndex == null ? from : Math.max(0, anchorIndex - 1),
             anchorIndex,
             chunks: rows.map((row) => ({

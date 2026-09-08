@@ -46,14 +46,17 @@ const documentReadSchema = z.object({
     sourceRef: assistantSourceRefSchema,
     documentId: positiveIdSchema,
     anchorChunkId: positiveIdSchema.optional(),
+    expectedUpdatedAt: z.string().datetime().optional(),
+    anchorContentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     passageId: positiveIdSchema.optional(),
     generationId: positiveIdSchema.optional(),
     contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 }).superRefine((value, ctx) => {
     const modern = [value.passageId, value.generationId, value.contentHash].some((item) => item != null)
-    if (modern && (value.passageId == null || value.generationId == null || value.contentHash == null || value.anchorChunkId != null)) {
+    if (modern && (value.passageId == null || value.generationId == null || value.contentHash == null || value.anchorChunkId != null || value.expectedUpdatedAt != null || value.anchorContentHash != null)) {
         ctx.addIssue({ code: "custom", message: "代际锚点必须完整，且不能与旧chunk锚点混用" })
     }
+    if (value.anchorContentHash != null && value.anchorChunkId == null) ctx.addIssue({ code: "custom", message: "片段hash必须绑定旧chunk锚点" })
 })
 
 const geneOpsReadSchema = z.object({
@@ -241,10 +244,18 @@ async function searchDocumentsAcross(
         const source = byId.get(String(row.libraryId))
         if (!source) return []
         const documentId = Number(row.documentId)
+        const versionKey = `${source.ref}:${documentId}`
+        if (row.passageId == null && typeof row.expectedUpdatedAt === "string") {
+            const prior = session.legacyVersions.get(versionKey)
+            if (prior && prior !== row.expectedUpdatedAt) throw badRequest("本轮关键词文档版本已变化，未合并新旧内容")
+            session.legacyVersions.set(versionKey, row.expectedUpdatedAt)
+        }
         const read: SourceReadInput = row.passageId != null
             ? { kind: "document", sourceRef: source.ref, documentId, passageId: Number(row.passageId),
                 generationId: Number(row.generationId), contentHash: String(row.contentHash) }
-            : { kind: "document", sourceRef: source.ref, documentId, anchorChunkId: positiveIdSchema.parse(row.chunkId) }
+            : { kind: "document", sourceRef: source.ref, documentId, anchorChunkId: positiveIdSchema.parse(row.chunkId),
+                ...(typeof row.expectedUpdatedAt === "string" ? { expectedUpdatedAt: row.expectedUpdatedAt } : {}),
+                ...(typeof row.anchorContentHash === "string" ? { anchorContentHash: row.anchorContentHash } : {}) }
         return [{
             candidateKey: row.passageId != null ? `document:${documentId}:generation:${row.generationId}:passage:${row.passageId}` : `document:${documentId}:chunk:${row.chunkId}`,
             sourceRef: source.ref, sourceKind: source.kind, sourceName: source.name,
@@ -426,19 +437,31 @@ async function executeSourceRead(ctx: ToolExecutionContext, raw: unknown): Promi
             }],
         } }
     }
+    const legacyVersions = getDocumentIndexSession(ctx).legacyVersions
+    const versionKey = `${source.ref}:${documentId}`
+    const pinnedVersion = legacyVersions.get(versionKey)
+    if (pinnedVersion && input.expectedUpdatedAt && pinnedVersion !== input.expectedUpdatedAt) throw badRequest("读取目标与本轮关键词文档版本不一致")
     // reader在同一受限事务中核验focus.libraryId、用户和锚点后才读取正文。
     const output = await readDocument(toAssistantContext(focusForSource(ctx, source)), {
         documentId,
         fromIndex: 0,
         limit: input.anchorChunkId == null ? 12 : 3,
         anchorChunkId: input.anchorChunkId,
+        expectedUpdatedAt: pinnedVersion ?? input.expectedUpdatedAt,
+        anchorContentHash: input.anchorContentHash,
     }) as {
         documentId: string
         href: string
         title: string
         fileName: string
+        updatedAt: string
         anchorIndex: number | null
         chunks: Array<{ chunkIndex: number; locator: string | null; text: string }>
+    }
+    if (typeof output.updatedAt === "string") {
+        const currentPin = legacyVersions.get(versionKey)
+        if (currentPin && currentPin !== output.updatedAt) throw badRequest("并发读取的关键词文档版本不一致")
+        legacyVersions.set(versionKey, output.updatedAt)
     }
     if (input.anchorChunkId != null && output.anchorIndex == null) throw badRequest("命中片段已失效")
     const window = output.anchorIndex != null ? buildEvidenceWindow(output.chunks, output.anchorIndex) : null
@@ -457,6 +480,7 @@ async function executeSourceRead(ctx: ToolExecutionContext, raw: unknown): Promi
                 confidence: 0.8,
                 metadata: {
                     sourceRef: source.ref, sourceName: source.name, documentId: output.documentId,
+                    ...(typeof output.updatedAt === "string" ? { documentVersion: output.updatedAt } : {}),
                     ...(window ? { windowAnchorStart: window.anchorStart, windowAnchorEnd: window.anchorEnd } : {}),
                     ...(input.anchorChunkId == null ? {} : { anchorChunkId: String(input.anchorChunkId), anchorIndex: output.anchorIndex }),
                 },
