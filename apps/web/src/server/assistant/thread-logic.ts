@@ -238,14 +238,15 @@ export async function persistAssistantMessage(input: {
 }) {
     const db = getDb()
     const now = new Date()
-    await db.insert(assistantMessages).values({
+    const [saved] = await db.insert(assistantMessages).values({
         threadId: input.threadId,
         role: input.role,
         contentJson: JSON.stringify(input.role === "assistant"
             ? sanitizeAssistantMessageContentForPersistence(input.content)
             : input.content),
         createdAt: now,
-    })
+    }).returning({ id: assistantMessages.id })
+    if (!saved) throw new Error("消息保存未返回ID")
     await db
         .update(assistantThreads)
         .set({
@@ -255,6 +256,7 @@ export async function persistAssistantMessage(input: {
                 : {}),
         })
         .where(and(eq(assistantThreads.id, input.threadId), eq(assistantThreads.userId, input.userId)))
+    return saved.id
 }
 
 /**

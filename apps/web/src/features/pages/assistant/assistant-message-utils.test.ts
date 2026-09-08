@@ -12,6 +12,13 @@ import {
 } from "./assistant-message-utils"
 
 describe("assistant source scope messages", () => {
+    it("恢复服务端问题ID，不从临时UI ID或位置猜测", () => {
+        const messages = toInitialMessages([{ id: "80", role: "assistant", content: { parts: [{ type: "text", text: "合成回答" }], agentRunId: "run-fixture", questionMessageId: "79" } }])
+        expect(messages[0].metadata).toMatchObject({ custom: { agentRunId: "run-fixture", questionMessageId: "79" } })
+        expect(extractPersistedMessageMetadata({ questionMessageId: "ui-nanoid" })).toBeNull()
+        expect(extractPersistedMessageMetadata({ questionMessageId: "0" })).toBeNull()
+        expect(extractPersistedMessageMetadata({ questionMessageId: "9007199254740992" })).toBeNull()
+    })
     it("new messages persist explicit all scope", () => {
         expect(focusToRequestBody({ mode: "all" })).toEqual({ sourceScope: { mode: "all" } })
         expect(focusToRequestBody({ mode: "selected", refs: ["knowledge-base:3"] })).toEqual({

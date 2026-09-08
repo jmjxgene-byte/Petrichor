@@ -95,6 +95,7 @@ export type AgentRunMetrics = {
 
 export type AgentRunViewModel = {
     id: string
+    questionMessageId?: string
     status: AgentRunStatus
     complexity?: TaskComplexity
     goal: string

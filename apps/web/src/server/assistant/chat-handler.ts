@@ -89,6 +89,7 @@ export async function assistantChat(request: AppRequest) {
         const lastMessage = input.messages.at(-1)
         const goal = extractLastUserText(input.messages)
         const shouldPersistUser = Boolean(goal) && isUserRoleMessage(lastMessage)
+        let questionMessageId: number | null = null
 
         const thread = await ensureAssistantThread({
             userId: user.id,
@@ -103,7 +104,7 @@ export async function assistantChat(request: AppRequest) {
                 threadId: thread.id,
                 keepCount: Math.max(0, input.messages.length - 1),
             })
-            await persistAssistantMessage({
+            questionMessageId = await persistAssistantMessage({
                 userId: user.id,
                 threadId: thread.id,
                 role: "user",
@@ -219,6 +220,7 @@ export async function assistantChat(request: AppRequest) {
                     try {
                         const result = await runtime.run({
                             conversationId,
+                            ...(questionMessageId == null ? {} : { questionMessageId: String(questionMessageId) }),
                             userId: user.id,
                             dbRunId: dbRun.id,
                             threadId: thread.id,
@@ -315,6 +317,7 @@ export async function assistantChat(request: AppRequest) {
                         content: {
                             parts: responseMessage.parts,
                             ...(runKey ? { agentRunId: runKey } : {}),
+                            ...(questionMessageId == null ? {} : { questionMessageId: String(questionMessageId) }),
                         },
                     })
                 },
@@ -322,6 +325,7 @@ export async function assistantChat(request: AppRequest) {
             headers: {
                 "X-Petrichor-Assistant-Thread-Id": String(thread.id),
                 "X-Petrichor-Assistant-Run-Id": String(dbRun.id),
+                ...(questionMessageId == null ? {} : { "X-Petrichor-Assistant-Question-Id": String(questionMessageId) }),
             },
         })
     } catch (error) {

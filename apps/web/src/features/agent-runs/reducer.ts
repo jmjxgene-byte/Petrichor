@@ -81,6 +81,7 @@ function applyEvent(state: AgentRunViewModel, event: AgentStreamEvent): AgentRun
                 ...state,
                 status: "running",
                 goal: String(payload.goal ?? state.goal),
+                ...(typeof payload.questionMessageId === "string" && /^[1-9]\d*$/.test(payload.questionMessageId) && Number.isSafeInteger(Number(payload.questionMessageId)) ? { questionMessageId: payload.questionMessageId } : {}),
                 startedAt: event.timestamp,
             }
 

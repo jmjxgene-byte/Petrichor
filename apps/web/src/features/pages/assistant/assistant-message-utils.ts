@@ -279,6 +279,9 @@ export function extractPersistedMessageMetadata(content: unknown) {
   const record = asRecord(content)
   if (!record) return null
   const custom: Record<string, unknown> = {}
+  if (typeof record.questionMessageId === "string" && /^[1-9]\d*$/.test(record.questionMessageId) && Number.isSafeInteger(Number(record.questionMessageId))) {
+    custom.questionMessageId = record.questionMessageId
+  }
   if (typeof record.agentRunId === "string" && record.agentRunId.trim()) {
     custom.agentRunId = record.agentRunId.trim()
   }

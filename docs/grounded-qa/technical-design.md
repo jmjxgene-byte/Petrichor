@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08问题身份节点：persistAssistantMessage返回数据库生成的ID，无返回行则失败；chat-handler捕获本轮新保存user消息ID，写入回答根元数据questionMessageId、响应Question-Id header，并经Runtime agent_started事件传到前端Run状态。历史toInitialMessages保留经过正整数/安全整数检查的questionMessageId；不从nanoid、消息位置或客户端自报字段推断。无本轮新保存用户消息的旧/重放场景暂不补猜关联。全量2workers下1386通过/40既有跳过，typecheck/lint/build通过，合成测试验证数据库ID、保存失败、实时与历史恢复。Deep报价/启动仍需服务端复验回答根元数据、Run和questionId的具体关系，UI操作栏及金额确认尚未接通；无真实生产或模型验收。
+
 2026-09-08Deep启动安全节点：fastRunKey需匹配当前用户与thread，旧threadId为空的Run仅接受同conversationId；拒绝时不解析来源或建Job。Deep start/cancel复用从索引接口抽出的mutation-origin规则，跨域请求在业务访问前拒绝。parseDeepResearchFocus共享严格解析，损坏JSON/不兼容范围不再回退null扩大到本地全范围；真实空值仍兼容，worker遇无效范围终态失败。全量2workers下1382通过/40既有跳过，typecheck/lint/build通过，仅合成HTTP/SQL契约测试。
 
 已确认的UI缺口：deepResearchApi.start当前没有页面调用者，只有历史Deep结果恢复；AssistantChatPage操作栏尚未接启动、预算确认与状态/取消。历史消息ID由toInitialMessages转换成persisted-ID，而实时消息不能直接当数据库questionMessageId使用。下一实施链应先提供用户/会话/Run绑定的服务端消息ID解析，再接报价确认和签名金额授权、持久预算预留，最后接现有操作栏与刷新恢复。当前fastRun校验只证明用户/会话归属，不证明它对应所选问题的具体轮次；这项映射仍待完成。不得把已有API误写成手动Deep UI已交付。

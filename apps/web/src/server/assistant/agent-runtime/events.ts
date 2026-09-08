@@ -40,7 +40,7 @@ export type AgentStreamEventType =
     | "agent_error"
 
 export type AgentStreamEventPayloadMap = {
-    agent_started: { goal: string; model: string; conversationId: string }
+    agent_started: { goal: string; model: string; conversationId: string; questionMessageId?: string }
     complexity_detected: { complexity: TaskComplexity; routingHint?: RoutingHint; reason?: string }
     plan_created: { steps: AgentPlanStep[] }
     plan_updated: { steps: AgentPlanStep[]; changed?: string[] }

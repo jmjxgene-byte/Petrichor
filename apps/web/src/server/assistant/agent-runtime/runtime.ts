@@ -73,6 +73,7 @@ export type AgentRunRequest = {
     /** 普通问答流式输出前加载真实 Wiki 实体/概念词典；由 HTTP 入口按用户与 focus 注入。 */
     loadWikiMentionTargets?: () => Promise<WikiMentionTarget[]>
     goal: string
+    questionMessageId?: string
     /** 已裁剪的模型消息 */
     messages?: unknown[]
     model: unknown
@@ -213,6 +214,7 @@ export class PetrichorAgentRuntime {
             goal: request.goal,
             model: request.modelName,
             conversationId: request.conversationId,
+            ...(request.questionMessageId ? { questionMessageId: request.questionMessageId } : {}),
         })
 
         // Router 只作提示，且失败不影响主流程（§5/§84/§128）

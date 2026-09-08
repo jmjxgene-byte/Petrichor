@@ -27,6 +27,10 @@ beforeEach(() => {
 })
 
 describe("agentRunReducer", () => {
+    it("实时事件保留服务端问题ID，但不接受前端临时ID", () => {
+        expect(reduce([event("agent_started", { goal: "合成", questionMessageId: "79" })]).questionMessageId).toBe("79")
+        expect(reduce([event("agent_started", { goal: "合成", questionMessageId: "ui-id" })]).questionMessageId).toBeUndefined()
+    })
     it("从 agent_started 建立运行态", () => {
         const run = reduce([event("agent_started", { goal: "Redis 怎么部署" })])
         expect(run.status).toBe("running")
