@@ -60,6 +60,10 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08Deep启动安全节点：fastRunKey需匹配当前用户与thread，旧threadId为空的Run仅接受同conversationId；拒绝时不解析来源或建Job。Deep start/cancel复用从索引接口抽出的mutation-origin规则，跨域请求在业务访问前拒绝。parseDeepResearchFocus共享严格解析，损坏JSON/不兼容范围不再回退null扩大到本地全范围；真实空值仍兼容，worker遇无效范围终态失败。全量2workers下1382通过/40既有跳过，typecheck/lint/build通过，仅合成HTTP/SQL契约测试。
+
+已确认的UI缺口：deepResearchApi.start当前没有页面调用者，只有历史Deep结果恢复；AssistantChatPage操作栏尚未接启动、预算确认与状态/取消。历史消息ID由toInitialMessages转换成persisted-ID，而实时消息不能直接当数据库questionMessageId使用。下一实施链应先提供用户/会话/Run绑定的服务端消息ID解析，再接报价确认和签名金额授权、持久预算预留，最后接现有操作栏与刷新恢复。当前fastRun校验只证明用户/会话归属，不证明它对应所选问题的具体轮次；这项映射仍待完成。不得把已有API误写成手动Deep UI已交付。
+
 2026-09-08价格响应边界节点：匿名报价读取改为stream reader逐块限制1,000,000字节，Content-Length声明超限先取消，未知长度按实际字节累计，严格UTF-8解码；两秒AbortSignal覆盖fetch及body读取，结束/失败清理reader。拒绝baseURL userinfo与localhost子域，既有HTTPS/IP/redirect约束保留。合成流验证越界取消、声明超限取消及危险地址不发请求，全量2workers下1376通过/40既有跳过，typecheck/lint/build通过。没有真实网络验收，DNS重绑定/完整出口策略仍未完成，此处不宣称完整SSRF防护；用户金额上限确认/持久预留仍待实现。
 
 2026-09-08模型与价格前置节点：Deep取得执行占位后先resolveChatModel读取模型元数据及匿名价格，价格/分组倍率不可用则validation_failed，尚未开始规划模型调用。规划与综合传同一modelRefId/expectedModelFingerprint；generation在重新解析后、generateText之前验证模型ID/版本、provider ID/key/baseURL/版本、credential ID/版本及options的指纹，阻止失效模型自动回落与运行中配置漂移。指纹不访问runtime/API Key；未传指纹的旧调用保持行为。全量2workers下1374通过/40既有跳过，typecheck/lint/build通过，假SDK验证不匹配时不调用generateText。该前置检查没有用户金额审批、报价锁价或累计预算预留，实际provider/价格/生产Job仍未验收。

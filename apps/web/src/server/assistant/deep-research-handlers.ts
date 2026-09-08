@@ -1,14 +1,16 @@
 import { createHash } from "node:crypto"
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, isNull, or } from "drizzle-orm"
 import { z } from "zod"
 
 import { getServerConfig } from "@/config/server"
 import { requireCurrentUser } from "@/server/auth/current-user"
 import { getDb } from "@/server/db/client"
-import { assistantMessages, assistantThreads } from "@/server/db/schema"
-import { forbidden, notFound, ok, readJson, toErrorResponse } from "@/server/http/response"
+import { agentRuns, assistantMessages, assistantThreads } from "@/server/db/schema"
+import { badRequest, forbidden, notFound, ok, readJson, toErrorResponse } from "@/server/http/response"
 import type { AppRequest } from "@/server/http/request"
-import { assistantFocusSchema, assistantIdSchema } from "./thread-logic"
+import { assertMutationOrigin } from "@/server/http/mutation-origin"
+import { assistantIdSchema } from "./thread-logic"
+import { parseDeepResearchFocus } from "./deep-research-focus"
 import { resolveAssistantSources } from "./source-catalog"
 import { buildDeepResearchCapabilitySnapshot, buildDeepResearchSourceScopeHash } from "./deep-research-contract"
 import {
@@ -30,6 +32,7 @@ const runSchema = z.object({
 
 export async function startDeepResearch(request: AppRequest) {
     try {
+        assertMutationOrigin(request, "深度检索操作")
         const config = getServerConfig()
         if (!config.deepResearch.enabled || !config.deepResearch.workerEnabled) {
             throw forbidden("深度检索 Worker 尚未启用")
@@ -49,6 +52,15 @@ export async function startDeepResearch(request: AppRequest) {
             eq(assistantMessages.role, "user"),
         )).limit(1)
         if (!question) throw notFound("用户问题消息不存在")
+
+        if (input.fastRunKey) {
+            const [fastRun] = await db.select({ id: agentRuns.id }).from(agentRuns).where(and(
+                eq(agentRuns.runKey, input.fastRunKey),
+                eq(agentRuns.userId, user.id),
+                or(eq(agentRuns.threadId, thread.id), and(isNull(agentRuns.threadId), eq(agentRuns.conversationId, String(thread.id)))),
+            )).limit(1)
+            if (!fastRun) throw notFound("关联回答不存在或不属于当前会话")
+        }
 
         const focus = parseFocus(thread.focusJson)
         const sources = await resolveAssistantSources(user.id, focus)
@@ -96,6 +108,7 @@ export async function deepResearchStatus(request: AppRequest) {
 
 export async function cancelDeepResearch(request: AppRequest) {
     try {
+        assertMutationOrigin(request, "深度检索操作")
         const user = await requireCurrentUser(request)
         const input = runSchema.parse(await readJson(request))
         const job = await requestDeepResearchJobCancellation(input.runKey, user.id)
@@ -107,13 +120,7 @@ export async function cancelDeepResearch(request: AppRequest) {
 }
 
 function parseFocus(value: string | null) {
-    if (!value) return null
-    try {
-        const parsed = assistantFocusSchema.safeParse(JSON.parse(value))
-        return parsed.success ? parsed.data : null
-    } catch {
-        return null
-    }
+    try { return parseDeepResearchFocus(value) } catch { throw badRequest("保存的资料范围无效，请重新选择范围") }
 }
 
 function sha256(value: string) {

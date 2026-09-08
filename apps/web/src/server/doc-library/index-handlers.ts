@@ -1,22 +1,14 @@
 import { z, ZodError } from "zod"
 import { requireCurrentUser } from "@/server/auth/current-user"
 import type { AppRequest } from "@/server/http/request"
-import { forbidden, HttpError, notFound, ok, readJson, toErrorResponse } from "@/server/http/response"
+import { HttpError, notFound, ok, readJson, toErrorResponse } from "@/server/http/response"
+import { assertMutationOrigin } from "@/server/http/mutation-origin"
 import { getDocumentIndexStatus } from "./index-status"
 import { cancelDocumentIndexGeneration } from "./index-jobs"
 
 const id = z.coerce.number().int().positive()
 export function assertIndexMutationOrigin(request: AppRequest) {
-    const origin = request.headers.get("origin")
-    const fetchSite = request.headers.get("sec-fetch-site")
-    if (fetchSite === "cross-site" || (!origin && fetchSite === "same-site")) throw forbidden("不允许跨站索引操作")
-    if (origin) {
-        const allowed = new Set([request.urlObject.origin])
-        for (const value of [process.env.APP_BASE_URL, process.env.BETTER_AUTH_URL]) {
-            if (value) allowed.add(new URL(value).origin)
-        }
-        if (!allowed.has(origin)) throw forbidden("不允许跨域索引操作")
-    }
+    assertMutationOrigin(request, "索引操作")
 }
 export function safeError(error: unknown, request: AppRequest) {
     return toErrorResponse(error instanceof HttpError || error instanceof ZodError

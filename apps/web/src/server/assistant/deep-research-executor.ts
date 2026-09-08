@@ -17,7 +17,7 @@ import {
     type DeepResearchErrorCode,
 } from "./deep-research-job-store"
 import { persistEvidence } from "./agent-runtime/store"
-import { assistantFocusSchema } from "./thread-logic"
+import { parseDeepResearchFocus } from "./deep-research-focus"
 import { buildDeepResearchSourceScopeHash, searchDeepResearchMode } from "./deep-research-contract"
 import { DEEP_RESEARCH_MODEL_OUTPUT_LIMITS } from "./deep-research-limits"
 import {
@@ -71,7 +71,10 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
     }
     const question = extractQuestion(questionRow.contentJson)
     if (!question) return await failDeepResearchJob({ jobId, workerId, errorCode: "validation_failed" })
-    const focus = parseFocus(thread.focusJson)
+    let focus: ReturnType<typeof parseDeepResearchFocus>
+    try { focus = parseDeepResearchFocus(thread.focusJson) } catch {
+        return await failDeepResearchJob({ jobId, workerId, errorCode: "validation_failed", retryable: false })
+    }
     if (buildDeepResearchSourceScopeHash(focus) !== job.sourceScopeHash) {
         return await failDeepResearchJob({ jobId, workerId, errorCode: "validation_failed" })
     }
@@ -361,16 +364,6 @@ function extractQuestion(value: string | null) {
         )).join("\n").trim()
     } catch {
         return ""
-    }
-}
-
-function parseFocus(value: string | null) {
-    if (!value) return null
-    try {
-        const parsed = assistantFocusSchema.safeParse(JSON.parse(value))
-        return parsed.success ? parsed.data : null
-    } catch {
-        return null
     }
 }
 
