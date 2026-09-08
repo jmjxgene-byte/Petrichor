@@ -6,7 +6,8 @@ import { searchDocuments, readDocument } from "@/server/assistant/tools/doc-libr
 import { resolveAssistantSources } from "@/server/assistant/source-catalog"
 import { readSourceStatistics } from "@/server/assistant/source-statistics"
 import { buildEvidenceWindow } from "@/server/doc-library/evidence-window"
-import { searchDocumentIndex, readDocumentIndexPassage, createDocumentIndexReadSession, type DocumentIndexReadSession } from "@/server/doc-library/index-retrieval"
+import { searchDocumentIndex, readDocumentIndexPassage } from "@/server/doc-library/index-retrieval"
+import { getDocumentIndexSession } from "../document-index-session"
 import { badRequest } from "@/server/http/response"
 import { defineTool, toAssistantContext } from "./adapter"
 import { geneOpsTools } from "./geneops"
@@ -203,14 +204,11 @@ async function searchDocumentLibrary(
     return searchDocumentsAcross(ctx, [source], query, degraded)
 }
 
-const documentIndexSessions = new WeakMap<ToolExecutionContext["state"], DocumentIndexReadSession>()
-
 async function searchDocumentsAcross(
     ctx: ToolExecutionContext, sources: AssistantSourceCatalogItem[], query: string,
     degraded?: (source: AssistantSourceCatalogItem, message: string) => void,
 ): Promise<SourceCandidate[]> {
-    let session = documentIndexSessions.get(ctx.state)
-    if (!session) { session = createDocumentIndexReadSession(); documentIndexSessions.set(ctx.state, session) }
+    const session = getDocumentIndexSession(ctx)
     let indexed: Awaited<ReturnType<typeof searchDocumentIndex>> = { hits: [], indexedLibraryIds: [], degraded: [] }
     try {
         indexed = await searchDocumentIndex({ userId: ctx.userId, libraryIds: sources.map((source) => Number(source.id)),
@@ -409,7 +407,7 @@ async function executeSourceRead(ctx: ToolExecutionContext, raw: unknown): Promi
     }
 
     const documentId = Number(input.documentId)
-    const pins = documentIndexSessions.get(ctx.state)?.pins
+    const pins = getDocumentIndexSession(ctx).pins
     if (pins?.has(Number(source.id)) && pins.get(Number(source.id)) !== (input.generationId ?? null)) {
         throw badRequest("读取目标与本轮固定索引版本不一致")
     }

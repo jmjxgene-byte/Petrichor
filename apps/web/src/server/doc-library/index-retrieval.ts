@@ -12,10 +12,8 @@ import { documentHitSnippet, documentSearchTerms } from "./search-query"
 import { buildEvidenceWindow } from "./evidence-window"
 import { hashDocumentText } from "./passage-builder"
 
-export type DocumentIndexReadSession = { pins: Map<number, number | null>; queue: Promise<void> }
-export function createDocumentIndexReadSession(): DocumentIndexReadSession {
-    return { pins: new Map(), queue: Promise.resolve() }
-}
+import type { DocumentIndexReadSession } from "./index-read-session"
+export { createDocumentIndexReadSession, type DocumentIndexReadSession } from "./index-read-session"
 type IndexInput = ReadBudget & { userId: number; libraryIds: number[]; query: string; limit?: number; session?: DocumentIndexReadSession }
 export type IndexedDocumentHit = {
     passageId: number; generationId: number; documentId: number; libraryId: number; title: string; text: string

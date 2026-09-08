@@ -1,6 +1,7 @@
 import { SUBAGENT_DEFAULT_TIMEOUT_MS } from "./config"
 import { AgentError, normalizeAgentError } from "./errors"
 import { EvidenceStore } from "./evidence"
+import { getDocumentIndexSession } from "./document-index-session"
 import type { AgentEventEmitter } from "./events"
 import { newId } from "./ids"
 import { LoopDetector } from "./loop-detector"
@@ -134,6 +135,7 @@ export class SubAgentRuntime {
 
         const ctx: ToolExecutionContext = {
             ...parentCtx,
+            documentIndexReadSession: getDocumentIndexSession(parentCtx),
             delegationDepth: options.depth,
             state: state.current,
         }

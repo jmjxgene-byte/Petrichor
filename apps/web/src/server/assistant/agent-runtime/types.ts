@@ -8,6 +8,8 @@
 // 任务复杂度与停止原因
 // ============================================================================
 
+import type { DocumentIndexReadSession } from "@/server/doc-library/index-read-session"
+
 /** 任务复杂度（§8）。仅作策略提示，不限制 Agent 实际能力。 */
 export type TaskComplexity = "direct" | "simple" | "multi_step" | "complex"
 
@@ -219,6 +221,8 @@ export type ToolExecutionContext = {
     state: AgentState
     abortSignal?: AbortSignal
     queryDeadlineAt?: number
+    /** 同次回答的子代理共享索引版本选择；不进入序列化State或Trace。 */
+    documentIndexReadSession?: DocumentIndexReadSession
     /** 主 Agent 的 DB run id，用于步骤落库与审计 */
     dbRunId?: number
     threadId?: number

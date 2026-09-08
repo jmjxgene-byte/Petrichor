@@ -11,8 +11,7 @@ const mocks = vi.hoisted(() => ({
     readIndex: vi.fn(),
 }))
 
-vi.mock("@/server/doc-library/index-retrieval", () => ({ searchDocumentIndex: mocks.searchIndex, readDocumentIndexPassage: mocks.readIndex,
-    createDocumentIndexReadSession: () => ({ pins: new Map(), queue: Promise.resolve() }) }))
+vi.mock("@/server/doc-library/index-retrieval", () => ({ searchDocumentIndex: mocks.searchIndex, readDocumentIndexPassage: mocks.readIndex }))
 
 vi.mock("@/server/assistant/tools/doc-library", () => ({
     searchDocuments: mocks.searchDocuments,

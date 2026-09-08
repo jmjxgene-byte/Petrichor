@@ -2,6 +2,8 @@
 
 日期：2026-09-08。本文件描述待实现契约，不表示迁移、模型调用或部署已执行。
 
+第四十七节点补全下述跨子代理缺口：DocumentIndexReadSession抽为无数据库依赖的轻量模块，Runtime上下文允许携带同次回答的session；SubAgentRuntime从父级取得并继承，source工具优先消费继承session。主/子State独立，权限仍逐工具校验，Map/队列不进入State或Trace，不共享正文。新回答及独立Deep仍创建独立session。模拟模型驱动真实委派链验证两个子代理与父级共享版本，单元测试验证先委派再搜索及新Run隔离；1424测试及类型/Lint/构建通过。跨进程恢复、旧关键词正文、GeneOps代际及真实PG并发仍未证明。
+
 最新代际一致性节点：普通主Agent与Deep各自Run内，source工具通过同一state关联内存DocumentIndexReadSession，按库保存首次generation或legacy模式；并发搜索串行确立pin，后续查询按指定ID及ready/retired读取，仍校验user/library与当前文档版本。固定版本缺失、原文变化或查询失败时返回降级，不切新版或旧chunk；source.read拒绝与既有pin不符的generation。首次无索引/失败后的legacy不会在下一查询自动升级。pin只含ID且随Run释放，不缓存正文。此节点推进了下文旧记录中的“跨查询固定generation”待办，但不证明跨子代理/跨进程恢复、旧关键词正文版本或GeneOps generation已固定；这些仍未完成。1422项全量测试及类型/Lint/构建通过，SQL构造与模拟并发不替代真实PG验收。
 
 ## 基线与参考

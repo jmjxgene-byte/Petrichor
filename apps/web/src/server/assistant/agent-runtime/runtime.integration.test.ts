@@ -6,6 +6,7 @@ import { AgentSkillRegistry } from "./skill-registry"
 import { AgentToolRegistry } from "./tool-registry"
 import type { AgentStreamEvent } from "./events"
 import type { AgentToolDefinition } from "./types"
+import { getDocumentIndexSession } from "./document-index-session"
 
 /**
  * Agent Runtime 集成测试（§115）。
@@ -392,9 +393,16 @@ describe("Agent Runtime 集成", () => {
     })
 
     it("委派子任务：子代理证据合并回主 Agent", async () => {
+        const childSessions: unknown[] = []
         tools.register(makeTool("agent.delegate", "delegate_task", "agent", async (ctx, raw) => {
+            const parentSession = getDocumentIndexSession(ctx)
+            parentSession.pins.set(3, 5)
             const tasks = (raw as { tasks: Array<{ objective: string }> }).tasks
             const results = await ctx.services!.delegate(tasks)
+            expect(childSessions).toHaveLength(2)
+            expect(childSessions.every((session) => session === parentSession)).toBe(true)
+            expect(parentSession.pins.get(4)).toBeNull()
+            expect(ctx.state).not.toHaveProperty("documentIndexReadSession")
             return { results: results.map((item) => ({ status: item.status, summary: item.summary })) }
         }, {
             core: true,
@@ -413,6 +421,11 @@ describe("Agent Runtime 集成", () => {
             tools,
             skills,
             runNested: async (nested) => {
+                const session = getDocumentIndexSession(nested.ctx)
+                childSessions.push(session)
+                expect(session.pins.get(3)).toBe(5)
+                session.pins.set(4, null)
+                expect(nested.ctx.state).not.toHaveProperty("documentIndexReadSession")
                 await nested.executor.execute("research.search", { query: nested.prompt }, nested.ctx)
                 return { text: `已完成：${nested.prompt}`, toolCalls: 1 }
             },
