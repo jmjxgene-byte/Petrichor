@@ -1,3 +1,5 @@
 # Petrichor 可信问答 MVP 开发台账
 
+当前执行门：等待用户输入，MVP未完成。2026-09-08再次只读核验，源码HEAD为046b777ab、工作区干净，Docker仍缺少orbstack socket；页面未调用Deep start/status/cancel，start接口未包含签名金额审批。计费只读授权在连续多个节点仍未收到，不能据公开估算继续承诺实际硬预算，也不访问账号或开启付费入口。恢复条件：明确允许只读核验new.genejm.one部署/计费/分组/限额（不读取API Key、不调用模型、不改配置），并启动本机Docker/OrbStack供隔离PG验证。真实模型/索引/生产验收继续单独授权。以下为最近已验证实现，不是已完成声明。
+
 2026-09-08，完整MVP进行中，codex/grounded-qa-mvp，提交前HEAD f9003cd61；基线b6eac4c72/tag baseline/pre-grounded-qa-20260908保留。第六十节点处理Run头辅助正文：当前chat-handler创建与收尾显式redactAuxiliaryText，目标置redacted，计划仅留ID/状态/依赖并隐藏目标与resultSummary，路由保留domains/confidence不保存reasoning；来源Run收尾也强制该规则。问题message ID、计数、最终回答和既有恢复规则保留，内存状态不修改，未改历史记录或其他旧调用默认值。1468测试通过/40跳过，typecheck/Lint/build/diff通过，含写入边界合成隐私回归；不宣称所有历史/旧路径或最终回答副本已清除。此前Trace/步骤/消息事件和错误日志修复保留，尚需真实生产日志及UI复验。G-PRICE-IDENTITY未授权，未访问计费账号、生产、模型、Worker、GeneOps/FNS或其他工作树。下一步需完成签名金额审批与手动Deep主路径（先独立只读核验网关计费身份），以及真实充分性/60题人工支持、跨进程恢复、PG/RLS/vector/Staging和外部锚点契约；Docker既有socket阻塞未解除，MVP未完成。
