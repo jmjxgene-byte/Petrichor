@@ -23,6 +23,7 @@ export function buildDeepResearchCapabilitySnapshot(
     const allowedModes = [...new Set(sources.flatMap((source) => source.allowedModes))].sort()
     const single = sources.length === 1 ? sources[0] : undefined
     return deepResearchCapabilitySnapshotSchema.parse({
+        reservationVersion: 1,
         sources,
         // 根字段仅作旧读取器兼容摘要，不能再代表某一个外部源。
         contractVersion: single?.contractVersion ?? null,

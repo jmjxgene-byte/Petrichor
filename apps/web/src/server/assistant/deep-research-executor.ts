@@ -12,9 +12,10 @@ import {
     failDeepResearchJob,
     getDeepResearchJob,
     heartbeatDeepResearchJob,
+    reserveDeepResearchExecution,
     type DeepResearchErrorCode,
 } from "./deep-research-job-store"
-import { createAgentRunRecord, persistEvidence } from "./agent-runtime/store"
+import { persistEvidence } from "./agent-runtime/store"
 import { assistantFocusSchema } from "./thread-logic"
 import { buildDeepResearchSourceScopeHash, searchDeepResearchMode } from "./deep-research-contract"
 import { DEEP_RESEARCH_MODEL_OUTPUT_LIMITS } from "./deep-research-limits"
@@ -107,21 +108,17 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
     let inputTokens = 0
     let outputTokens = 0
     let modelCallsStarted = 0
+    let executionReserved = false
     let plannerUsage: ChatCompletionResult["usage"] | null = null
     let synthesisUsage: ChatCompletionResult["usage"] | null = null
     let pricingSnapshot: DeepResearchPricingSnapshot | null = null
     const startedAt = Date.now()
     try {
-        await createAgentRunRecord({
-            runKey: job.runKey,
-            conversationId: String(job.threadId),
-            threadId: job.threadId,
-            userId: job.userId,
-            model: modelName,
-            goal: `[deep-research-message:${job.questionMessageId}]`,
-            complexity: "complex",
-            retryOfRunKey: job.fastRunKey,
-        })
+        if (!await reserveDeepResearchExecution(jobId, workerId)) {
+            return await failDeepResearchJob({ jobId, workerId, errorCode: "validation_failed", retryable: false })
+        }
+        executionReserved = true
+        controller.signal.throwIfAborted()
         modelCallsStarted += 1
         const planner = await callModelOrThrow({
             userId: job.userId,
@@ -260,7 +257,7 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
             return await acknowledgeDeepResearchJobCancellation({ jobId, workerId })
         }
         const code = classifyExecutionError(error, { leaseLost, aborted: controller.signal.aborted })
-        await db.update(agentRuns).set({
+        if (executionReserved) await db.update(agentRuns).set({
             status: "failed",
             stopReason: code,
             metricsJson: JSON.stringify({

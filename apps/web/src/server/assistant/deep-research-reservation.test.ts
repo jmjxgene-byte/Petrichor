@@ -1,0 +1,37 @@
+import { beforeEach, describe, expect, it, vi } from "vitest"
+const mocks = vi.hoisted(() => ({ query: vi.fn(), end: vi.fn(), begin: vi.fn() }))
+vi.mock("@/server/db/client", () => ({ getDb: vi.fn(), getSqlClient: () => ({ begin: mocks.begin, end: mocks.end }) }))
+import { reserveDeepResearchExecution, recoverExpiredDeepResearchJobs } from "./deep-research-job-store"
+beforeEach(() => { vi.clearAllMocks(); mocks.begin.mockImplementation(async (run: (query: typeof mocks.query) => unknown) => run(mocks.query)); mocks.end.mockResolvedValue(undefined) })
+describe("Deep一次性模型执行占位（SQL契约，非真实PG并发验收）", () => {
+    it("有效租约锁定与唯一Run插入在同一事务，只有返回一行才允许执行", async () => {
+        mocks.query.mockResolvedValueOnce([{ id: 7 }]).mockResolvedValueOnce([])
+        expect(await reserveDeepResearchExecution(1, "fixture-worker", new Date(0))).toBe(true)
+        expect(await reserveDeepResearchExecution(1, "fixture-worker", new Date(0))).toBe(false)
+        const text = mocks.query.mock.calls[0][0].join("?")
+        expect(text).toContain("for update")
+        expect(text).toContain("lease_expires_at >")
+        expect(text).toContain("lease_owner =")
+        expect(text).toContain("on conflict (run_key) do nothing")
+        expect(text).toContain('"modelWorkReserved":true')
+        expect(text).not.toContain("content_json")
+        expect(mocks.begin).toHaveBeenCalledTimes(2)
+        expect(mocks.end).toHaveBeenCalledTimes(2)
+    })
+    it("数据库失败不被吞掉，连接仍关闭", async () => {
+        mocks.query.mockRejectedValueOnce(new Error("synthetic_db_failure"))
+        await expect(reserveDeepResearchExecution(1, "fixture-worker")).rejects.toThrow("synthetic_db_failure")
+        expect(mocks.end).toHaveBeenCalledOnce()
+    })
+    it("过期恢复仅重试尚无Run记录者，已有Run保守失败", async () => {
+        mocks.query.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 1 }])
+        expect(await recoverExpiredDeepResearchJobs(new Date(0))).toEqual({ retried: 0, failed: 1 })
+        const retry = mocks.query.mock.calls[0][0].join("?")
+        const failed = mocks.query.mock.calls[1][0].join("?")
+        expect(retry).toContain("and not exists (select 1 from petrichor_agent_run")
+        expect(retry).toContain("'reservationVersion' = '1'")
+        expect(failed).toContain("or exists (select 1 from petrichor_agent_run")
+        expect(failed).toContain("is distinct from '1'")
+        expect(mocks.begin).toHaveBeenCalledOnce()
+    })
+})

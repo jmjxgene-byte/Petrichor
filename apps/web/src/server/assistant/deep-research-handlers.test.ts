@@ -35,6 +35,7 @@ describe("deep research capability snapshot", () => {
         }, new Date("2026-09-01T00:00:00.000Z"))
 
         expect(snapshot).toEqual({
+            reservationVersion: 1,
             sources: [{ sourceRef: "external-source:1", kind: "external-source", contractVersion: 2,
                 sourceCutoffs: { wearesellers: "2026-08-27T00:00:00.000Z" }, allowedModes: ["exact", "fuzzy"], qualityStale: false, wikiReady: false, graphReady: false }],
             contractVersion: 2,

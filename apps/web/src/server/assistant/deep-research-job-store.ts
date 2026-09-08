@@ -35,6 +35,7 @@ export const deepResearchErrorCodeSchema = z.enum([
 export type DeepResearchErrorCode = z.infer<typeof deepResearchErrorCodeSchema>
 
 export const deepResearchCapabilitySnapshotSchema = z.object({
+    reservationVersion: z.literal(1).optional(),
     sources: z.array(z.object({
         sourceRef: assistantSourceRefSchema,
         kind: z.enum(["knowledge-base", "doc-library", "external-source"]),
@@ -258,6 +259,8 @@ export async function recoverExpiredDeepResearchJobs(now = new Date()) {
                 where status = 'running'
                   and lease_expires_at <= ${now}
                   and attempt_count < max_attempts
+                  and capability_snapshot_json::jsonb ->> 'reservationVersion' = '1'
+                  and not exists (select 1 from petrichor_agent_run r where r.run_key = petrichor_deep_research_job.run_key)
                 returning id
             `
             const failedRows = await sql<Array<{ id: number }>>`
@@ -271,7 +274,9 @@ export async function recoverExpiredDeepResearchJobs(now = new Date()) {
                     updated_at = ${now}
                 where status = 'running'
                   and lease_expires_at <= ${now}
-                  and attempt_count >= max_attempts
+                  and (attempt_count >= max_attempts
+                       or (capability_snapshot_json::jsonb ->> 'reservationVersion') is distinct from '1'
+                       or exists (select 1 from petrichor_agent_run r where r.run_key = petrichor_deep_research_job.run_key))
                 returning id
             `
             return { retried: retryRows.length, failed: failedRows.length }
@@ -279,6 +284,33 @@ export async function recoverExpiredDeepResearchJobs(now = new Date()) {
     } finally {
         await client.end({ timeout: 5 })
     }
+}
+
+/** 有效租约下原子创建唯一Run；未成功落盘不得开始任何模型调用。旧Run一律保守视为可能已计费。 */
+export async function reserveDeepResearchExecution(jobId: number, workerId: string, now = new Date()) {
+    const client = getSqlClient()
+    try {
+        return await client.begin(async (sql) => {
+            const rows = await sql<Array<{ id: number }>>`
+                with active_job as (
+                    select run_key, thread_id, user_id, question_message_id, fast_run_key
+                    from petrichor_deep_research_job
+                    where id = ${jobId} and status = 'running' and lease_owner = ${workerId}
+                      and lease_expires_at > ${now}
+                    for update
+                )
+                insert into petrichor_agent_run
+                    (run_key, conversation_id, thread_id, user_id, model, goal, complexity, status, retry_of_run_key, metrics_json)
+                select run_key, thread_id::text, thread_id, user_id, 'unresolved',
+                       '[deep-research-message:' || question_message_id::text || ']', 'complex', 'running', fast_run_key,
+                       '{"modelWorkReserved":true}'
+                from active_job
+                on conflict (run_key) do nothing
+                returning id
+            `
+            return rows.length === 1
+        })
+    } finally { await client.end({ timeout: 5 }) }
 }
 
 export async function completeDeepResearchJob(input: {

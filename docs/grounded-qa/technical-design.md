@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08Deep执行占位节点：reserveDeepResearchExecution在有效租约行锁下INSERT唯一agent_run，on conflict不创建，仅返回一行才允许模型工作；替代会吞创建错误的通用createAgentRunRecord。元数据只记录question-message引用及modelWorkReserved，不写原始问题。未取得占位的执行器不更新既有Run审计。新capability snapshot带reservationVersion=1；租约恢复仅重试v1且无Run记录的任务，已有Run或旧协议保守失败，避免把未知费用当零。该方案牺牲已开始模型任务的自动恢复，仍需后续金额预算/阶段级持久授权，不宣称完整累计费用治理。SQL形状/唯一冲突/连接关闭和旧新协议测试通过，全量2workers下1365通过/40既有跳过，typecheck/lint/build通过；真实PG原子性/并发未验收，未运行生产Job或模型。
+
 2026-09-08Deep跨查询融合节点：pipeline复用reciprocalRankFusion，以query_result标识已经排序的查询/模式结果，只用排名融合，不比较跨查询原始score；单列表candidateKey去重避免重复加分，各来源批次先在同查询模式内合并排序。深读前检查本地document sourceRef的generation一致性，混合不同generation或indexed/legacy立即validation_failed，不影响不同文档库各自版本。全量maxWorkers=2运行1361通过/40既有跳过，追加跨库正例后15项定向通过，typecheck/lint/build/diff通过。这里只防已观察到的本地混代，尚未把每次查询绑定到固定generation；legacy内容版本、GeneOps generation/anchor和实际PG执行仍未验收，不宣称全来源快照一致性已完成。
 
 2026-09-08逐源Deep快照节点：新snapshot.sources逐项保存sourceRef/kind/contractVersion/cutoff/allowedModes/qualityStale及Wiki/Graph能力，固定排序并拒绝重复引用/类型不匹配；旧无sources快照保留读取兼容。根字段只作摘要，单源保留旧版本/cutoff，多源不再拿第一外部源代表全部。新任务按模式缩小到已捕获且许可的来源，本地只参加exact这一次入口（其内部Hybrid仍独立开关），不因外部fuzzy再次检索本地。all超过20来源按20分批，不截断，snapshot最多200源；单批失败保留其他批次并记录失败次数，陈旧源跳过并记降级。默认Hybrid/Wiki/Graph未开启，executor对Hybrid的既有拒绝仍在，实际Hybrid Deep尚未交付。全量首次出现worker启动与流式测试超时，改用--maxWorkers=2后1358通过/40既有跳过，typecheck/lint/build通过，未放宽断言/超时；只做离线测试，无Job/生产/模型运行。跨查询固定generation、累计租约预算和真实PG/性能仍待验收。
