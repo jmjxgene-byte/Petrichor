@@ -14,6 +14,7 @@
     "start": "bun run --cwd apps/web start",
     "worker:deep-research": "bun deep-research-worker.ts",
     "worker:document-index": "bun document-index-worker.ts",
+    "qa:eval": "bun apps/web/scripts/evaluate-grounded-qa.ts",
     "vercel-build": "bun run build",
     "db:backfill-public-article-metadata": "bun run --cwd apps/web db:backfill-public-article-metadata",
     "db:sql": "bun run --silent --cwd apps/web db:sql",
