@@ -9,6 +9,7 @@ import { agentRuns, assistantMessages, assistantThreads } from "@/server/db/sche
 import { badRequest, forbidden, notFound, ok, readJson, toErrorResponse } from "@/server/http/response"
 import type { AppRequest } from "@/server/http/request"
 import { assertMutationOrigin } from "@/server/http/mutation-origin"
+import { questionMessageIdFromMetadata } from "@/lib/question-message-id"
 import { assistantIdSchema } from "./thread-logic"
 import { parseDeepResearchFocus } from "./deep-research-focus"
 import { resolveAssistantSources } from "./source-catalog"
@@ -54,12 +55,13 @@ export async function startDeepResearch(request: AppRequest) {
         if (!question) throw notFound("用户问题消息不存在")
 
         if (input.fastRunKey) {
-            const [fastRun] = await db.select({ id: agentRuns.id }).from(agentRuns).where(and(
+            const [fastRun] = await db.select({ id: agentRuns.id, metricsJson: agentRuns.metricsJson }).from(agentRuns).where(and(
                 eq(agentRuns.runKey, input.fastRunKey),
                 eq(agentRuns.userId, user.id),
                 or(eq(agentRuns.threadId, thread.id), and(isNull(agentRuns.threadId), eq(agentRuns.conversationId, String(thread.id)))),
             )).limit(1)
             if (!fastRun) throw notFound("关联回答不存在或不属于当前会话")
+            if (questionMessageIdFromMetadata(fastRun.metricsJson) !== String(input.questionMessageId)) throw badRequest("关联回答与问题不匹配或缺少可靠关联，请重新提问后再试")
         }
 
         const focus = parseFocus(thread.focusJson)

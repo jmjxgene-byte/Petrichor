@@ -20,6 +20,12 @@ beforeEach(() => {
     mocks.create.mockResolvedValue({ runKey: "fixture", status: "queued" })
 })
 describe("Deep启动关联归属", () => {
+    it.each(['{"questionMessageId":"23"}', "{}", "{broken"])("同会话错误轮次或缺少可靠关联不能创建任务：%s", async (metricsJson) => {
+        mocks.rows.push([{ id: 33, metricsJson }])
+        expect((await startDeepResearch(request("own-run"))).status).toBe(400)
+        expect(mocks.sources).not.toHaveBeenCalled()
+        expect(mocks.create).not.toHaveBeenCalled()
+    })
     it.each(["{broken", '{"sourceScope":{"mode":"unknown"}}'])("损坏范围不回落到本地全范围：%s", async (focusJson) => {
         mocks.rows[0] = [{ id: 11, focusJson }]
         expect((await startDeepResearch(request())).status).toBe(400)
@@ -41,7 +47,7 @@ describe("Deep启动关联归属", () => {
         expect(mocks.create).not.toHaveBeenCalled()
     })
     it("Run关联查询同时约束用户、会话与旧记录兼容路径", async () => {
-        mocks.rows.push([{ id: 33 }])
+        mocks.rows.push([{ id: 33, metricsJson: '{"questionMessageId":"22"}' }])
         expect((await startDeepResearch(request("own-run"))).status).toBe(200)
         const query = new PgDialect().sqlToQuery(mocks.where.mock.calls[2][0] as SQL)
         expect(query.sql).toContain('"user_id"')

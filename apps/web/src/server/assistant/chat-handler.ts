@@ -280,6 +280,7 @@ export async function assistantChat(request: AppRequest) {
                                     runKey = event.runId
                                     void createAgentRunRecord({
                                         runKey: event.runId,
+                                        questionMessageId,
                                         conversationId,
                                         threadId: thread.id,
                                         userId: user.id,
@@ -297,6 +298,7 @@ export async function assistantChat(request: AppRequest) {
                         await finishDbRun(result.state.status === "failed" ? "FAILED" : "COMPLETED")
                         // 落库不阻塞流关闭；失败只记录日志（fail-open）
                         await persistAgentRun({
+                            questionMessageId,
                             state: result.state,
                             trace: result.trace,
                             answer: result.answer,

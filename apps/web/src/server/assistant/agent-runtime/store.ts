@@ -10,6 +10,7 @@ import {
 import type { AgentRunEval } from "./eval"
 import { citationIndicesForEvidence } from "./evidence"
 import { toPublicEvidence, type PublicEvidence } from "./events"
+import { questionMessageIdFromMetadata } from "@/lib/question-message-id"
 import type { AgentRunMetrics } from "./events"
 import type {
     AgentEvidence,
@@ -44,6 +45,7 @@ export type PersistRunInput = {
     goal: string
     complexity: TaskComplexity
     retryOfRunKey?: string | null
+    questionMessageId?: number | null
 }
 
 /** 迁移未执行时的可执行提示，避免只报一句「Failed query」让人无从下手 */
@@ -79,6 +81,7 @@ export async function createAgentRunRecord(input: PersistRunInput): Promise<void
             complexity: input.complexity,
             status: "running",
             retryOfRunKey: input.retryOfRunKey ?? null,
+            metricsJson: input.questionMessageId == null ? null : JSON.stringify({ questionMessageId: String(input.questionMessageId) }),
         })
     } catch (error) {
         logStoreError("createRun", error, { runKey: input.runKey })
@@ -87,6 +90,7 @@ export async function createAgentRunRecord(input: PersistRunInput): Promise<void
 
 export async function finishAgentRunRecord(input: {
     runKey: string
+    questionMessageId?: number | null
     state: AgentState
     trace: AgentTrace
     answer: string
@@ -102,7 +106,7 @@ export async function finishAgentRunRecord(input: {
             routingHintJson: trace.routingHint ? JSON.stringify(trace.routingHint) : null,
             planJson: state.plan.length > 0 ? JSON.stringify(state.plan) : null,
             loadedSkillsJson: state.loadedSkills.length > 0 ? JSON.stringify(state.loadedSkills) : null,
-            metricsJson: JSON.stringify({ latency: trace.latency }),
+            metricsJson: JSON.stringify({ latency: trace.latency, ...(input.questionMessageId == null ? {} : { questionMessageId: String(input.questionMessageId) }) }),
             evalJson: input.evaluation ? JSON.stringify(input.evaluation) : null,
             toolCallCount: state.toolCallCount,
             iterationCount: state.iteration,
@@ -245,6 +249,7 @@ export async function persistSubtasks(runKey: string, trace: AgentTrace): Promis
 
 /** Run 结束后一次性落库；调用方不应 await 阻塞流式响应关闭 */
 export async function persistAgentRun(input: {
+    questionMessageId?: number | null
     state: AgentState
     trace: AgentTrace
     answer: string
@@ -254,6 +259,7 @@ export async function persistAgentRun(input: {
     await Promise.allSettled([
         finishAgentRunRecord({
             runKey: input.state.runId,
+            questionMessageId: input.questionMessageId,
             state: input.state,
             trace: input.trace,
             answer: input.answer,
@@ -271,6 +277,7 @@ export async function persistAgentRun(input: {
 
 export type AgentRunView = {
     id: string
+    questionMessageId?: string
     conversationId: string
     status: string
     complexity: TaskComplexity
@@ -384,6 +391,7 @@ async function loadAgentRunViewUnsafe(runKey: string, userId: number): Promise<A
 
     return {
         id: run.runKey,
+        ...(questionMessageIdFromMetadata(run.metricsJson) ? { questionMessageId: questionMessageIdFromMetadata(run.metricsJson)! } : {}),
         conversationId: run.conversationId,
         status: run.status,
         complexity: run.complexity as TaskComplexity,

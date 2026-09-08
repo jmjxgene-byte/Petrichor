@@ -2666,6 +2666,7 @@ export interface AgentRunEvidenceResponse {
 }
 
 export interface AgentRunDetailResponse {
+  questionMessageId?: string
   id: string
   conversationId: string
   status: "starting" | "running" | "completed" | "failed" | "stopped" | "cancelled"

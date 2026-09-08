@@ -13,6 +13,7 @@ import { assignEvidenceCitationIndices } from "./evidence-sources"
 export function toRunViewModel(response: AgentRunDetailResponse): AgentRunViewModel {
     return {
         id: response.id,
+        ...(response.questionMessageId ? { questionMessageId: response.questionMessageId } : {}),
         status: response.status,
         ...(response.complexity ? { complexity: response.complexity } : {}),
         goal: response.goal,
