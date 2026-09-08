@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08价格响应边界节点：匿名报价读取改为stream reader逐块限制1,000,000字节，Content-Length声明超限先取消，未知长度按实际字节累计，严格UTF-8解码；两秒AbortSignal覆盖fetch及body读取，结束/失败清理reader。拒绝baseURL userinfo与localhost子域，既有HTTPS/IP/redirect约束保留。合成流验证越界取消、声明超限取消及危险地址不发请求，全量2workers下1376通过/40既有跳过，typecheck/lint/build通过。没有真实网络验收，DNS重绑定/完整出口策略仍未完成，此处不宣称完整SSRF防护；用户金额上限确认/持久预留仍待实现。
+
 2026-09-08模型与价格前置节点：Deep取得执行占位后先resolveChatModel读取模型元数据及匿名价格，价格/分组倍率不可用则validation_failed，尚未开始规划模型调用。规划与综合传同一modelRefId/expectedModelFingerprint；generation在重新解析后、generateText之前验证模型ID/版本、provider ID/key/baseURL/版本、credential ID/版本及options的指纹，阻止失效模型自动回落与运行中配置漂移。指纹不访问runtime/API Key；未传指纹的旧调用保持行为。全量2workers下1374通过/40既有跳过，typecheck/lint/build通过，假SDK验证不匹配时不调用generateText。该前置检查没有用户金额审批、报价锁价或累计预算预留，实际provider/价格/生产Job仍未验收。
 
 2026-09-08费用未知值节点：New API token计费必须显式提供model_ratio/completion_ratio，按次计费必须提供model_price，未知quota_type拒绝，不再把缺失价格默认成免费；未参与该计费分支的字段才保留兼容0。估算拒绝负值/非整数/NaN用量，generation usage新增totalsKnown，只有输入/输出/总token完整且自洽才为true，原计数字段保持兼容。Deep两处估算检查开始/完成调用数及totalsKnown，失败或缺失用量报告usage_incomplete，不伪装零费用。全量2workers下1371通过/40既有跳过，typecheck/lint/build通过；测试使用假fetcher，无真实报价或模型。当前pricing仍在planner之后读取，首次调用前的金额审批、模型锁定与累计费用预留仍未实现，不能据此放行真实批处理。

@@ -3,6 +3,24 @@ import { describe, expect, it, vi } from "vitest"
 import { estimateDeepResearchCost, fetchDeepResearchPricingSnapshot } from "./deep-research-pricing"
 
 describe("deep research pricing snapshot", () => {
+    it("分块响应超字节上限立即取消，不等整包载入", async () => {
+        const cancel = vi.fn()
+        const body = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array(500_000)); controller.enqueue(new Uint8Array(500_001)) }, cancel })
+        const fetcher = vi.fn(async () => new Response(body)) as unknown as typeof fetch
+        expect((await fetchDeepResearchPricingSnapshot({ providerKey: "openai-compatible", baseUrl: "https://example.invalid/v1", modelId: "fixture", fetcher })).status).toBe("unavailable")
+        expect(cancel).toHaveBeenCalledOnce()
+    })
+    it("拒绝声明超限、携带凭据与localhost子域", async () => {
+        const cancel = vi.fn()
+        const fetcher = vi.fn(async () => new Response(new ReadableStream({ cancel }), { headers: { "content-length": "1000001" } })) as unknown as typeof fetch
+        expect((await fetchDeepResearchPricingSnapshot({ providerKey: "openai-compatible", baseUrl: "https://example.invalid/v1", modelId: "fixture", fetcher })).status).toBe("unavailable")
+        expect(cancel).toHaveBeenCalledOnce()
+        vi.mocked(fetcher).mockClear()
+        for (const baseUrl of ["https://user:secret@example.invalid/v1", "https://api.localhost/v1"]) {
+            expect(await fetchDeepResearchPricingSnapshot({ providerKey: "openai-compatible", baseUrl, modelId: "fixture", fetcher })).toEqual({ status: "unavailable", reason: "unsafe_base_url" })
+        }
+        expect(fetcher).not.toHaveBeenCalled()
+    })
     it.each([
         { quota_type: 0 },
         { quota_type: 0, model_ratio: 1 },

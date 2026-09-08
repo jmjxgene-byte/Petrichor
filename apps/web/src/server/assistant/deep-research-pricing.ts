@@ -2,7 +2,7 @@ import { isIP } from "node:net"
 import { z } from "zod"
 
 const QUOTA_PER_USD = 500_000
-const MAX_PRICING_RESPONSE_CHARS = 1_000_000
+const MAX_PRICING_RESPONSE_BYTES = 1_000_000
 
 const pricingResponseSchema = z.object({
     success: z.boolean(),
@@ -60,17 +60,15 @@ export async function fetchDeepResearchPricingSnapshot(input: {
     if (!endpoint) return { status: "unavailable", reason: "unsafe_base_url" }
 
     try {
+        const signal = AbortSignal.timeout(2_000)
         const response = await (input.fetcher ?? fetch)(endpoint, {
             method: "GET",
             headers: { accept: "application/json" },
             redirect: "error",
-            signal: AbortSignal.timeout(2_000),
+            signal,
         })
-        if (!response.ok) return { status: "unavailable", reason: "request_failed" }
-        const raw = await response.text()
-        if (raw.length > MAX_PRICING_RESPONSE_CHARS) {
-            return { status: "unavailable", reason: "invalid_response" }
-        }
+        if (!response.ok) { void response.body?.cancel().catch(() => {}); return { status: "unavailable", reason: "request_failed" } }
+        const raw = await readPricingBody(response, signal)
         const parsed = pricingResponseSchema.safeParse(JSON.parse(raw) as unknown)
         if (!parsed.success || !parsed.data.success) {
             return { status: "unavailable", reason: "invalid_response" }
@@ -98,6 +96,35 @@ export async function fetchDeepResearchPricingSnapshot(input: {
         }
     } catch {
         return { status: "unavailable", reason: "request_failed" }
+    }
+}
+
+async function readPricingBody(response: Response, signal: AbortSignal) {
+    if (Number(response.headers.get("content-length")) > MAX_PRICING_RESPONSE_BYTES) {
+        void response.body?.cancel().catch(() => {})
+        throw new Error("pricing_body_too_large")
+    }
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error("pricing_body_missing")
+    const abort = () => { void reader.cancel().catch(() => {}) }
+    signal.addEventListener("abort", abort, { once: true })
+    const decoder = new TextDecoder("utf-8", { fatal: true })
+    let bytes = 0, text = ""
+    try {
+        while (true) {
+            signal.throwIfAborted()
+            const chunk = await reader.read()
+            signal.throwIfAborted()
+            if (chunk.done) break
+            bytes += chunk.value.byteLength
+            if (bytes > MAX_PRICING_RESPONSE_BYTES) throw new Error("pricing_body_too_large")
+            text += decoder.decode(chunk.value, { stream: true })
+        }
+        return text + decoder.decode()
+    } finally {
+        signal.removeEventListener("abort", abort)
+        void reader.cancel().catch(() => {})
+        reader.releaseLock()
     }
 }
 
@@ -133,9 +160,9 @@ function pricingEndpoint(baseUrl: string | null) {
     if (!baseUrl) return null
     try {
         const url = new URL(baseUrl)
-        if (url.protocol !== "https:" || isIP(url.hostname) !== 0) return null
+        if (url.protocol !== "https:" || url.username || url.password || isIP(url.hostname) !== 0) return null
         const hostname = url.hostname.toLowerCase()
-        if (hostname === "localhost" || hostname.endsWith(".local") || !hostname.includes(".")) return null
+        if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local") || !hostname.includes(".")) return null
         return new URL("/api/pricing", url.origin)
     } catch {
         return null
