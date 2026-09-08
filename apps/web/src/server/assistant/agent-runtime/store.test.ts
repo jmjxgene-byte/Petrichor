@@ -12,7 +12,7 @@ import { __testing, listAgentRunsForConversation, loadAgentRunTrace, loadAgentRu
 
 /**
  * 持久化层的错误日志必须能定位问题：
- * drizzle 只给 "Failed query"，真正原因在 error.cause 上。
+ * drizzle真正错误码在cause上；message/detail/stack可能含参数，禁止直接打印。
  */
 describe("logStoreError", () => {
     function capture(error: unknown): Record<string, unknown> {
@@ -21,13 +21,17 @@ describe("logStoreError", () => {
         return logMocks.error.mock.calls[0][0] as Record<string, unknown>
     }
 
-    it("把 cause 上的 Postgres 错误码与详情带出来", () => {
+    it("仅带出cause上的SQLSTATE，不打印SQL与详情", () => {
         const error = new Error("Failed query: insert into ...")
         error.cause = { code: "42P01", message: 'relation "petrichor_agent_run" does not exist' }
         const payload = capture(error)
 
         expect(payload.code).toBe("42P01")
-        expect(payload.cause).toContain("does not exist")
+        expect(payload.errorKind).toBe("database_error")
+        expect(payload).not.toHaveProperty("cause")
+        expect(payload).not.toHaveProperty("err")
+        expect(JSON.stringify(payload)).not.toContain("insert into")
+        expect(JSON.stringify(payload)).not.toContain("does not exist")
     })
 
     it("表不存在时给出可执行的迁移提示", () => {
@@ -46,12 +50,30 @@ describe("logStoreError", () => {
 
     it("没有 cause 时不崩，仍保留上下文", () => {
         const payload = capture(new Error("boom"))
-        expect((payload.err as Error).message).toBe("boom")
+        expect(payload.errorKind).toBe("error")
+        expect(JSON.stringify(payload)).not.toContain("boom")
         expect(payload.runKey).toBe("run_x")
     })
 
     it("非 Error 值也能记录", () => {
-        expect((capture("plain string").err as Error).message).toBe("plain string")
+        const payload = capture("private non-error payload")
+        expect(payload.errorKind).toBe("unknown_error")
+        expect(JSON.stringify(payload)).not.toContain("private")
+    })
+    it("恶意错误名、详情和扩展上下文字段均不泄漏", () => {
+        logMocks.error.mockClear()
+        const error = new Error("private query")
+        error.name = "private body"
+        error.stack = "private stack"
+        error.cause = { code: "private_code", message: "private detail", detail: "private parameters" }
+        __testing.logStoreError("persistEvidence", error, { runKey: "run_x", conversationId: "2", rawInput: "private context" })
+        const payload = logMocks.error.mock.calls[0][0]
+        expect(JSON.stringify(payload)).not.toContain("private")
+        expect(payload).toMatchObject({ scope: "persistEvidence", runKey: "run_x", conversationId: "2", errorKind: "error" })
+        expect(payload).not.toHaveProperty("code")
+    })
+    it("原始Postgres错误对象也只保留合法SQLSTATE", () => {
+        expect(capture({ code: "23505", detail: "private duplicate value" })).toMatchObject({ code: "23505", errorKind: "database_error" })
     })
 })
 

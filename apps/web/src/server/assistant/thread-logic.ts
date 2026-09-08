@@ -86,7 +86,8 @@ export function isExternalMetadataOnlyTool(toolName: string) {
         || EXTERNAL_METADATA_ONLY_TOOL_NAMES.has(toolName)
 }
 
-export function sanitizeAssistantStepPayload(toolName: string, value: unknown) {
+export function sanitizeAssistantStepPayload(toolName: string, value: unknown, metadataOnly = false) {
+    if (metadataOnly) return { redacted: true, reason: "agent-run-metadata-only" }
     if (!isExternalMetadataOnlyTool(toolName)) return value
     return { redacted: true, reason: "external-source-metadata-only" }
 }
@@ -337,6 +338,7 @@ export async function finishAssistantRun(input: {
 }
 
 export async function recordAssistantStep(input: {
+    metadataOnly?: boolean
     runId: number
     stepIndex: number
     toolName: string
@@ -346,8 +348,8 @@ export async function recordAssistantStep(input: {
     errorCode?: string | null
     durationMs: number | null
 }) {
-    const safeInput = redactAssistantStepInput(sanitizeAssistantStepPayload(input.toolName, input.input))
-    const safeOutput = sanitizeAssistantStepPayload(input.toolName, input.output)
+    const safeInput = redactAssistantStepInput(sanitizeAssistantStepPayload(input.toolName, input.input, input.metadataOnly))
+    const safeOutput = sanitizeAssistantStepPayload(input.toolName, input.output, input.metadataOnly)
     await getDb().insert(assistantSteps).values({
         runId: input.runId,
         stepIndex: input.stepIndex,

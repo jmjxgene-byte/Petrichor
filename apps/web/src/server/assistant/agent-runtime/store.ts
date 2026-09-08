@@ -1,5 +1,5 @@
 import { and, asc, desc, eq } from "drizzle-orm"
-import { createLogger, toLogError } from "@/lib/logger"
+import { createLogger } from "@/lib/logger"
 import { getDb } from "@/server/db/client"
 import {
     agentEvidence,
@@ -28,7 +28,7 @@ const log = createLogger("agent-runtime-store")
  *
  * 落库口径：
  * - Run 头：可按 runKey / conversationId / userId / 时间 / stopReason 查询；
- * - Trace 事件：已在 TraceCollector 内脱敏与截断，这里只做搬运；
+ * - Trace 事件：来源Run在写入边界再次按metadata白名单过滤；
  * - Evidence：供刷新恢复与引用定位；
  * - SubTask：供并行子代理 UI 恢复。
  *
@@ -55,17 +55,21 @@ function logStoreError(scope: string, error: unknown, context: Record<string, un
     // drizzle 抛出的 Error.message 只有 "Failed query: ..."，真正原因在 cause 上（postgres.js 的 PostgresError）
     const cause = error instanceof Error ? error.cause : undefined
     const causeRecord = cause && typeof cause === "object" ? cause as Record<string, unknown> : null
-    const code = typeof causeRecord?.code === "string" ? causeRecord.code : undefined
-    const detail = causeRecord?.message ?? causeRecord?.detail
-
+    const direct = error && typeof error === "object" ? error as Record<string, unknown> : null
+    const candidateCode = causeRecord?.code ?? direct?.code
+    const code = typeof candidateCode === "string" && /^[0-9A-Z]{5}$/.test(candidateCode) ? candidateCode : undefined
+    const safeContext: Record<string, string> = {}
+    for (const key of ["runKey", "conversationId"]) {
+        const value = context[key]
+        if (typeof value === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(value)) safeContext[key] = value
+    }
     log.error({
-        err: toLogError(error),
+        errorKind: code ? "database_error" : error instanceof TypeError ? "type_error" : error instanceof Error ? "error" : "unknown_error",
         scope,
         ...(code ? { code } : {}),
-        ...(detail ? { cause: String(detail) } : {}),
         // 42P01 = undefined_table，明确指向未执行的迁移
         ...(code === "42P01" ? { hint: MISSING_TABLE_HINT } : {}),
-        ...context,
+        ...safeContext,
     }, "Agent Runtime 持久化失败，继续当前对话")
 }
 

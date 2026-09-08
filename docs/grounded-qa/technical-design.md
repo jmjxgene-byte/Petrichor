@@ -2,6 +2,8 @@
 
 日期：2026-09-08。本文件描述待实现契约，不表示迁移、模型调用或部署已执行。
 
+第五十八节点：Agent store错误日志仅保留固定错误类别/合法SQLSTATE/受限上下文，删除原始Error、cause详情和stack，避免失败SQL参数进入日志；保留42P01迁移提示。当前Agent的旧assistant_step回调显式metadataOnly，保留工具名/状态/耗时，input/output不落正文；步骤写入失败也不序列化原始异常。recordAssistantStep其他旧调用仍兼容，未清理历史。1466测试及类型/Lint/构建通过，含恶意错误字段和步骤插入边界mock。Run头、流式消息元数据及其他旧日志路径仍不在本节点的完整验证范围，不声称全系统脱敏完成。
+
 第五十七节点：Trace来源Run判定仍包含geneops.*与source.*，所以纯本地统一来源也采用metadata-only保护。persistTrace的事件及全部工具展开调用统一走白名单；自由文本替换、载荷redacted、未知字段不落库，只保留受限身份/状态/数值。persistSubtasks隐藏objective，避免主/子工具或任意别名绕过旧黑名单。1461测试与类型/Lint/构建通过，新增mock数据库边界测试验证落库不含合成私密串且内存数据不变。此处只覆盖Trace事件/工具展开/子任务目标，Run头、旧assistant_step回调、错误日志和历史数据仍未全面核验或清理；不改变最终会话回答的既有保存规则。
 
 第五十四节点：旧关键词searchChunks候选携带文档updatedAt与原始chunk文本SHA256；read_document/source.read透传并在权限限定的同一只读事务核验，任一变化停止读取窗口。同回答主/子代理共用legacyVersions，固定首次搜索/读取的文档更新时间并拒绝后续漂移；核心hash额外保护搜索到深读。metadata记录documentVersion，无额外正文副本或迁移。旧无版本调用仍兼容，但不能冒称已经验证版本；正常应用写入更新时间是版本前提，不保证绕过应用直接修改邻接chunk的检测，也不保证跨进程恢复。1459测试、类型/Lint/构建通过，无实际PG/生产运行。

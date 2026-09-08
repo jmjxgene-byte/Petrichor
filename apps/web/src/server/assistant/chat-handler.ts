@@ -7,7 +7,7 @@ import {
     type UIMessageChunk,
 } from "ai"
 import { z } from "zod"
-import { createLogger, toLogError } from "@/lib/logger"
+import { createLogger } from "@/lib/logger"
 import { createChatLanguageModel } from "@/server/ai/generation"
 import { requireCurrentUser } from "@/server/auth/current-user"
 import { HttpError, toErrorResponse } from "@/server/http/response"
@@ -258,6 +258,7 @@ export async function assistantChat(request: AppRequest) {
                             // 兼容既有 assistant_step 表：listRecentToolNames 与历史 UI 都依赖它（§108）
                             onToolTrace: (toolTrace) => {
                                 void recordAssistantStep({
+                                    metadataOnly: true,
                                     runId: dbRun.id,
                                     stepIndex: stepIndex++,
                                     toolName: toolTrace.toolName,
@@ -270,7 +271,7 @@ export async function assistantChat(request: AppRequest) {
                                     durationMs: toolTrace.durationMs,
                                 }).catch((error: unknown) => {
                                     log.error({
-                                        err: toLogError(error),
+                                        errorKind: error instanceof Error ? "step_persistence_error" : "unknown_step_persistence_error",
                                         runId: dbRun.id,
                                         toolName: toolTrace.toolName,
                                     }, "Assistant tool step 落库失败")
