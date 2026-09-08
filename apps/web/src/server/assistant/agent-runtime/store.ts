@@ -140,9 +140,7 @@ export async function persistTrace(trace: AgentTrace): Promise<void> {
                 runKey: trace.runId,
                 sequence: trace.steps.length + index + 1,
                 eventType: call.ok ? "tool_result" : "error",
-                payloadJson: JSON.stringify(isExternalSourceTool(call.toolId)
-                    ? { ...call, input: { redacted: true }, rawOutput: { redacted: true } }
-                    : call),
+                payloadJson: JSON.stringify(sanitizeExternalTracePayload({ ...call }, { externalRun })),
                 toolId: call.toolId,
             }))).onConflictDoNothing()
         }
@@ -209,16 +207,19 @@ export function sanitizeExternalTracePayload(
     const source = typeof payload.source === "string" ? payload.source : ""
     const externalToolPayload = isExternalSourceTool(toolId) || isExternalSourceTool(source)
     if (!externalToolPayload && !options.externalRun) return payload
-    const sanitized = {
-        ...payload,
-        ...(externalToolPayload && payload.input !== undefined ? { input: { redacted: true } } : {}),
-        ...(externalToolPayload && payload.output !== undefined ? { output: { redacted: true } } : {}),
-        ...(externalToolPayload && payload.observation !== undefined ? { observation: { redacted: true } } : {}),
-        ...(externalToolPayload && payload.data !== undefined ? { data: { redacted: true } } : {}),
-        ...(options.externalRun && payload.goal !== undefined ? { goal: "[redacted]" } : {}),
-        ...(options.externalRun && Array.isArray(payload.steps)
-            ? { steps: { redacted: true, count: payload.steps.length } }
-            : {}),
+    const sanitized: Record<string, unknown> = {}
+    // 不展开未知载荷；自由文本不是安全诊断元数据。
+    const identifiers = new Set(["id", "toolId", "toolName", "namespace", "source", "taskId", "traceId", "strategy", "permissionDecision"])
+    const enums = new Set(["running", "completed", "failed", "cancelled", "stopped", "succeeded", "insufficient", "clarification", "time_unknown", "conflict", "missing_citation", "unread_citation", "valid_references", "rewritten", "skipped", "invalid", "retrieved", "allowed", "denied"])
+    const numbers = new Set(["durationMs", "startedAt", "totalMs", "depth", "retries", "evidenceCount", "citationCount", "candidateCount", "queryCount", "count", "retrievalMs", "rerankMs", "inputTokens", "outputTokens", "totalTokens", "round"])
+    for (const [key, value] of Object.entries(payload)) {
+        if (identifiers.has(key) && typeof value === "string" && /^[a-zA-Z0-9_.:-]{1,128}$/.test(value)) sanitized[key] = value
+        else if (["status", "reason"].includes(key) && typeof value === "string" && enums.has(value)) sanitized[key] = value
+        else if (numbers.has(key) && typeof value === "number" && Number.isFinite(value) && value >= 0) sanitized[key] = value
+        else if (["ok", "cached", "isError", "progress"].includes(key) && typeof value === "boolean") sanitized[key] = value
+        else if (["goal", "summary", "objective", "message", "answer", "error"].includes(key)) sanitized[key] = "[redacted]"
+        else if (key === "steps" && Array.isArray(value)) sanitized[key] = { redacted: true, count: value.length }
+        else if (["input", "output", "rawOutput", "observation", "data"].includes(key)) sanitized[key] = { redacted: true }
     }
     return sanitized
 }
@@ -237,7 +238,7 @@ export async function persistSubtasks(runKey: string, trace: AgentTrace): Promis
         await getDb().insert(agentSubtasks).values(trace.delegations.map((item) => ({
             runKey,
             taskKey: item.taskId,
-            objective: item.objective.slice(0, 2_000),
+            objective: traceContainsExternalSource(trace) ? "[redacted]" : item.objective.slice(0, 2_000),
             status: item.status,
             depth: item.depth,
             evidenceCount: item.evidenceCount,

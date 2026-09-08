@@ -2,6 +2,8 @@
 
 日期：2026-09-08。本文件描述待实现契约，不表示迁移、模型调用或部署已执行。
 
+第五十七节点：Trace来源Run判定仍包含geneops.*与source.*，所以纯本地统一来源也采用metadata-only保护。persistTrace的事件及全部工具展开调用统一走白名单；自由文本替换、载荷redacted、未知字段不落库，只保留受限身份/状态/数值。persistSubtasks隐藏objective，避免主/子工具或任意别名绕过旧黑名单。1461测试与类型/Lint/构建通过，新增mock数据库边界测试验证落库不含合成私密串且内存数据不变。此处只覆盖Trace事件/工具展开/子任务目标，Run头、旧assistant_step回调、错误日志和历史数据仍未全面核验或清理；不改变最终会话回答的既有保存规则。
+
 第五十四节点：旧关键词searchChunks候选携带文档updatedAt与原始chunk文本SHA256；read_document/source.read透传并在权限限定的同一只读事务核验，任一变化停止读取窗口。同回答主/子代理共用legacyVersions，固定首次搜索/读取的文档更新时间并拒绝后续漂移；核心hash额外保护搜索到深读。metadata记录documentVersion，无额外正文副本或迁移。旧无版本调用仍兼容，但不能冒称已经验证版本；正常应用写入更新时间是版本前提，不保证绕过应用直接修改邻接chunk的检测，也不保证跨进程恢复。1459测试、类型/Lint/构建通过，无实际PG/生产运行。
 
 第五十二节点：Deep正常零候选或读取成功但无正文，且failedSearchCount/failedReadCount/degradedSourceChecks均为0时，返回固定insufficient结果，不调用综合模型；已有规划调用仍计费/计数，不声称免费。任何失败或降级导致无证据则失败，不能据此断言资料没有答案；零有效查询与不合法引用身份不归为正常无结果。空references允许沿既有完成事务保存不足提示。1457测试与类型/Lint/构建通过；事务测试为模拟DB，真实Worker、费用与PG验收未执行。

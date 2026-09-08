@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest"
 import { evidenceForPersistence, sanitizeExternalTracePayload, shouldPersistEvidence } from "./store"
 
 describe("GeneOps Agent 持久化脱敏", () => {
+    it("混合Run的非来源工具和未知字段也不能带出正文", () => {
+        const payload = { toolId: "agent.delegate", input: { objective: "private_query" }, rawOutput: "private_reply",
+            summary: "private_summary", objective: "private_objective", alias: { body: "private_body" },
+            durationMs: 12, ok: true, status: "completed", reason: "private_reason" }
+        const result = sanitizeExternalTracePayload(payload, { externalRun: true })
+        expect(JSON.stringify(result)).not.toContain("private_")
+        expect(result).toMatchObject({ toolId: "agent.delegate", durationMs: 12, ok: true, status: "completed", summary: "[redacted]", rawOutput: { redacted: true } })
+        expect(result).not.toHaveProperty("alias")
+        expect(sanitizeExternalTracePayload(payload)).toBe(payload)
+    })
     it("Trace 不保存 GeneOps observation data", () => {
         expect(sanitizeExternalTracePayload({
             source: "geneops.search",
@@ -9,7 +19,7 @@ describe("GeneOps Agent 持久化脱敏", () => {
             data: { rows: [{ content: "sensitive" }] },
         })).toEqual({
             source: "geneops.search",
-            summary: "命中 2 条",
+            summary: "[redacted]",
             data: { redacted: true },
         })
     })
