@@ -12,6 +12,8 @@ Recall@20按有答案题逐题计算后宏平均，重复命中只算一次且�
 
 ## 合成题集v1
 
+有限canary仅规划入口及实测规模见[canary-plan-only.md](canary-plan-only.md)。使用 `bun run --cwd apps/web ./scripts/plan-grounded-canary.ts --review-template` 输出60题人工待审阅草稿；所有实际运行/答案/引用审查字段均为空，不可直接作为通过报告。
+
 `apps/web/src/server/retrieval/fixtures/grounded-qa-v1.ts`包含19份虚构资料和60题，序列化dataset SHA为`55eee733924fcda56d2ad3f6ff52bb4b546a6564db9e6bf858639f3d42d3ba1e`。此版本供回归，变更需另建版本；不是实际业务题或人工独立审核结果。每题明确scope、history、expectedResolution、证据文档及原文quote，语义标签在运行前固定。文末题位于1000段过程记录之后，真实切片器输出中的命中索引必须大于20。测试证明引文属于范围且仍可切片定位，不证明检索能命中。
 
 运行旧/新检索前，需将每条quote映射到对应冻结generation中的实际证据ID，执行检索并记录实际readIds；不能把期望quote直接当检索结果。人工仍需独立检查题目歧义和期望关系，尤其时间冲突和澄清题。当前尚无旧/新检索实跑、真实群聊60题或人工支持标注；不得报告业务Recall/precision已达标。另需验收Deep 180秒、队列/取消/崩溃/费用、PG/RLS、历史恢复和部署门；这些不由本报告代替。
