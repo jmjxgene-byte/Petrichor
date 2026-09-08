@@ -40,6 +40,7 @@ import {createHash} from "node:crypto";
 import {decodeApiKey} from "/app/apps/web/src/server/ai/config-logic.ts";
 const input=${JSON.stringify(input)},phase=${JSON.stringify(phase)};
 const report={planHash:input.planHash,executionId:input.executionId,phase,passed:false,calls:0,requests:[],documents:[],cases:[]};
+const watchdog=setTimeout(()=>process.exit(124),540000);watchdog.unref();
 let key=""; const db=postgres(process.env.DATABASE_URL,{max:1,prepare:false,connect_timeout:10,onnotice:()=>{}});
 async function post(route,body){
  const max=phase==="embed"?22:8;if(report.calls>=max)throw Error("call_limit");report.calls++;console.error("CANARY_ATTEMPT "+phase+" "+report.calls);
@@ -73,7 +74,7 @@ try{
  }
  report.passed=true;
 }catch(e){const m=e instanceof Error?e.message:"unknown";report.error=/^[a-z_]+(?:[0-9]+)?$/.test(m)?m:"provider_or_metadata_failed";process.exitCode=1}
-finally{key="";await db.end({timeout:2}).catch(()=>{});const payload=JSON.stringify(report);const hash=createHash("sha256").update(payload).digest("hex");await Bun.write(Bun.stdout,"PETRICHOR_CANARY_V1 "+Buffer.byteLength(payload)+" "+hash+"\\n"+payload+"\\nEND "+hash+"\\n")}`
+finally{key="";await db.end({timeout:2}).catch(()=>{});const payload=JSON.stringify(report);const hash=createHash("sha256").update(payload).digest("hex");const frame=Buffer.from("PETRICHOR_CANARY_V1 "+Buffer.byteLength(payload)+" "+hash+"\\n"+payload+"\\nEND "+hash+"\\n");for(let i=0;i<frame.length;i+=16384){await new Promise((resolve,reject)=>process.stdout.write(frame.subarray(i,i+16384),error=>error?reject(error):resolve()))}clearTimeout(watchdog)}`
 new Bun.Transpiler({ loader: "ts", target: "bun" }).transformSync(remote)
 if (process.argv[3] === "--preflight") { console.log(JSON.stringify({ preflight: true, executionId, phase, planHash: expected, unused: !fs.existsSync(path.join(directory, `${phase}.started`)), documentRequests: 14, queryRequests: 8, rerankLimit: 8, modelCalls: 0 })); process.exit(0) }
 if (!sshTarget || !sshIdentity || !sshPort || !/^\d+$/.test(sshPort)) throw new Error("ssh_configuration_missing")
@@ -82,19 +83,25 @@ fs.mkdirSync(directory, { recursive: true, mode: 0o700 })
 fs.writeFileSync(path.join(directory, `${phase}.started`), new Date().toISOString(), { flag: "wx", mode: 0o600 })
 const child = Bun.spawn(["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=10", "-p", sshPort, "-i", sshIdentity, sshTarget,
     "docker exec -i -w /app/apps/web petrichor-web-1 bun run -"], { stdin: "pipe", stdout: "pipe", stderr: "pipe" })
-child.stdin.write(remote); await child.stdin.end()
+// 在等待大stdin前并发排空两条输出流，避免输入失败时丢失stderr和退出证据。
+const stdoutPromise = new Response(child.stdout).text()
+const stderrPromise = new Response(child.stderr).text()
 const timer = setTimeout(() => child.kill(), 600000)
 try {
-    const [output, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
+    let inputFailure: string | null = null
+    try { child.stdin.write(remote); await child.stdin.end() }
+    catch (error) { inputFailure = error && typeof error === "object" && "code" in error && error.code === "EPIPE" ? "EPIPE" : "stdin_failed" }
+    const [output, stderr, code] = await Promise.all([stdoutPromise, stderrPromise, child.exited])
     const progress = stderr.split("\n").flatMap(line => {
         const match = /^CANARY_(ATTEMPT|RESPONSE) (embed|rerank) (\d{1,2})$/.exec(line)
         return match && match[2] === phase ? [{ event: match[1], call: Number(match[3]) }] : []
     })
-    fs.writeFileSync(path.join(directory, `${phase}.transport.json`), JSON.stringify({ exitCode: code, stdoutBytes: Buffer.byteLength(output), stderrBytes: Buffer.byteLength(stderr),
+    fs.writeFileSync(path.join(directory, `${phase}.transport.json`), JSON.stringify({ exitCode: code, inputFailure, stdoutBytes: Buffer.byteLength(output), stderrBytes: Buffer.byteLength(stderr),
         stdoutSha: createHash("sha256").update(output).digest("hex"), stderrSha: createHash("sha256").update(stderr).digest("hex"), progress }), { flag: "wx", mode: 0o600 })
     if (Buffer.byteLength(output) > 4 * 1024 * 1024 + 256) throw new Error("artifact_limit")
     // 先保留受限回传，再解析；截断也必须留有证据，不能因解析异常丢失全部终态。
     fs.writeFileSync(path.join(directory, `${phase}.received.frame`), output, { flag: "wx", mode: 0o600 })
+    if (inputFailure) throw new Error("stdin_failed")
     const report = JSON.parse(decodeCanaryFrame(output))
     if (report.planHash !== expected || report.executionId !== executionId || report.phase !== phase || !Number.isInteger(report.calls) || report.calls < 0 || report.calls > (phase === "embed" ? 22 : 8)) throw new Error("terminal_gate")
     fs.writeFileSync(path.join(directory, `${phase}.json`), JSON.stringify(report), { flag: "wx", mode: 0o600 })
