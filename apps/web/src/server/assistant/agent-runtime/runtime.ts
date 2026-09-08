@@ -9,7 +9,7 @@ import { EvidenceStore } from "./evidence"
 import { AgentEventEmitter, type AgentEventSink } from "./events"
 import { buildFinalAnswerPlan } from "./final-answer"
 import { groundingPolicy, groundingQueries, GROUNDED_ANSWER_GUIDANCE, insufficientGroundingAnswer, needsGroundingContext, GROUNDING_CLARIFICATION } from "./grounding-policy"
-import { validateGroundedCitations, UNVERIFIED_CITATION_ANSWER } from "./grounded-citations"
+import { validateGroundedCitations, UNVERIFIED_CITATION_ANSWER, isGroundingSourceEvidence } from "./grounded-citations"
 import { rewriteGroundingQuery } from "./grounding-rewrite"
 import { isSourceStatisticsQuestion, renderSourceStatistics } from "@/server/assistant/source-statistics"
 import { newRunId } from "./ids"
@@ -429,7 +429,7 @@ export class PetrichorAgentRuntime {
                 try {
                     const outcome = await executor.execute("source.lookup", { query }, { ...buildCtx(), abortSignal: controller.signal, queryDeadlineAt: deadline })
                     if (!outcome.ok) { failed = true; break }
-                    const hasReadableEvidence = outcome.evidence.some((item) => item.content?.trim())
+                    const hasReadableEvidence = outcome.evidence.some(isGroundingSourceEvidence)
                     const needsContext = needsGroundingContext(request.goal)
                     if (hasReadableEvidence && (!needsContext || contextResolved)) {
                         simpleKnowledgeFastPath = true
@@ -705,7 +705,7 @@ export class PetrichorAgentRuntime {
         if (requiresGrounding && answer && !groundingFallback) {
             if (fatal || stopReason === "cancelled") answer = ""
             else {
-                const readable = new Set(evidence.all.filter((item) => item.content?.trim()).map((item) => evidence.citationIndex(item.id)))
+                const readable = new Set(evidence.all.filter(isGroundingSourceEvidence).map((item) => evidence.citationIndex(item.id)))
                 const validation = validateGroundedCitations(answer, readable)
                 trace.event("observation", { strategy: "grounded_citation_validation", reason: validation.reason, citationCount: validation.count })
                 if (!validation.valid) answer = UNVERIFIED_CITATION_ANSWER

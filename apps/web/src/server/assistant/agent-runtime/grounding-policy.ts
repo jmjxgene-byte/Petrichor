@@ -29,6 +29,7 @@ export function groundingQueries(goal: string): string[] {
 }
 
 export const GROUNDED_ANSWER_GUIDANCE = `当前为资料优先问答。你只能依据本轮已读取的资料支持业务结论。
+subagent总结、memory记忆、tool结果、graph关系及范围外web内容不能替代选定资料，也不能用它们的编号证明资料结论。
 范围选择不是一般背景：不得自行跨库、联网或补入常识。引用只使用本轮实际证据。
 问题存在关键歧义时先问一句澄清；“怎么翻”不等于“翻译”。资料不支持的部分明确说明不足。
 群聊经验不等于官方规则，未知时间不用于断言最新。`

@@ -118,6 +118,26 @@ describe("Agent Runtime 集成", () => {
         if (answer.endsWith("[1]")) expect(result.answer).toBe(answer)
         else expect(result.answer).toContain("未通过资料引用核验")
     })
+    it("纯子代理总结不能令资料检索通过，也不生成貌似有引用的回答", async () => {
+        tools.register(makeTool("source.lookup", "lookup_sources", "source", async () => ({}), { core: true,
+            normalize: () => ({ summary: "只有模型总结", evidence: [{ source: "subagent", sourceId: "summary-only", content: "未经原文支持的说法" }] }),
+        }))
+        const result = await new PetrichorAgentRuntime({ tools, skills }).run({ ...baseRequest(scriptedModel([{ kind: "text", text: "未经原文支持的说法[1]" }]), "如何处理订单缺陷？"), focus: { libraryId: "3" } })
+        expect(result.answer).not.toContain("未经原文支持的说法")
+        expect(result.answer).not.toContain("[1]")
+        expect(result.trace.toolCalls.every((call) => call.toolId === "source.lookup")).toBe(true)
+    })
+    it("真实原文与子代理总结共存时，最终回答不得引用总结编号", async () => {
+        tools.register(makeTool("source.lookup", "lookup_sources", "source", async () => ({}), { core: true,
+            normalize: () => ({ summary: "混合输出", evidence: [
+                { source: "document", sourceId: "document-read", content: "合成资料正文" },
+                { source: "subagent", sourceId: "summary-only", content: "未经原文支持的说法" },
+            ] }),
+        }))
+        const result = await new PetrichorAgentRuntime({ tools, skills }).run({ ...baseRequest(scriptedModel([{ kind: "text", text: "未经原文支持的说法[2]" }]), "如何处理订单缺陷？"), focus: { libraryId: "3" } })
+        expect(result.answer).toContain("未通过资料引用核验")
+        expect(result.answer).not.toContain("未经原文支持的说法")
+    })
     it("资料数量问题只走范围统计，不搜索正文或调用模型猜数", async () => {
         tools.register(makeTool("source.overview", "source_overview", "source", async () => ({ rows: [{ name: "合成", kind: "doc-library", total: 7, ready: 5, available: true }] }), { core: true }))
         tools.register(makeTool("source.lookup", "lookup_sources", "source", async () => { throw new Error("不应正文检索") }, { core: true }))

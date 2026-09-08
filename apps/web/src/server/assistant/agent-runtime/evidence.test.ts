@@ -10,6 +10,14 @@ import {
 } from "./evidence"
 
 describe("EvidenceStore 去重", () => {
+    it("同URL不同来源类型不互相覆盖或共享引用编号", () => {
+        const store = new EvidenceStore()
+        const original = store.add({ source: "document", content: "原文", url: "https://example.invalid/doc" })
+        const summary = store.add({ source: "subagent", content: "更长但未经原文支持的模型总结", url: "https://example.invalid/doc" })
+        expect(store.size).toBe(2)
+        expect(original.content).toBe("原文")
+        expect(store.citationIndex(original.id)).not.toBe(store.citationIndex(summary.id))
+    })
     it("同文档不同代际片段保留独立证据但共享来源编号", () => {
         const store = new EvidenceStore()
         const first = store.add({ source: "document", sourceId: "12:gen:5:pass:6", content: "片段一",

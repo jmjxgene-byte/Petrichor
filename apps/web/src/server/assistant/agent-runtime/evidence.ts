@@ -108,7 +108,7 @@ export function citationSourceKey(evidence: AgentEvidence): string {
     }
 
     if (evidence.source === "document" && typeof metadata.documentId === "string") return `document:${metadata.documentId}`
-    if (evidence.url?.trim()) return `url:${canonicalUrl(evidence.url)}`
+    if (evidence.url?.trim()) return `url:${evidence.source}:${canonicalUrl(evidence.url)}`
     if (evidence.sourceId?.trim()) return `source:${evidence.source}:${evidence.sourceId.trim()}`
     return `evidence:${evidence.id}`
 }
@@ -150,7 +150,8 @@ export function dedupKeys(input: EvidenceInput): string[] {
         return [`node:${input.source}:${nodeKey.trim()}`]
     }
 
-    if (input.url?.trim()) return [`url:${canonicalUrl(input.url)}`]
+    // 同URL的模型总结不能覆盖原文，也不能借用原文的引用编号。
+    if (input.url?.trim()) return [`url:${input.source}:${canonicalUrl(input.url)}`]
 
     const content = input.content?.trim()
     if (content) return [`hash:${input.source}:${contentHash(content)}`]

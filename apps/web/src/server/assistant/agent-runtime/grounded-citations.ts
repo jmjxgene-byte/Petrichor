@@ -1,3 +1,10 @@
+import type { AgentEvidence } from "./types"
+
+/** 资料问答不把模型总结、记忆、图谱关系或泛化工具输出当成已读原文。 */
+export function isGroundingSourceEvidence(evidence: Pick<AgentEvidence, "source" | "content">): boolean {
+    return ["knowledge", "document", "wiki", "geneops"].includes(evidence.source) && evidence.content.trim().length > 0
+}
+
 /** 只验证引用身份，不将格式合法当成语义支持或答案正确。 */
 export function validateGroundedCitations(answer: string, readableIndices: ReadonlySet<number>) {
     // 代码示例、Markdown链接不构成资料引用。
