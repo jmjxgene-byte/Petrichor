@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { SQL } from "drizzle-orm"
 import { PgDialect } from "drizzle-orm/pg-core"
-const mocks = vi.hoisted(() => ({ reader: null as unknown, budget: vi.fn(), provider: vi.fn() }))
+const mocks = vi.hoisted(() => ({ reader: null as unknown, budget: vi.fn(), provider: vi.fn(), rerank: vi.fn() }))
 vi.mock("@/server/db/client", () => ({ isSqliteDatabase: () => false }))
 vi.mock("@/server/db/read-budget", () => ({ withReadBudget: async (run: (reader: unknown, checkpoint: () => Promise<void>) => Promise<unknown>) => {
     mocks.budget(); return run(mocks.reader, async () => {})
 } }))
 vi.mock("./index-provider", () => ({ resolveDocumentIndexProvider: mocks.provider }))
+vi.mock("./index-reranker", () => ({ rerankIndexedCandidates: mocks.rerank }))
 import { searchDocumentIndex, readDocumentIndexPassage, createDocumentIndexReadSession } from "./index-retrieval"
 import { prepareIndexManifest } from "./index-contract"
 import { hashDocumentText } from "./passage-builder"
@@ -30,6 +31,15 @@ function fixture(results: unknown[][]) {
 beforeEach(() => { vi.clearAllMocks(); vi.stubEnv("PETRICHOR_DOC_INDEX_ENABLED", "true"); vi.stubEnv("PETRICHOR_DOC_HYBRID_ENABLED", "false") })
 afterEach(() => vi.unstubAllEnvs())
 describe("代际检索与引用", () => {
+    it("外部重排接入候选链且安全降级码随搜索返回", async () => {
+        vi.stubEnv("PETRICHOR_DOC_RERANK_ENABLED", "true")
+        fixture([[generation], [document], [hit]])
+        mocks.rerank.mockImplementation(async (input) => ({ items: input.candidates, degraded: ["rerank_unavailable"] }))
+        const result = await searchDocumentIndex({ userId: 7, libraryIds: [2], query: "翻新" })
+        expect(mocks.rerank).toHaveBeenCalledWith(expect.objectContaining({ userId: 7, query: "翻新", queryDeadlineAt: expect.any(Number), abortSignal: expect.any(AbortSignal) }))
+        expect(result.hits[0].passageId).toBe(4)
+        expect(result.degraded).toEqual(["rerank_unavailable"])
+    })
     it("第二轮使用固定代际并允许retired，不再读取current", async () => {
         const session = createDocumentIndexReadSession()
         fixture([[generation], [document], [hit]])

@@ -125,7 +125,15 @@ async function searchPinnedDocumentIndex(input: IndexInput) {
     ], { topK: Math.min(input.limit ?? 20, 20) })
     const reranked = await new LocalLexicalReranker().rerank(input.query, ranked.map((rank) => ({ ...rank,
         title: byKey.get(rank.nodeKey)?.title, content: byKey.get(rank.nodeKey)?.text })))
-    return { hits: reranked.map((rank) => {
+    let finalRanks = reranked
+    if (process.env.PETRICHOR_DOC_RERANK_ENABLED === "true") {
+        const { rerankIndexedCandidates } = await import("./index-reranker")
+        const result = await rerankIndexedCandidates({ userId: input.userId, query: input.query, candidates: reranked, ...budget })
+        finalRanks = result.items
+        degraded.push(...result.degraded)
+    }
+    signal.throwIfAborted()
+    return { hits: finalRanks.map((rank) => {
         const hit = byKey.get(rank.nodeKey)!
         return { ...hit, snippet: documentHitSnippet(hit.text, terms), href: docLibraryDocumentPath(String(hit.libraryId), String(hit.documentId)),
             mode: rank.recallSources.includes("chunk_vector") ? "hybrid" : "lexical" }

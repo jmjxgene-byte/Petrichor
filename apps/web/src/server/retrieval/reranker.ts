@@ -105,46 +105,58 @@ export class OpenAiCompatibleReranker implements Reranker {
         options?: RerankOptions,
     ): Promise<Array<RerankedCandidate<T>>> {
         if (candidates.length === 0) return []
+        options?.signal?.throwIfAborted()
         if (!this.config.baseUrl) throw new Error("RAG_RERANK_BASE_URL 未配置")
-
+        const topN = Math.min(options?.topN ?? this.config.topN, candidates.length)
+        if (!Number.isInteger(topN) || topN < 1) throw new Error("rerank_invalid_limit")
         const documents = candidates.map((candidate) => renderDocument(candidate))
-        const controller = new AbortController()
-        const timer = setTimeout(() => controller.abort(), this.config.timeoutMs)
-        options?.signal?.addEventListener("abort", () => controller.abort(), { once: true })
-
-        try {
-            const response = await fetch(`${this.config.baseUrl.replace(/\/+$/, "")}/rerank`, {
-                method: "POST",
-                headers: {
-                    "content-type": "application/json",
-                    ...(this.config.apiKey ? { authorization: `Bearer ${this.config.apiKey}` } : {}),
-                },
-                body: JSON.stringify({
-                    model: this.config.model,
-                    query,
-                    documents,
-                    top_n: options?.topN ?? this.config.topN,
-                }),
-                signal: controller.signal,
-            })
-            if (!response.ok) {
-                throw new Error(`rerank 服务返回 ${response.status}`)
-            }
-            const payload = await response.json() as {
-                results?: Array<{ index: number; relevance_score?: number; score?: number }>
-            }
-            const results = payload.results ?? []
-            if (results.length === 0) return candidates
-
-            return results
-                .filter((item) => item.index >= 0 && item.index < candidates.length)
-                .map((item) => ({
-                    ...candidates[item.index],
-                    rerankScore: item.relevance_score ?? item.score ?? 0,
-                }))
-        } finally {
-            clearTimeout(timer)
+        const signal = AbortSignal.any([AbortSignal.timeout(this.config.timeoutMs), ...(options?.signal ? [options.signal] : [])])
+        const response = await fetch(`${this.config.baseUrl.replace(/\/+$/, "")}/rerank`, {
+            method: "POST",
+            headers: {
+                "content-type": "application/json",
+                ...(this.config.apiKey ? { authorization: `Bearer ${this.config.apiKey}` } : {}),
+            },
+            body: JSON.stringify({
+                model: this.config.model,
+                query,
+                documents,
+                top_n: topN,
+                return_documents: false,
+            }),
+            signal,
+            redirect: "error",
+        })
+        if (!response.ok) {
+            await response.body?.cancel()
+            throw new Error(`rerank 服务返回 ${response.status}`)
         }
+        const reader = response.body?.getReader()
+        if (!reader) throw new Error("rerank_empty_body")
+        const parts: Uint8Array[] = []
+        let size = 0
+        try {
+            for (;;) {
+                signal.throwIfAborted()
+                const { done, value } = await reader.read()
+                if (done) break
+                size += value.byteLength
+                if (size > 128 * 1024) throw new Error("rerank_response_too_large")
+                parts.push(value)
+            }
+        } finally { await reader.cancel(); reader.releaseLock() }
+        const payload = JSON.parse(Buffer.concat(parts).toString("utf8")) as {
+            results?: Array<{ index: number; relevance_score?: number; score?: number }>
+        }
+        const results = payload.results
+        if (!Array.isArray(results) || results.length !== topN || new Set(results.map((item) => item?.index)).size !== topN
+            || results.some((item) => !item || !Number.isInteger(item.index) || item.index < 0 || item.index >= candidates.length
+                || typeof (item.relevance_score ?? item.score) !== "number" || !Number.isFinite(item.relevance_score ?? item.score))) throw new Error("rerank_invalid_results")
+        signal.throwIfAborted()
+        return results.map((item) => ({
+                ...candidates[item.index],
+                rerankScore: (item.relevance_score ?? item.score)!,
+            }))
     }
 }
 
@@ -236,7 +248,7 @@ export async function rerankAdaptively<T extends RerankCandidate>(
 }
 
 function renderDocument(candidate: RerankCandidate): string {
-    return [candidate.title, candidate.summary, candidate.content?.slice(0, 1_200)]
+    return [candidate.title?.slice(0, 300), candidate.summary?.slice(0, 600), candidate.content?.slice(0, 1_200)]
         .filter(Boolean)
         .join("\n")
 }
