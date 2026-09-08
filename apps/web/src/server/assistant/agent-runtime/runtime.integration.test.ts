@@ -105,6 +105,23 @@ function baseRequest(model: unknown, goal: string) {
 }
 
 describe("Agent Runtime 集成", () => {
+    it.each(["没有引用的合成结论", "伪造引用的合成结论[99]", "已读合成结论[1]"])("资料答案先核验再发出：%s", async (answer) => {
+        tools.register(makeTool("source.lookup", "lookup_sources", "source", async () => ({}), {
+            core: true, normalize: () => ({ summary: "已读", evidence: [{ source: "document", sourceId: "synthetic", title: "合成", content: "已读合成结论" }] }),
+        }))
+        const events: AgentStreamEvent[] = []
+        const result = await new PetrichorAgentRuntime({ tools, skills }).run({ ...baseRequest(scriptedModel([{ kind: "text", text: answer }]), "合成资料说明什么？"),
+            focus: { libraryId: "3" }, onEvent: (event) => events.push(event) })
+        expect(events.filter((event) => event.type === "final_answer_delta" || event.type === "final_answer_started")).toHaveLength(0)
+        expect(events.some((event) => event.type === "evidence_created")).toBe(true)
+        const completed = events.filter((event) => event.type === "final_answer_completed")
+        expect(completed).toHaveLength(1)
+        if (answer.endsWith("[1]")) expect(result.answer).toBe(answer)
+        else {
+            expect(result.answer).toContain("未通过资料引用核验")
+            expect(JSON.stringify(completed)).not.toContain(answer)
+        }
+    })
     it("选定文档库的模糊短问先检索，未命中有限补检且不调用模型编答案", async () => {
         const queries: unknown[] = []
         tools.register(makeTool("source.lookup", "lookup_sources", "source", async (_ctx, input) => {

@@ -9,6 +9,7 @@ import { EvidenceStore } from "./evidence"
 import { AgentEventEmitter, type AgentEventSink } from "./events"
 import { buildFinalAnswerPlan } from "./final-answer"
 import { groundingPolicy, groundingQueries, GROUNDED_ANSWER_GUIDANCE, insufficientGroundingAnswer } from "./grounding-policy"
+import { validateGroundedCitations, UNVERIFIED_CITATION_ANSWER } from "./grounded-citations"
 import { newRunId } from "./ids"
 import { LoopDetector } from "./loop-detector"
 import { runAgentSegment, SegmentController } from "./mastra-bridge"
@@ -190,7 +191,14 @@ export class PetrichorAgentRuntime {
         const startedAt = request.startedAt ?? Date.now()
 
         // ---------------------------------------------------------- 基础设施
-        const events = new AgentEventEmitter(runId, request.onEvent)
+        const requiresGrounding = request.qaMode !== "wiki"
+            && (request.focus !== undefined || this.tools.has("source.lookup"))
+            && groundingPolicy(request.goal) === "required"
+        const events = new AgentEventEmitter(runId, (event) => {
+            // 检索进度仍流式；资料答案草稿不得在最终引用核验前进入UI或消息桥。
+            if (requiresGrounding && (event.type === "final_answer_started" || event.type === "final_answer_delta")) return
+            request.onEvent?.(event)
+        })
         const trace = new TraceCollector(
             runId,
             request.conversationId,
@@ -221,9 +229,6 @@ export class PetrichorAgentRuntime {
             ...(request.turnCount != null ? { turnCount: request.turnCount } : {}),
             hasFocus: Boolean(request.focus),
         })
-        const requiresGrounding = request.qaMode !== "wiki"
-            && (request.focus !== undefined || this.tools.has("source.lookup"))
-            && groundingPolicy(request.goal) === "required"
         const complexity = requiresGrounding && complexityDecision.complexity === "direct"
             ? "simple" : complexityDecision.complexity
         trace.setComplexity(complexity, complexityDecision.reason)
@@ -420,7 +425,7 @@ export class PetrichorAgentRuntime {
             if (!simpleKnowledgeFastPath) groundingFallback = insufficientGroundingAnswer(failed || Date.now() >= deadline)
             groundingDeadline = null
             trace.event("observation", {
-                strategy: "required_source_grounding", status: simpleKnowledgeFastPath ? "grounded" : failed ? "unavailable" : "insufficient",
+                strategy: "required_source_grounding", status: simpleKnowledgeFastPath ? "retrieved" : failed ? "unavailable" : "insufficient",
                 evidenceCount: evidence.size,
             })
         }
@@ -658,6 +663,16 @@ export class PetrichorAgentRuntime {
                 events.emit("wiki_mention_targets", { targets: wikiTargets })
             }
             if (annotated !== answer) answer = annotated
+        }
+
+        if (requiresGrounding && answer && !groundingFallback) {
+            if (fatal || stopReason === "cancelled") answer = ""
+            else {
+                const readable = new Set(evidence.all.filter((item) => item.content?.trim()).map((item) => evidence.citationIndex(item.id)))
+                const validation = validateGroundedCitations(answer, readable)
+                trace.event("observation", { strategy: "grounded_citation_validation", reason: validation.reason, citationCount: validation.count })
+                if (!validation.valid) answer = UNVERIFIED_CITATION_ANSWER
+            }
         }
 
         // ------------------------------------------------------------- 收尾
