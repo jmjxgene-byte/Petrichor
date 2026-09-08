@@ -105,6 +105,15 @@ function baseRequest(model: unknown, goal: string) {
 }
 
 describe("Agent Runtime 集成", () => {
+    it("资料数量问题只走范围统计，不搜索正文或调用模型猜数", async () => {
+        tools.register(makeTool("source.overview", "source_overview", "source", async () => ({ rows: [{ name: "合成", kind: "doc-library", total: 7, ready: 5, available: true }] }), { core: true }))
+        tools.register(makeTool("source.lookup", "lookup_sources", "source", async () => { throw new Error("不应正文检索") }, { core: true }))
+        const model = new MockLanguageModelV3({ doStream: async () => { throw new Error("不应模型猜数") } })
+        const result = await new PetrichorAgentRuntime({ tools, skills }).run({ ...baseRequest(model, "这个库有多少文档？"), focus: { libraryId: "3" } })
+        expect(result.answer).toContain("7 份文件，其中 5 份关键词就绪")
+        expect(result.trace.toolCalls.map((item) => item.toolId)).toEqual(["source.overview"])
+        expect(result.state.tokenUsage.total).toBe(0)
+    })
     it("改写无效后规则补检有命中，也不能将歧义当成已消除", async () => {
         let calls = 0
         tools.register(makeTool("source.lookup", "lookup_sources", "source", async () => ({ found: ++calls > 1 }), { core: true,

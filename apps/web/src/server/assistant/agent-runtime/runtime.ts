@@ -11,6 +11,7 @@ import { buildFinalAnswerPlan } from "./final-answer"
 import { groundingPolicy, groundingQueries, GROUNDED_ANSWER_GUIDANCE, insufficientGroundingAnswer, needsGroundingContext, GROUNDING_CLARIFICATION } from "./grounding-policy"
 import { validateGroundedCitations, UNVERIFIED_CITATION_ANSWER } from "./grounded-citations"
 import { rewriteGroundingQuery } from "./grounding-rewrite"
+import { isSourceStatisticsQuestion, renderSourceStatistics } from "@/server/assistant/source-statistics"
 import { newRunId } from "./ids"
 import { LoopDetector } from "./loop-detector"
 import { runAgentSegment, SegmentController } from "./mastra-bridge"
@@ -400,7 +401,16 @@ export class PetrichorAgentRuntime {
         // Wiki 模式不走快车道：它面向分片/章节，而 Wiki 模式要求页面级检索与 [[..]] 引用。
         let simpleKnowledgeFastPath = false
         let groundingFallback: string | null = null
-        if (requiresGrounding && !request.abortSignal?.aborted) {
+        if (requiresGrounding && isSourceStatisticsQuestion(request.goal) && !request.abortSignal?.aborted) {
+            groundingFallback = "当前资料统计暂不可用，我不能用检索命中数推测总量。"
+            if (this.tools.has("source.overview")) {
+                const outcome = await executor.execute("source.overview", {}, buildCtx())
+                if (outcome.ok) {
+                    try { groundingFallback = renderSourceStatistics(outcome.output) } catch { trace.event("observation", { strategy: "source_statistics", status: "invalid_result" }) }
+                }
+            }
+        }
+        if (requiresGrounding && !groundingFallback && !request.abortSignal?.aborted) {
             const deadline = Date.now() + 8_000
             groundingDeadline = deadline
             let failed = false

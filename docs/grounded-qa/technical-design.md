@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08范围统计节点：新增非core的source.overview，复用resolveAssistantSources解析权限/范围，在受限只读事务按userId及选定library/knowledgeBase聚合文件/ready/文章数量，不选取正文。外部源无总量接口返回null未知，停用源不查询正文或计数。Runtime对明确全库数量问法直接通过ToolExecutor读取并校验统计结构后生成固定文案，不调用检索或模型；异常不以搜索命中数兜底。工具活动单独显示读取统计；不增加常驻核心工具数量。合成SQL参数/权限门、外部单选和真实Runtime测试已通过，全量1333通过/40既有跳过，typecheck/lint/build通过；未连接真实PG验收，不声称外部总量已支持。
+
 2026-09-08上下文澄清节点：grounding-rewrite加入最近4条用户/助手纯文本（每条≤500字符），排除system/tool/图片/附件与任意对象，作为不可信数据而非指令输入。严格结果允许needsClarification=true，返回固定澄清句，不采用模型自由生成的业务结论。短“怎么翻”及部分指代追问即使首轮已有正文，也先执行唯一上下文改写；有效新查询后补检，解析/时间失败且已有正文时先澄清。rewriteAttempted与contextResolved分开，规则补检命中不能把失败改写视为消歧成功。全量1329通过/40既有跳过，typecheck/lint/build通过；合成Runtime覆盖已有正文仍澄清、无效改写后第二轮命中仍澄清，历史过滤与预算维持。短问识别与模型理解仍需60题人工评测，尚无语义充分性或实际provider费用证明。
 
 2026-09-08有限改写节点：首轮source.lookup成功但未读到正文时最多调用一次grounding-rewrite；复用当前模型streamText、输出256 tokens、maxRetries=0，不附加工具，最多2秒且从8秒总预算中预留3秒给第二轮。只接受严格JSON单查询，替换规则第二查询、不增加第三轮；失败/无效/取消/预算不足保留规则路径，结果不作为答案。已知usage进入State/Trace，未知usage不伪装为已知零；Trace不记录查询或模型响应。真实Runtime+MockLanguageModel验证两次检索、一次改写加一次回答的token累计；全量1325通过/40既有跳过，typecheck/lint/build通过。仍未处理有正文但语义不足时的评估和上下文歧义，真实模型能力/费用未核验，生产未部署。

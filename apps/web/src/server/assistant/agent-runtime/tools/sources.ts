@@ -4,6 +4,7 @@ import { assistantSourceRefSchema, type AssistantSourceCatalogItem } from "@/lib
 import type { AssistantFocus } from "@/server/assistant/domain-types"
 import { searchDocuments, readDocument } from "@/server/assistant/tools/doc-library"
 import { resolveAssistantSources } from "@/server/assistant/source-catalog"
+import { readSourceStatistics } from "@/server/assistant/source-statistics"
 import { buildEvidenceWindow } from "@/server/doc-library/evidence-window"
 import { searchDocumentIndex, readDocumentIndexPassage } from "@/server/doc-library/index-retrieval"
 import { badRequest } from "@/server/http/response"
@@ -539,6 +540,13 @@ function clip(value: string, max: number) {
 }
 
 export const sourceTools: AgentToolDefinition[] = [
+    defineTool({
+        id: "source.overview", name: "source_overview", namespace: "source", riskLevel: "low", sideEffect: false, maxRetries: 0, timeoutMs: 8_000,
+        description: "何时用：读取当前选定范围内的资料数量元数据。何时不用：需要正文内容或业务数量时。外部源无总量接口时返回未知，不将命中数当全库总数。",
+        inputSchema: z.object({}).strict(),
+        execute: (ctx) => readSourceStatistics(ctx.userId, ctx.focus as AssistantFocus | undefined, ctx.abortSignal),
+        normalize: (output) => ({ summary: "已读取所选范围资料统计", data: output, evidence: [] }),
+    }),
     defineTool({
         id: "source.lookup",
         name: "lookup_sources",

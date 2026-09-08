@@ -33,6 +33,7 @@ type ToolUiSpec = {
 
 const TOOL_UI: Record<string, ToolUiSpec> = {
     "source.lookup": { activityType: "knowledge_search", running: "正在跨资料源检索并深读", done: "跨资料源检索并深读", group: "sources" },
+    "source.overview": { activityType: "knowledge_search", running: "正在读取所选范围资料统计", done: "读取资料统计", group: "sources" },
     "source.search": { activityType: "knowledge_search", running: "正在搜索所选资料源", done: "搜索所选资料源", group: "sources" },
     "source.read": { activityType: "knowledge_read", running: "正在深读资料来源", done: "深读资料来源", group: "sources" },
     "geneops.search": { activityType: "web_search", running: "正在搜索 GeneOps 实时知识", done: "搜索 GeneOps 实时知识", group: "geneops" },
