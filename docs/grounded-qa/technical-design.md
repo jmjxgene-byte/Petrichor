@@ -60,6 +60,10 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08会话编辑/删除联动节点：PG历史截断按user/thread锁定会话，在同事务中取消被移除问题的Deep再删除消息；软删除会话只取消实际归属的目标会话任务。排队任务cancelled，运行任务cancel_requested，关联Run先停止且保留已有费用元数据。Deep启动拒绝软删除会话，完成事务锁同一会话并检查用户问题仍存在，避免编辑后追加旧答案；Job被级联删除时执行器停止而非重试。已执行迁移对question_message_id有ON DELETE CASCADE，本轮未改它，完整Job审计保留仍需单独增量设计。
+
+本地实测发现Bun SQLite异步事务在await后抛错仍留两条写入，因此新增thread-sqlite-mutations同步事务，不改全局驱动。verify-thread-sqlite.ts只用内存合成表，11项实际验证包括故障回滚、范围隔离、级联删除与Run元数据保留；无磁盘数据库/网络/凭据。全量2workers下1403通过/40既有跳过，typecheck/lint/build通过。对话框测试曾出现卸载后Radix 0ms焦点回调跨jsdom环境错误，核对本地依赖代码后等待清理回调，重跑无错误，未屏蔽异常。PG锁/并发仍待真实验收，SQLite此测试不替代PG。
+
 2026-09-08Deep完成一致性节点：新executor将最终Run answer/安全metrics/token计数放入completeDeepResearchJob同一事务，与消息和Job成功状态一起提交；Run归属/状态更新未命中则抛错，不先交付消息再单独写Run。完成入口及CAS检查租约未过期，重复succeeded只返回已有消息；异常路径若读到Job已succeeded则保留成功，不降级为失败。runCompletion为旧内部调用保留可选兼容，新executor总是提供；旧历史不一致Run本轮不批量修复。全量2workers下1396通过/40既有跳过，typecheck/lint/build通过，修正测试隔离后3项定向通过。测试证明事务回调顺序与拒绝路径，不是实际PG回滚/并发验收；本轮未访问生产或模型。
 
 2026-09-08过期取消收口节点：恢复事务补cancel_requested且租约过期/缺失分支，终态cancelled，保留首次取消时间并清理租约；同一数据修改CTE只更新相同runKey/userId且仍running的Agent Run，返回cancelled数量，不重排队。执行器对cancel_requested或已cancelled统一取消分类，在保留可获得的用量元数据后确认取消，避免迟到结果覆盖成普通失败。全量2workers下1393通过/40既有跳过，typecheck/lint/build通过；当前为SQL契约/合成回归，真实PG并发与网络取消未验收。G-PRICE-IDENTITY仍待新增只读授权，本轮未访问账号或模型。

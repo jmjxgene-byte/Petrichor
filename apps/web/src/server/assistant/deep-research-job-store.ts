@@ -1,10 +1,10 @@
-import { and, eq, gt, inArray } from "drizzle-orm"
+import { and, eq, gt, inArray, isNull } from "drizzle-orm"
 import { z } from "zod"
 import { normalizeDeepEvidenceUrl } from "@/lib/deep-evidence-url"
 import { assistantSourceRefSchema } from "@/lib/assistant-source-contract"
 
-import { getDb, getSqlClient } from "@/server/db/client"
-import { agentRuns, assistantMessages, deepResearchJobs, type DeepResearchJobRecord } from "@/server/db/schema"
+import { getDb, getSqlClient, isSqliteDatabase } from "@/server/db/client"
+import { agentRuns, assistantMessages, assistantThreads, deepResearchJobs, type DeepResearchJobRecord } from "@/server/db/schema"
 
 export const DEEP_RESEARCH_JOB_STATUSES = [
     "queued",
@@ -352,6 +352,11 @@ export async function completeDeepResearchJob(input: {
         if (current.status !== "running" || current.leaseOwner !== input.workerId) return null
         if (!current.leaseExpiresAt || current.leaseExpiresAt <= now) return null
         if (input.runCompletion && message.agentRunId !== current.runKey) throw new Error("深度检索Run关联不匹配")
+        const threadQuery = tx.select({ id: assistantThreads.id }).from(assistantThreads).where(and(eq(assistantThreads.id, current.threadId), eq(assistantThreads.userId, current.userId), isNull(assistantThreads.deletedAt))).limit(1)
+        const [thread] = isSqliteDatabase() ? await threadQuery : await threadQuery.for("update")
+        if (!thread) return null
+        const [question] = await tx.select({ id: assistantMessages.id }).from(assistantMessages).where(and(eq(assistantMessages.id, current.questionMessageId), eq(assistantMessages.threadId, current.threadId), eq(assistantMessages.role, "user"))).limit(1)
+        if (!question) return null
 
         const [createdMessage] = await tx.insert(assistantMessages).values({
             threadId: current.threadId,

@@ -101,6 +101,7 @@ export async function assistantChat(request: AppRequest) {
         if (shouldPersistUser) {
             // 编辑重提时客户端会截断后续消息：先对齐库中历史，再写入本轮 user
             await truncateAssistantThreadMessages({
+                userId: user.id,
                 threadId: thread.id,
                 keepCount: Math.max(0, input.messages.length - 1),
             })

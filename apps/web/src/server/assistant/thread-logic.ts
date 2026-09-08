@@ -1,6 +1,8 @@
 import { and, asc, desc, eq, inArray, isNull, like } from "drizzle-orm"
 import { z } from "zod"
-import { getDb } from "@/server/db/client"
+import { getDb, getSqliteClient, isSqliteDatabase } from "@/server/db/client"
+import { softDeleteSqliteThreads, truncateSqliteThread } from "./thread-sqlite-mutations"
+import { cancelDeepResearchForScope } from "./deep-research-thread-cancellation"
 import {
     assistantMessages,
     assistantRuns,
@@ -263,21 +265,29 @@ export async function persistAssistantMessage(input: {
  * 编辑重提：按时间序只保留前 keepCount 条消息，删除其后全部（线性截断，无分支）。
  */
 export async function truncateAssistantThreadMessages(input: {
+    userId: number
     threadId: number
     keepCount: number
 }): Promise<{ deleted: number }> {
+    if (isSqliteDatabase()) return truncateSqliteThread(getSqliteClient(), input)
     const keep = Math.max(0, Math.floor(input.keepCount))
-    const rows = await getDb()
-        .select({ id: assistantMessages.id })
-        .from(assistantMessages)
-        .where(eq(assistantMessages.threadId, input.threadId))
-        .orderBy(asc(assistantMessages.createdAt), asc(assistantMessages.id))
-    const toDelete = rows.slice(keep).map((row) => row.id)
-    if (toDelete.length === 0) return { deleted: 0 }
-    await getDb()
-        .delete(assistantMessages)
-        .where(inArray(assistantMessages.id, toDelete))
-    return { deleted: toDelete.length }
+    return getDb().transaction(async (tx) => {
+        const threadQuery = tx.select({ id: assistantThreads.id }).from(assistantThreads).where(and(eq(assistantThreads.id, input.threadId), eq(assistantThreads.userId, input.userId), isNull(assistantThreads.deletedAt))).limit(1)
+        const [thread] = isSqliteDatabase() ? await threadQuery : await threadQuery.for("update")
+        if (!thread) throw notFound("Assistant 会话不存在")
+        const rows = await tx
+            .select({ id: assistantMessages.id })
+            .from(assistantMessages)
+            .where(eq(assistantMessages.threadId, input.threadId))
+            .orderBy(asc(assistantMessages.createdAt), asc(assistantMessages.id))
+        const toDelete = rows.slice(keep).map((row) => row.id)
+        if (toDelete.length === 0) return { deleted: 0 }
+        await cancelDeepResearchForScope(tx, input.userId, [input.threadId], toDelete)
+        await tx
+            .delete(assistantMessages)
+            .where(inArray(assistantMessages.id, toDelete))
+        return { deleted: toDelete.length }
+    })
 }
 
 export async function createAssistantRun(input: {
@@ -449,26 +459,27 @@ export async function getAssistantThreadDetail(input: {
 
 export async function softDeleteAssistantThread(input: { userId: number; threadId: number }) {
     const thread = await loadAssistantThreadOrThrow(input.userId, input.threadId)
-    await getDb()
-        .update(assistantThreads)
-        .set({ deletedAt: new Date(), updatedAt: new Date() })
-        .where(eq(assistantThreads.id, thread.id))
+    await softDeleteAssistantThreads(input.userId, [thread.id])
     return { ok: true as const }
 }
 
 export async function softDeleteAssistantThreads(userId: number, threadIds: number[]) {
+    if (isSqliteDatabase()) return softDeleteSqliteThreads(getSqliteClient(), userId, threadIds)
     if (threadIds.length === 0) return { deleted: 0 }
     const uniqueIds = Array.from(new Set(threadIds))
-    const rows = await getDb()
-        .update(assistantThreads)
-        .set({ deletedAt: new Date(), updatedAt: new Date() })
-        .where(and(
-            eq(assistantThreads.userId, userId),
-            inArray(assistantThreads.id, uniqueIds),
-            isNull(assistantThreads.deletedAt),
-        ))
-        .returning({ id: assistantThreads.id })
-    return { deleted: rows.length }
+    return getDb().transaction(async (tx) => {
+        const rows = await tx
+            .update(assistantThreads)
+            .set({ deletedAt: new Date(), updatedAt: new Date() })
+            .where(and(
+                eq(assistantThreads.userId, userId),
+                inArray(assistantThreads.id, uniqueIds),
+                isNull(assistantThreads.deletedAt),
+            ))
+            .returning({ id: assistantThreads.id })
+        await cancelDeepResearchForScope(tx, userId, rows.map((row) => row.id))
+        return { deleted: rows.length }
+    })
 }
 
 function parseJsonValue(value: string | null): unknown {

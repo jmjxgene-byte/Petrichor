@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm"
+import { and, eq, isNull } from "drizzle-orm"
 
 import { callChatCompletion, resolveChatModel, type ChatCompletionResult } from "@/server/ai/generation"
 import { chatModelFingerprint } from "@/server/ai/model-identity"
@@ -57,6 +57,7 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
         db.select().from(assistantThreads).where(and(
             eq(assistantThreads.id, job.threadId),
             eq(assistantThreads.userId, job.userId),
+            isNull(assistantThreads.deletedAt),
         )).limit(1).then((rows) => rows[0] ?? null),
         db.select().from(assistantMessages).where(and(
             eq(assistantMessages.id, job.questionMessageId),
@@ -266,7 +267,7 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
     } catch (error) {
         const current = await getDeepResearchJob(job.runKey, job.userId)
         if (current?.status === "succeeded") return current
-        const cancelled = current?.status === "cancel_requested" || current?.status === "cancelled"
+        const cancelled = !current || current.status === "cancel_requested" || current.status === "cancelled"
         const code = cancelled ? "cancelled" : classifyExecutionError(error, { leaseLost, aborted: controller.signal.aborted })
         if (executionReserved) await db.update(agentRuns).set({
             status: cancelled ? "cancelled" : "failed",
@@ -295,6 +296,7 @@ export async function executeDeepResearchJob(jobId: number, workerId: string) {
         }).where(eq(agentRuns.runKey, job.runKey))
         if (current?.status === "cancel_requested") return await acknowledgeDeepResearchJobCancellation({ jobId, workerId })
         if (current?.status === "cancelled") return current
+        if (!current) return null
         return await failDeepResearchJob({ jobId, workerId, errorCode: code, retryable: modelCallsStarted === 0 })
     } finally {
         clearTimeout(deadline)

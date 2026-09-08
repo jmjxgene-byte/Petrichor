@@ -10,7 +10,11 @@ const status: DocumentIndexStatus = { libraryId: "2", enabled: true, workerConfi
 const quote = { libraryId: "2", token: "synthetic", documentCount: 1, passageCount: 2, model: "synthetic", maxInputTokens: 100,
   maxCostMicrousd: 100, quoteExpiresAt: "2099-01-01T00:00:00Z", executionExpiresAt: "2099-01-02T00:00:00Z" }
 beforeEach(() => { vi.clearAllMocks(); mocks.quoteIndex.mockResolvedValue({ data: quote }); mocks.buildIndex.mockResolvedValue({ data: { generationId: "3" } }) })
-afterEach(() => cleanup())
+afterEach(async () => {
+  cleanup()
+  // Radix FocusScope在卸载后用0ms任务恢复焦点；须在jsdom销毁前完成。
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+})
 describe("索引确认UI", () => {
   it("打开不自动报价，未勾选不得创建任务", async () => {
     const changed = vi.fn()

@@ -70,7 +70,8 @@ export function getSqlClient() {
     })
 }
 
-function getSqliteClient() {
+export function getSqliteClient() {
+    if (!isSqliteDatabase()) throw new Error("SQLite client仅用于本地SQLite模式")
     const databaseUrl = getServerConfig().databaseUrl
     const { Database } = loadSqliteDeps()
     sqliteClient ??= new Database(sqlitePathFromUrl(databaseUrl))
