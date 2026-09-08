@@ -105,6 +105,25 @@ function baseRequest(model: unknown, goal: string) {
 }
 
 describe("Agent Runtime 集成", () => {
+    it("改写无效后规则补检有命中，也不能将歧义当成已消除", async () => {
+        let calls = 0
+        tools.register(makeTool("source.lookup", "lookup_sources", "source", async () => ({ found: ++calls > 1 }), { core: true,
+            normalize: (output) => ({ summary: "合成", evidence: (output as { found: boolean }).found ? [{ source: "document", sourceId: "fixture", content: "某种翻新" }] : [] }),
+        }))
+        const result = await new PetrichorAgentRuntime({ tools, skills }).run({ ...baseRequest(scriptedModel([{ kind: "text", text: "不是有效改写JSON" }]), "翻新怎么翻？"), focus: { libraryId: "3" } })
+        expect(result.answer).toContain("对象或含义还不够明确")
+        expect(calls).toBe(2)
+        expect(result.state.tokenUsage.total).toBe(15)
+    })
+    it("歧义短问即使读到正文，含义未确定也先澄清", async () => {
+        tools.register(makeTool("source.lookup", "lookup_sources", "source", async () => ({}), { core: true,
+            normalize: () => ({ summary: "有命中", evidence: [{ source: "document", sourceId: "fixture", title: "合成", content: "某一种翻新的资料" }] }),
+        }))
+        const result = await new PetrichorAgentRuntime({ tools, skills }).run({ ...baseRequest(scriptedModel([{ kind: "text", text: '{"needsClarification":true}' }]), "翻新怎么翻？"), focus: { libraryId: "3" } })
+        expect(result.answer).toContain("对象或含义还不够明确")
+        expect(result.state.toolCallCount).toBe(1)
+        expect(result.state.tokenUsage.total).toBe(15)
+    })
     it("首轮空结果只改写一次并补检，改写用量纳入Run而不成为答案", async () => {
         const queries: unknown[] = []
         tools.register(makeTool("source.lookup", "lookup_sources", "source", async (_ctx, input) => { queries.push(input); return { found: queries.length > 1 } }, {

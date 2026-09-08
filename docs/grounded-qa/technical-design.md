@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08上下文澄清节点：grounding-rewrite加入最近4条用户/助手纯文本（每条≤500字符），排除system/tool/图片/附件与任意对象，作为不可信数据而非指令输入。严格结果允许needsClarification=true，返回固定澄清句，不采用模型自由生成的业务结论。短“怎么翻”及部分指代追问即使首轮已有正文，也先执行唯一上下文改写；有效新查询后补检，解析/时间失败且已有正文时先澄清。rewriteAttempted与contextResolved分开，规则补检命中不能把失败改写视为消歧成功。全量1329通过/40既有跳过，typecheck/lint/build通过；合成Runtime覆盖已有正文仍澄清、无效改写后第二轮命中仍澄清，历史过滤与预算维持。短问识别与模型理解仍需60题人工评测，尚无语义充分性或实际provider费用证明。
+
 2026-09-08有限改写节点：首轮source.lookup成功但未读到正文时最多调用一次grounding-rewrite；复用当前模型streamText、输出256 tokens、maxRetries=0，不附加工具，最多2秒且从8秒总预算中预留3秒给第二轮。只接受严格JSON单查询，替换规则第二查询、不增加第三轮；失败/无效/取消/预算不足保留规则路径，结果不作为答案。已知usage进入State/Trace，未知usage不伪装为已知零；Trace不记录查询或模型响应。真实Runtime+MockLanguageModel验证两次检索、一次改写加一次回答的token累计；全量1325通过/40既有跳过，typecheck/lint/build通过。仍未处理有正文但语义不足时的评估和上下文歧义，真实模型能力/费用未核验，生产未部署。
 
 2026-09-08最终引用门节点：资料优先问答的final_answer_started/delta在Runtime事件出口抑制，检索/工具事件仍流式，最终正文在引用检查后才发送与保存。数字引用必须属于本轮具有非空正文的Evidence；代码、未闭合围栏、转义编号、链接/引用定义不能代替资料引用；缺失/越界引用改为固定未核验说明，不自动增加模型重试。取消或错误时不发布缓冲草稿。问候、明确翻译及Wiki沿用原路径。Trace只记安全原因/引用数量，预检状态改名retrieved避免暗示语义充分。MockLanguageModel驱动真实Runtime测试检查未核验草稿从未出现在答案事件中；全量1321通过/40既有跳过，typecheck/lint/build通过。该门仅核验引用身份/形式，尚不能证明引用支持结论；语义充分性与人工95%支持precision仍未完成，也未运行真实模型或生产验收。

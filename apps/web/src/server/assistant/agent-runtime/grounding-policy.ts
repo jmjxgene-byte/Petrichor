@@ -2,6 +2,12 @@ import { toKeywordQuery } from "@/server/retrieval/query-rewrite"
 
 export type GroundingPolicy = "required" | "exempt" | "action"
 
+export function needsGroundingContext(goal: string): boolean {
+    const text = goal.trim()
+    return text.length <= 40 && (/(?:怎么|如何|怎样)翻[？?。！!]*$/.test(text) || /^(?:这个|那个|这些|那些|它|上述|刚才).*(?:怎么|如何|为什么|是否|可以|呢|吗)/.test(text))
+}
+export const GROUNDING_CLARIFICATION = "当前问题的对象或含义还不够明确。你指的是哪一种场景或操作？请补充一下，我再依据选定资料回答。"
+
 /** 豁免只接受完整、明确的请求，不让模型的意图标签覆盖资料约束。 */
 export function groundingPolicy(goal: string): GroundingPolicy {
     const text = goal.trim()

@@ -8,7 +8,7 @@ import { evaluateRun, type AgentRunEval } from "./eval"
 import { EvidenceStore } from "./evidence"
 import { AgentEventEmitter, type AgentEventSink } from "./events"
 import { buildFinalAnswerPlan } from "./final-answer"
-import { groundingPolicy, groundingQueries, GROUNDED_ANSWER_GUIDANCE, insufficientGroundingAnswer } from "./grounding-policy"
+import { groundingPolicy, groundingQueries, GROUNDED_ANSWER_GUIDANCE, insufficientGroundingAnswer, needsGroundingContext, GROUNDING_CLARIFICATION } from "./grounding-policy"
 import { validateGroundedCitations, UNVERIFIED_CITATION_ANSWER } from "./grounded-citations"
 import { rewriteGroundingQuery } from "./grounding-rewrite"
 import { newRunId } from "./ids"
@@ -406,6 +406,7 @@ export class PetrichorAgentRuntime {
             let failed = false
             const queries = groundingQueries(request.goal)
             let rewriteAttempted = false
+            let contextResolved = false
             for (const query of queries) {
                 if (Date.now() >= deadline || request.abortSignal?.aborted) break
                 if (!this.tools.has("source.lookup")) { failed = true; break }
@@ -416,25 +417,35 @@ export class PetrichorAgentRuntime {
                 try {
                     const outcome = await executor.execute("source.lookup", { query }, { ...buildCtx(), abortSignal: controller.signal, queryDeadlineAt: deadline })
                     if (!outcome.ok) { failed = true; break }
-                    if (outcome.evidence.some((item) => item.content?.trim())) {
+                    const hasReadableEvidence = outcome.evidence.some((item) => item.content?.trim())
+                    const needsContext = needsGroundingContext(request.goal)
+                    if (hasReadableEvidence && (!needsContext || contextResolved)) {
                         simpleKnowledgeFastPath = true
+                        break
+                    }
+                    if (hasReadableEvidence && needsContext && rewriteAttempted) {
+                        groundingFallback = GROUNDING_CLARIFICATION
                         break
                     }
                     if (!rewriteAttempted) {
                         rewriteAttempted = true
                         const rewriteStarted = Date.now()
-                        const rewrite = await rewriteGroundingQuery({ model: request.model, goal: request.goal, deadline, signal: controller.signal })
+                        const rewrite = await rewriteGroundingQuery({ model: request.model, goal: request.goal, deadline, signal: controller.signal, messages: request.messages })
                         if (rewrite.usage) { state.addTokenUsage(rewrite.usage); trace.addTokenUsage(rewrite.usage) }
                         trace.addLlmLatency(Date.now() - rewriteStarted)
                         trace.event("observation", { strategy: "bounded_grounding_rewrite", status: rewrite.status, usageKnown: !!rewrite.usage })
-                        if (rewrite.query && rewrite.query !== queries[0]) queries.splice(1, 1, rewrite.query)
+                        if (rewrite.status === "clarification" || (needsContext && hasReadableEvidence && (!rewrite.query || rewrite.query === queries[0]))) {
+                            groundingFallback = GROUNDING_CLARIFICATION
+                            break
+                        }
+                        if (rewrite.query && rewrite.query !== queries[0]) { queries.splice(1, 1, rewrite.query); contextResolved = true }
                     }
                 } finally {
                     clearTimeout(timer)
                     request.abortSignal?.removeEventListener("abort", abort)
                 }
             }
-            if (!simpleKnowledgeFastPath) groundingFallback = insufficientGroundingAnswer(failed || Date.now() >= deadline)
+            if (!simpleKnowledgeFastPath && !groundingFallback) groundingFallback = insufficientGroundingAnswer(failed || Date.now() >= deadline)
             groundingDeadline = null
             trace.event("observation", {
                 strategy: "required_source_grounding", status: simpleKnowledgeFastPath ? "retrieved" : failed ? "unavailable" : "insufficient",
