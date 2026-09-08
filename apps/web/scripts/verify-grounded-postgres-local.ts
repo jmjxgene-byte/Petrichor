@@ -12,6 +12,8 @@ const clientName = `${name}-client`
 const network = `${name}-net`
 const checks: string[] = []
 const baselineSha = "b6eac4c729658c04655edc535367f4c7c51c6189"
+const canary = process.env.QA_CANARY === "true"
+const canaryDirectory = path.join(root, process.env.QA_CANARY_DRY_RUN === "true" ? ".data/canary-dry-run" : ".data/canary-61faa403")
 let baselineDirectory: string | null = null
 let stage = "preflight"
 let failure: string | null = null
@@ -62,7 +64,18 @@ try {
     fs.mkdirSync(path.dirname(target), { recursive: true })
     fs.writeFileSync(target, result.stdout, { mode: 0o644 })
   }
+  if (canary) {
+    const bytes = fs.readFileSync(path.join(canaryDirectory, "embed.json"))
+    assert(bytes.length < 4 * 1024 * 1024, "canary_artifact_size")
+    fs.writeFileSync(path.join(baselineDirectory, "canary.json"), bytes, { mode: 0o444 })
+  }
   const mounts = [
+    ...(canary ? [
+      "--mount", `type=bind,src=${baselineDirectory}/canary.json,dst=/canary/embed.json,readonly`,
+      ...mount("apps/web/scripts/verify-model-canary.ts", "/workspace/apps/web/scripts/verify-model-canary.ts"),
+      ...mount("apps/web/src/server/retrieval/grounded-canary-plan.ts", "/workspace/apps/web/src/server/retrieval/grounded-canary-plan.ts"),
+      ...mount("apps/web/src/server/retrieval/fixtures/grounded-qa-v1.ts", "/workspace/apps/web/src/server/retrieval/fixtures/grounded-qa-v1.ts"),
+    ] : []),
     "--mount", `type=bind,src=${baselineDirectory},dst=/baseline,readonly`,
     ...mount("apps/web/node_modules/postgres", "/baseline/apps/web/node_modules/postgres"),
     ...[
@@ -108,12 +121,17 @@ try {
   const child = Bun.spawn(["docker", "run", "--pull=never", "--name", clientName, "--label", `petrichor.qa.owner=${owner}`,
     "--network", network, "--cpus=1", "--memory=512m", "--memory-swap=512m", "--pids-limit=128", "--read-only",
     "--user", "1000:1000", "--tmpfs", "/tmp:rw,size=67108864", "--workdir", "/workspace/apps/web",
-    "-e", `QA_PG_HOST=${name}`, ...mounts, bunImage, "bun", "run", "scripts/verify-grounded-postgres-client.ts"],
+    "-e", `QA_PG_HOST=${name}`, "-e", `QA_CANARY=${canary}`, "-e", `QA_CANARY_DRY_RUN=${process.env.QA_CANARY_DRY_RUN === "true"}`, ...mounts, bunImage, "bun", "run", "scripts/verify-grounded-postgres-client.ts"],
     { stdout: "pipe", stderr: "pipe" })
   const timer = setTimeout(() => child.kill(), 180_000)
   try {
     const [output, error, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
-    console.log(output.trim())
+    const parsed = JSON.parse(output)
+    if (canary && parsed.canaryResult) {
+      fs.writeFileSync(path.join(canaryDirectory, "candidates.json"), JSON.stringify(parsed.canaryResult), { flag: "wx", mode: 0o600 })
+      delete parsed.canaryResult
+    }
+    console.log(JSON.stringify(parsed))
     if (code !== 0) console.log(JSON.stringify({ clientError: error.slice(0, 800) }))
     assert(code === 0 && JSON.parse(output).passed === true, "client_checks_passed")
   } finally { clearTimeout(timer) }

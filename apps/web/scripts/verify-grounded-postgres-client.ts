@@ -7,6 +7,7 @@ const checks: string[] = []
 const clients: ReturnType<typeof postgres>[] = []
 let stage = "client_preflight"
 let failure: string | null = null
+let canaryResult: unknown = null
 function assert(value: unknown, label: string): asserts value {
   if (!value) throw new Error(label)
   checks.push(label)
@@ -126,6 +127,11 @@ try {
   stage = "deep_application_store"
   const { verifyDeepFixture } = await import("./verify-deep-postgres-fixture")
   await verifyDeepFixture(runtime, Number(user.id), dbUrl("petrichor_runtime"), checks)
+  if (process.env.QA_CANARY === "true") {
+    const { verifyModelCanary } = await import("./verify-model-canary")
+    canaryResult = await verifyModelCanary(runtime)
+    assert(canaryResult, "native_model_canary_candidates")
+  }
   stage = "done"
 } catch (error) {
   failure = error instanceof Error ? error.message.slice(0, 160) : "unknown_failure"
@@ -136,6 +142,6 @@ try {
   }
 } finally {
   await Promise.allSettled(clients.map((client) => client.end({ timeout: 2 })))
-  console.log(JSON.stringify({ scope: "local-synthetic-postgres-client", stage, passed: !failure, checks, failure }, null, 2))
+  console.log(JSON.stringify({ scope: "local-synthetic-postgres-client", stage, passed: !failure, checks, failure, canaryResult }, null, 2))
   if (failure) process.exitCode = 1
 }
