@@ -1,4 +1,5 @@
 import type { DeepResearchErrorCode } from "./deep-research-job-store"
+import { reciprocalRankFusion, type RecallHit } from "@/server/retrieval/fusion"
 
 const MAX_QUERIES = 6
 const MAX_CANDIDATES = 12
@@ -62,17 +63,32 @@ export async function runDeepResearchPipeline(input: {
     let failedSearchCount = searched.filter((result) => result.status === "rejected").length
     let degradedSourceChecks = 0
     const byKey = new Map<string, DeepResearchCandidate>()
+    const rankingGroups: RecallHit[][] = []
+    const documentVersions = new Map<string, string>()
     for (const result of searched) {
         if (result.status !== "fulfilled") continue
         const hits = Array.isArray(result.value) ? result.value : result.value.candidates
         if (!Array.isArray(result.value)) degradedSourceChecks += result.value.degradedSourceChecks
         if (!Array.isArray(result.value)) failedSearchCount += result.value.failedSearches ?? 0
-        for (const candidate of hits) {
-            const existing = byKey.get(candidate.candidateKey)
-            if (!existing || candidate.score > existing.score) byKey.set(candidate.candidateKey, candidate)
+        const seen = new Set<string>()
+        const ranks: RecallHit[] = []
+        for (const [index, candidate] of hits.entries()) {
+            const read = candidate.read as Record<string, unknown> | null
+            if (read?.kind === "document" && typeof read.sourceRef === "string") {
+                const version = read.generationId == null ? "legacy" : `generation:${read.generationId}`
+                const previous = documentVersions.get(read.sourceRef)
+                if (previous && previous !== version) throw new DeepResearchExecutionError("validation_failed", "同一资料源的索引版本发生变化，请重新发起检索")
+                documentVersions.set(read.sourceRef, version)
+            }
+            if (seen.has(candidate.candidateKey)) continue
+            seen.add(candidate.candidateKey)
+            if (!byKey.has(candidate.candidateKey)) byKey.set(candidate.candidateKey, candidate)
+            ranks.push({ nodeKey: candidate.candidateKey, source: "query_result", rank: index + 1 })
         }
+        rankingGroups.push(ranks)
     }
-    const candidates = [...byKey.values()].sort((left, right) => right.score - left.score).slice(0, MAX_CANDIDATES)
+    const candidates = reciprocalRankFusion(rankingGroups, { topK: MAX_CANDIDATES })
+        .map((rank) => ({ ...byKey.get(rank.nodeKey)!, score: rank.fusedScore }))
     if (candidates.length === 0) throw new DeepResearchExecutionError("validation_failed", "检索没有候选")
 
     const reads = await Promise.allSettled(candidates.map(async (candidate) => { input.signal.throwIfAborted(); return await deps.read(candidate) }))

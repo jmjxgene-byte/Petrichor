@@ -7,6 +7,7 @@
  */
 
 export type RecallSource =
+    | "query_result"
     | "chunk_vector"
     | "question_vector"
     | "chunk_bm25"

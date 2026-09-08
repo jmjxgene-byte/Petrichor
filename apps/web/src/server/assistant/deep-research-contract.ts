@@ -58,6 +58,7 @@ export async function searchDeepResearchMode(snapshot: DeepResearchCapabilitySna
             failedSearches += 1
         }
     }
+    candidates.sort((a, b) => b.score - a.score || (a.candidateKey < b.candidateKey ? -1 : a.candidateKey > b.candidateKey ? 1 : 0))
     return { candidates, degradedSourceChecks, failedSearches }
 }
 

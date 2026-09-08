@@ -60,6 +60,8 @@ GeneOps只调用已批准安全RPC并逐源检查contract/quality。v1不具备�
 
 ## 6. 诊断、安全与发布
 
+2026-09-08Deep跨查询融合节点：pipeline复用reciprocalRankFusion，以query_result标识已经排序的查询/模式结果，只用排名融合，不比较跨查询原始score；单列表candidateKey去重避免重复加分，各来源批次先在同查询模式内合并排序。深读前检查本地document sourceRef的generation一致性，混合不同generation或indexed/legacy立即validation_failed，不影响不同文档库各自版本。全量maxWorkers=2运行1361通过/40既有跳过，追加跨库正例后15项定向通过，typecheck/lint/build/diff通过。这里只防已观察到的本地混代，尚未把每次查询绑定到固定generation；legacy内容版本、GeneOps generation/anchor和实际PG执行仍未验收，不宣称全来源快照一致性已完成。
+
 2026-09-08逐源Deep快照节点：新snapshot.sources逐项保存sourceRef/kind/contractVersion/cutoff/allowedModes/qualityStale及Wiki/Graph能力，固定排序并拒绝重复引用/类型不匹配；旧无sources快照保留读取兼容。根字段只作摘要，单源保留旧版本/cutoff，多源不再拿第一外部源代表全部。新任务按模式缩小到已捕获且许可的来源，本地只参加exact这一次入口（其内部Hybrid仍独立开关），不因外部fuzzy再次检索本地。all超过20来源按20分批，不截断，snapshot最多200源；单批失败保留其他批次并记录失败次数，陈旧源跳过并记降级。默认Hybrid/Wiki/Graph未开启，executor对Hybrid的既有拒绝仍在，实际Hybrid Deep尚未交付。全量首次出现worker启动与流式测试超时，改用--maxWorkers=2后1358通过/40既有跳过，typecheck/lint/build通过，未放宽断言/超时；只做离线测试，无Job/生产/模型运行。跨查询固定generation、累计租约预算和真实PG/性能仍待验收。
 
 2026-09-08Deep本地引用节点：共享deep-evidence-url只允许已知本地文档/文章路由（限document/knowledge/wiki来源），保留ID/hash/位置，清除citeSnippet/hlText/citeTerms，拒绝协议相对地址、未知内部路由、非HTTP(S)和userinfo。Deep final schema与历史恢复支持安全相对URL及显式citationIndex，同文档不同锚点保留独立referenceKey；模型prompt、metadata evidence与恢复后的引用统一编号，混合两个本地片段与一个外部来源为1/1/2。保存最终消息前验证实际已读引用范围，失效编号或无引用拒绝；validation_failed为终态，执行器开始模型调用后的失败不再自动整任务重试，尚不代表租约恢复累计费用已解决。全量1354通过/40既有跳过，typecheck/lint/build通过，测试仅合成契约；无真实Job/模型/PG或部署。

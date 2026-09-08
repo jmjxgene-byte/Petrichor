@@ -10,6 +10,40 @@ import { DEEP_RESEARCH_MODEL_OUTPUT_LIMITS } from "./deep-research-limits"
 const signal = new AbortController().signal
 
 describe("deep research pipeline", () => {
+    it("不同文档库各自的generation不互相冲突", async () => {
+        const result = await runDeepResearchPipeline({ question: "合成", modes: ["exact"], signal }, {
+            planQueries: async () => ["另一个問法"],
+            search: async (query) => [{ candidateKey: query, title: "合成", sourceName: "本地", url: null, score: 1,
+                read: { kind: "document", sourceRef: query === "合成" ? "doc-library:3" : "doc-library:4", generationId: query === "合成" ? 1 : 2 } }],
+            read: async (item) => [{ referenceKey: item.candidateKey, title: "合成", content: "已读正文", source: "document", url: null, queriedAt: "2026-09-08T00:00:00Z" }],
+            synthesize: async () => "合成回答",
+        })
+        expect(result.candidates).toHaveLength(2)
+        expect(result.evidence).toHaveLength(2)
+    })
+    it("跨查询使用排名融合，原始巨大分数和单列表重复不能刷高排名", async () => {
+        const candidate = (key: string, score: number): DeepResearchCandidate => ({ candidateKey: key, title: key, sourceName: "合成", url: null, score, read: {} })
+        const result = await runDeepResearchPipeline({ question: "合成", modes: ["exact"], signal }, {
+            planQueries: async () => ["另一个问法"],
+            search: async (query) => query === "合成" ? [candidate("a", 1e12), candidate("a", 1e12), candidate("b", 1)] : [candidate("b", 0.001)],
+            read: async (item) => [{ referenceKey: item.candidateKey, title: item.title, content: "合成正文", source: "document", url: null, queriedAt: "2026-09-08T00:00:00Z" }],
+            synthesize: async () => "合成回答",
+        })
+        expect(result.candidates.map((item) => item.candidateKey)).toEqual(["b", "a"])
+        expect(result.candidates[1].score).toBeCloseTo(1 / 61, 5)
+    })
+    it.each([2, undefined])("同库跨查询混入其他generation或legacy时不深读/综合：%s", async (second) => {
+        const read = vi.fn(async () => [])
+        const synthesize = vi.fn(async () => "不应调用")
+        await expect(runDeepResearchPipeline({ question: "合成", modes: ["exact"], signal }, {
+            planQueries: async () => ["另一个问法"],
+            search: async (query) => [{ candidateKey: query, title: "合成", sourceName: "本地", url: null, score: 1,
+                read: { kind: "document", sourceRef: "doc-library:3", generationId: query === "合成" ? 1 : second } }],
+            read, synthesize,
+        })).rejects.toMatchObject({ code: "validation_failed" })
+        expect(read).not.toHaveBeenCalled()
+        expect(synthesize).not.toHaveBeenCalled()
+    })
     it("搜索成功中的来源降级与部分深读失败都对用户可见", async () => {
         const candidate = (key: string): DeepResearchCandidate => ({ candidateKey: key, title: "合成", sourceName: "合成", url: null, score: 1, read: {} })
         const result = await runDeepResearchPipeline({ question: "合成", modes: ["exact"], signal }, {
