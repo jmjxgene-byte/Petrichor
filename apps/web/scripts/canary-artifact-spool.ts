@@ -103,3 +103,6 @@ export function finalizeArtifactSpool(directory: string, raw: unknown) {
     publish(path.join(directory, "receipt.json"), Buffer.from(JSON.stringify(receipt)))
     return receipt
 }
+
+// 仅供canary受限执行日志复用同一文件权限与无覆盖发布实现。
+export { checkDirectory as assertPrivateSpoolDirectory, readPrivate as readPrivateSpoolFile, publish as publishSpoolFile }
