@@ -12,7 +12,7 @@ import { inspectCanaryCall, openCanaryCallJournal } from "./canary-call-journal"
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
 export const runtimeApprovalSchema = z.object({ version: z.literal(1), executionId: z.string().uuid(),
     planHash: digest, codeSha: digest, providerProfileHash: digest, requestSetHash: digest,
-    userId: z.number().int().positive(), phase: z.literal("embed"), maxCalls: z.literal(22), expiresAt: z.string().datetime(),
+    userId: z.union([z.number().int().positive(), z.literal("Gene")]), phase: z.literal("embed"), maxCalls: z.literal(22), expiresAt: z.string().datetime(),
 }).strict()
 const hash = (v: string | Buffer) => createHash("sha256").update(v).digest("hex")
 export function runtimePreflight() {

@@ -27,6 +27,12 @@ function fixture(overrides: Record<string, unknown> = {}, gate = { role: "petric
     return { client: { begin } as unknown as postgres.Sql, userId: 1, decrypt, use, events, tx }
 }
 describe("canary只读凭证桥接", () => {
+    it("真实执行按Gene解析后的ID读取唯一密文", async () => {
+        const f = fixture()
+        const profile = await readCanaryProviderProfile({ ...f, userId: "Gene" })
+        expect((await withCanaryCredential({ ...f, userId: "Gene", expectedProviderProfileHash: profile.providerProfileHash })).hash).toBe(profile.providerProfileHash)
+        expect(f.decrypt).toHaveBeenCalledOnce()
+    })
     it("同一只读事务唯一解析Gene身份，不假定生产ID", async () => {
         const f = fixture()
         expect((await readCanaryProviderProfile({ ...f, userId: "Gene" })).configurationValid).toBe(true)

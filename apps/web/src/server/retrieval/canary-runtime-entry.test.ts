@@ -9,6 +9,10 @@ function approval() {
         providerProfileHash: "b".repeat(64), userId: 1, phase: "embed", maxCalls: 22, expiresAt: "2030-01-01T00:00:00.000Z" }
 }
 describe("runtime单项入口离线契约", () => {
+    it("允许唯一具名管理员，不接受任意名称", () => {
+        expect(assertRuntimeApproval({ ...approval(), userId: "Gene" }, owner, codeSha, 0).userId).toBe("Gene")
+        expect(() => assertRuntimeApproval({ ...approval(), userId: "Other" }, owner, codeSha, 0)).toThrow()
+    })
     it("预检只构造固定合成请求", () => {
         expect(runtimePreflight()).toMatchObject({ modelCalls: 0, databaseCalls: 0, calls: 22, needsNewApproval: true })
         const requests = frozenEmbeddingRequests().requests

@@ -32,7 +32,7 @@ async function profileInTransaction(tx: postgres.TransactionSql, selector: numbe
     const profile = { model: r.model_id, dimensions: r.dimensions, modelRef: r.model_ref, provider: r.provider_id,
         endpoint: "https://api.siliconflow.cn/v1", credential: r.credential_id,
         modelRevision: r.model_revision, providerRevision: r.provider_revision, credentialRevision: r.credential_revision }
-    return { credentialId: r.credential_id, providerProfileHash: createHash("sha256").update(JSON.stringify(profile)).digest("hex") }
+    return { userId, credentialId: r.credential_id, providerProfileHash: createHash("sha256").update(JSON.stringify(profile)).digest("hex") }
 }
 
 /** 纯配置核验：SQL不选择密文列，没有decrypt/use回调，也不访问provider。 */
@@ -47,10 +47,10 @@ export async function readCanaryProviderProfile(input: { client: postgres.Sql; u
 
 /** client由受控运行环境提供；不读取env、不建立新管理连接、不返回凭证对象。 */
 export async function withCanaryCredential<T>(input: {
-    client: postgres.Sql; userId: number; expectedProviderProfileHash?: string; decrypt: (ciphertext: string) => string
+    client: postgres.Sql; userId: number | "Gene"; expectedProviderProfileHash?: string; decrypt: (ciphertext: string) => string
     use: (credential: { apiKey: string; providerProfileHash: string }) => Promise<T>
 }) {
-    if (!Number.isSafeInteger(input.userId) || input.userId <= 0) throw new Error("credential_user_invalid")
+    if (input.userId !== "Gene" && (!Number.isSafeInteger(input.userId) || input.userId <= 0)) throw new Error("credential_user_invalid")
     if (input.expectedProviderProfileHash && !/^[a-f0-9]{64}$/.test(input.expectedProviderProfileHash)) throw new Error("credential_profile_invalid")
     let key = ""
     let failure = "credential_bridge_failed"
@@ -58,7 +58,7 @@ export async function withCanaryCredential<T>(input: {
         const row = await input.client.begin("read only isolation level repeatable read", async tx => {
             const profile = await profileInTransaction(tx, input.userId)
             if (input.expectedProviderProfileHash && input.expectedProviderProfileHash !== profile.providerProfileHash) throw new Error("profile_changed")
-            const rows = await tx`select api_key_enc from petrichor_ai_credential where id=${profile.credentialId} and user_id=${input.userId} limit 2`
+            const rows = await tx`select api_key_enc from petrichor_ai_credential where id=${profile.credentialId} and user_id=${profile.userId} limit 2`
             if (rows.length !== 1 || typeof rows[0].api_key_enc !== "string") throw new Error("credential_gate")
             return { ...profile, ciphertext: rows[0].api_key_enc }
         })
