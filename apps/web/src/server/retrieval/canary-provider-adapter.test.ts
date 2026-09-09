@@ -15,6 +15,15 @@ function fixture(requests = [request]) {
     return { directory: path.join(root, "journal"), executionId: "synthetic", planHash: "a".repeat(64), providerProfileHash: "b".repeat(64), apiKey: "synthetic-secret", requests, transport }
 }
 describe("持久化provider适配器（假服务）", () => {
+    it("指定前缀只推进一项，无凭证恢复不调用未来项", async () => {
+        const f = fixture([request, request])
+        expect((await runPersistedProviderBatch({ ...f, throughOrdinal: 0 })).results).toHaveLength(1)
+        expect((await runPersistedProviderBatch({ ...f, apiKey: undefined, throughOrdinal: 0 })).results[0].reused).toBe(true)
+        expect(f.transport).toHaveBeenCalledTimes(1)
+        expect(fs.existsSync(path.join(f.directory, "call-01"))).toBe(false)
+        await expect(runPersistedProviderBatch({ ...f, throughOrdinal: 2 })).rejects.toThrow("call_index_invalid")
+        expect(f.transport).toHaveBeenCalledTimes(1)
+    })
     it("宿主ACK未确认时适配器停止后续请求，重复交接不重调", async () => {
         const f = fixture([request, request]), afterPersist = vi.fn(async () => { throw new Error("ack_lost") })
         await expect(runPersistedProviderBatch({ ...f, afterPersist })).rejects.toThrow("handoff_unconfirmed")

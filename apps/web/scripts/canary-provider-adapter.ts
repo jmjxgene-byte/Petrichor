@@ -10,6 +10,9 @@ const embedding = z.object({ model: z.literal("BAAI/bge-m3"), input: z.array(z.s
 const rerank = z.object({ model: z.literal("BAAI/bge-reranker-v2-m3"), query: z.string().min(1).max(2000), documents: z.array(z.string().min(1).max(4000)).min(1).max(20), top_n: z.number().int().positive(), return_documents: z.literal(false) }).strict()
 export type CanaryRequest = { kind: "document_embedding" | "query_embedding" | "rerank"; body: unknown }
 const sha = (text: string) => createHash("sha256").update(text).digest("hex")
+export function canonicalCanaryRequests(requests: CanaryRequest[]) {
+    return requests.map(request => ({ kind: request.kind, body: request.kind === "rerank" ? rerank.parse(request.body) : embedding.parse(request.body) }))
+}
 
 export function frozenEmbeddingRequests() {
     const plan = planGroundedCanary()
@@ -52,9 +55,10 @@ export async function runPersistedProviderBatch(input: {
     directory: string; executionId: string; planHash: string; providerProfileHash: string; apiKey?: string
     requests: CanaryRequest[]; transport: (url: string, init: RequestInit) => Promise<Response>; signal?: AbortSignal
     afterPersist?: (receipt: { ordinal: number; reused: boolean; bytes: number; sha256: string }) => Promise<void>
+    throughOrdinal?: number
 }) {
     input.signal?.throwIfAborted()
-    const parsed = input.requests.map(request => {
+    const parsed = canonicalCanaryRequests(input.requests).map(request => {
         const body = request.kind === "rerank" ? rerank.parse(request.body) : embedding.parse(request.body)
         if (request.kind === "query_embedding" && "input" in body && body.input.length !== 1) throw new Error("query_batch_size")
         if ("documents" in body && body.top_n !== body.documents.length) throw new Error("rerank_count")
@@ -63,11 +67,13 @@ export async function runPersistedProviderBatch(input: {
         return { kind: request.kind, body }
     })
     const bodies = parsed.map(r => JSON.stringify(r.body))
+    const last = input.throughOrdinal ?? bodies.length - 1
+    if (!Number.isInteger(last) || last < 0 || last >= bodies.length) throw new Error("call_index_invalid")
     const contract = { version: 1, executionId: input.executionId, planHash: input.planHash, providerProfileHash: input.providerProfileHash,
         calls: parsed.map((r, i) => ({ kind: r.kind, requestHash: sha(bodies[i]) })),
     }
-    if (!input.apiKey?.trim() && (!fs.existsSync(input.directory) || bodies.some((_, ordinal) => inspectCanaryCall(input.directory, contract, ordinal) !== "persisted"))) throw new Error("credential_missing")
-    return runDurableCanaryBatch({ directory: input.directory, contract, requests: bodies, afterPersist: input.afterPersist, invoke: async (body, ordinal) => {
+    if (!input.apiKey?.trim() && (!fs.existsSync(input.directory) || bodies.slice(0, last + 1).some((_, ordinal) => inspectCanaryCall(input.directory, contract, ordinal) !== "persisted"))) throw new Error("credential_missing")
+    return runDurableCanaryBatch({ directory: input.directory, contract, requests: bodies, throughOrdinal: last, afterPersist: input.afterPersist, invoke: async (body, ordinal) => {
         input.signal?.throwIfAborted()
         if (!input.apiKey?.trim()) throw new Error("credential_missing")
         const signal = AbortSignal.any([AbortSignal.timeout(20000), ...(input.signal ? [input.signal] : [])])

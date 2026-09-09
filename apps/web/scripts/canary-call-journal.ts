@@ -86,14 +86,17 @@ export async function runDurableCanaryCall(input: {
 export async function runDurableCanaryBatch(input: {
     directory: string; contract: unknown; requests: string[]
     invoke: (requestJson: string, ordinal: number) => Promise<Uint8Array>
+    throughOrdinal?: number
     afterPersist?: (receipt: { ordinal: number; reused: boolean; bytes: number; sha256: string }) => Promise<void>
 }) {
     const contract = contractSchema.parse(input.contract), requests = [...input.requests]
+    const last = input.throughOrdinal ?? requests.length - 1
+    if (!Number.isInteger(last) || last < 0 || last >= requests.length) throw new Error("call_index_invalid")
     // 全部请求先对账，再允许第一次调用；不把query/body副本写入日志。
     if (requests.length !== contract.calls.length || requests.some((body, i) => Buffer.byteLength(body) > 128 * 1024 || sha(body) !== contract.calls[i].requestHash)) throw new Error("batch_request_mismatch")
     openCanaryCallJournal(input.directory, contract)
     const results = []
-    for (let ordinal = 0; ordinal < requests.length; ordinal++) {
+    for (let ordinal = 0; ordinal <= last; ordinal++) {
         const result = await runDurableCanaryCall({ directory: input.directory, contract, ordinal, requestJson: requests[ordinal],
             invoke: body => input.invoke(body, ordinal) })
         const receipt = { ordinal, reused: result.reused, bytes: result.payload.length, sha256: sha(result.payload) }
