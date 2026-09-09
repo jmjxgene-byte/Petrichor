@@ -46,7 +46,9 @@ async function main() {
     const requirePersisted = (n: number) => { if (inspectCanaryCall(journal, contract, n) !== "persisted") throw new Error("runtime_result_incomplete") }
     const receipt = (n: number) => { requirePersisted(n); return JSON.parse(readPrivateSpoolFile(path.join(responseRoot(n), "receipt.json"), 4096).toString()) }
     if (action === "status") {
-        console.log(JSON.stringify({ states: frozen.requests.map((_, n) => fs.existsSync(journal) ? inspectCanaryCall(journal, contract, n) : "not_started"), modelCalls: 0, databaseCalls: 0 })); return
+        console.log(JSON.stringify({ executionId: owner, codeSha, planHash: approval.planHash, requestSetHash: approval.requestSetHash,
+            providerProfileHash: approval.providerProfileHash,
+            states: frozen.requests.map((_, n) => fs.existsSync(journal) ? inspectCanaryCall(journal, contract, n) : "not_started"), modelCalls: 0, databaseCalls: 0 })); return
     }
     if (action === "manifest") { const n = ordinal(raw); requirePersisted(n); console.log(readPrivateSpoolFile(path.join(responseRoot(n), "manifest.json"), 16384).toString()); return }
     if (action === "block") {
