@@ -15,6 +15,14 @@ function fixture(requests = [request]) {
     return { directory: path.join(root, "journal"), executionId: "synthetic", planHash: "a".repeat(64), providerProfileHash: "b".repeat(64), apiKey: "synthetic-secret", requests, transport }
 }
 describe("持久化provider适配器（假服务）", () => {
+    it("宿主ACK未确认时适配器停止后续请求，重复交接不重调", async () => {
+        const f = fixture([request, request]), afterPersist = vi.fn(async () => { throw new Error("ack_lost") })
+        await expect(runPersistedProviderBatch({ ...f, afterPersist })).rejects.toThrow("handoff_unconfirmed")
+        await expect(runPersistedProviderBatch({ ...f, afterPersist })).rejects.toThrow("handoff_unconfirmed")
+        expect(f.transport).toHaveBeenCalledTimes(1)
+        expect(fs.existsSync(path.join(f.directory, "call-00/response/receipt.json"))).toBe(true)
+        expect(fs.existsSync(path.join(f.directory, "call-01"))).toBe(false)
+    })
     it("8次重排批次完整持久化，恢复无需凭证或新调用", async () => {
         const f = fixture(Array.from({ length: 8 }, (_, i) => ({ kind: "rerank", body: {
             model: "BAAI/bge-reranker-v2-m3", query: `synthetic-${i}`, documents: ["a", "b", "c", "d"], top_n: 4, return_documents: false,

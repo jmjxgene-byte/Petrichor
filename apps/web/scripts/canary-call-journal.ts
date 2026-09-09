@@ -86,6 +86,7 @@ export async function runDurableCanaryCall(input: {
 export async function runDurableCanaryBatch(input: {
     directory: string; contract: unknown; requests: string[]
     invoke: (requestJson: string, ordinal: number) => Promise<Uint8Array>
+    afterPersist?: (receipt: { ordinal: number; reused: boolean; bytes: number; sha256: string }) => Promise<void>
 }) {
     const contract = contractSchema.parse(input.contract), requests = [...input.requests]
     // 全部请求先对账，再允许第一次调用；不把query/body副本写入日志。
@@ -95,7 +96,11 @@ export async function runDurableCanaryBatch(input: {
     for (let ordinal = 0; ordinal < requests.length; ordinal++) {
         const result = await runDurableCanaryCall({ directory: input.directory, contract, ordinal, requestJson: requests[ordinal],
             invoke: body => input.invoke(body, ordinal) })
-        results.push({ ordinal, reused: result.reused, bytes: result.payload.length, sha256: sha(result.payload) })
+        const receipt = { ordinal, reused: result.reused, bytes: result.payload.length, sha256: sha(result.payload) }
+        if (input.afterPersist) {
+            try { await input.afterPersist(receipt) } catch { throw new Error("handoff_unconfirmed") }
+        }
+        results.push(receipt)
     }
     return { executionId: contract.executionId, planHash: contract.planHash, persisted: true, results }
 }

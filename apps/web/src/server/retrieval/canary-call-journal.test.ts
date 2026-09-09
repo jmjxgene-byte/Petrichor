@@ -14,6 +14,17 @@ function fixture(count = 1) {
     return { directory, contract, ordinal: 0, requestJson }
 }
 describe("调用前预约与逐响应持久化", () => {
+    it("持久化后ACK丢失阻止下一项，重复交接不重调已保存项", async () => {
+        const f = fixture(2), invoke = vi.fn(async () => Buffer.from("synthetic"))
+        const afterPersist = vi.fn(async () => { throw new Error("private_ack_error") })
+        const args = { ...f, requests: [requestJson, requestJson], invoke, afterPersist }
+        await expect(runDurableCanaryBatch(args)).rejects.toThrow("handoff_unconfirmed")
+        await expect(runDurableCanaryBatch(args)).rejects.toThrow("handoff_unconfirmed")
+        expect(invoke).toHaveBeenCalledTimes(1)
+        expect(inspectCanaryCall(f.directory, f.contract, 0)).toBe("persisted")
+        expect(inspectCanaryCall(f.directory, f.contract, 1)).toBe("not_started")
+        expect(afterPersist.mock.calls).toHaveLength(2)
+    })
     it("provider档案变更不能复用执行日志", async () => {
         const f = fixture(), invoke = vi.fn(async () => Buffer.from("synthetic"))
         await expect(runDurableCanaryCall({ ...f, contract: { ...f.contract, providerProfileHash: "c".repeat(64) }, invoke })).rejects.toThrow("call_contract_mismatch")

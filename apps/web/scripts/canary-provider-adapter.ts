@@ -51,6 +51,7 @@ function normalizeResponse(raw: unknown, request: ReturnType<typeof embedding.pa
 export async function runPersistedProviderBatch(input: {
     directory: string; executionId: string; planHash: string; providerProfileHash: string; apiKey?: string
     requests: CanaryRequest[]; transport: (url: string, init: RequestInit) => Promise<Response>; signal?: AbortSignal
+    afterPersist?: (receipt: { ordinal: number; reused: boolean; bytes: number; sha256: string }) => Promise<void>
 }) {
     input.signal?.throwIfAborted()
     const parsed = input.requests.map(request => {
@@ -66,7 +67,7 @@ export async function runPersistedProviderBatch(input: {
         calls: parsed.map((r, i) => ({ kind: r.kind, requestHash: sha(bodies[i]) })),
     }
     if (!input.apiKey?.trim() && (!fs.existsSync(input.directory) || bodies.some((_, ordinal) => inspectCanaryCall(input.directory, contract, ordinal) !== "persisted"))) throw new Error("credential_missing")
-    return runDurableCanaryBatch({ directory: input.directory, contract, requests: bodies, invoke: async (body, ordinal) => {
+    return runDurableCanaryBatch({ directory: input.directory, contract, requests: bodies, afterPersist: input.afterPersist, invoke: async (body, ordinal) => {
         input.signal?.throwIfAborted()
         if (!input.apiKey?.trim()) throw new Error("credential_missing")
         const signal = AbortSignal.any([AbortSignal.timeout(20000), ...(input.signal ? [input.signal] : [])])
