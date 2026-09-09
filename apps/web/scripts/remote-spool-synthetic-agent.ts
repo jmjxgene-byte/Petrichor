@@ -31,11 +31,12 @@ if (action === "init" || action === "init-provider") {
         const fakeTx = async (parts: TemplateStringsArray) => {
             const sql = parts.join("?")
             if (sql.includes("set_config")) return []
-            if (sql.includes("current_user")) return [{ role: "petrichor_runtime", ro: "on" }]
+            if (sql.includes("current_user")) return [{ role: "petrichor_runtime", ro: "on", isolation: "repeatable read" }]
+            if (sql.includes("select api_key_enc")) return [{ api_key_enc: "synthetic-cipher" }]
             return [{ binding_user: 1, model_user: 1, provider_user: 1, credential_user: 1, model_ref: 9,
                 model_id: "BAAI/bge-m3", dimensions: 1024, model_enabled: true, provider_enabled: true,
                 provider_id: 1, provider_key: "siliconflow", base_url: null, headers_json: "{}", credential_id: 2,
-                api_key_enc: "synthetic-cipher", model_revision: "v1", provider_revision: "v1", credential_revision: "v1" }]
+                endpoint_allowed: true, headers_empty: true, model_revision: "v1", provider_revision: "v1", credential_revision: "v1" }]
         }
         const fakeClient = { begin: async (options: string, run: (tx: unknown) => Promise<unknown>) => {
             if (options !== "read only isolation level repeatable read") throw new Error("fake_readonly_gate")
