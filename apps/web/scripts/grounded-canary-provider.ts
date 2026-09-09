@@ -6,6 +6,9 @@ import { planGroundedCanary } from "../src/server/retrieval/grounded-canary-plan
 import { syntheticQaDataset } from "../src/server/retrieval/fixtures/grounded-qa-v1"
 import { buildDocumentPassages } from "../src/server/doc-library/passage-builder"
 
+// 两批旧stdout路径均失败；保留预检/审计，但禁止换ID后误用旧执行链。
+if (process.argv[3] === "--execute-approved") throw new Error("legacy_transport_disabled_use_durable_adapter")
+
 const plan = planGroundedCanary()
 const expected = "61faa403c88032f3633e7b9a354101e8bdfe85a312c04dc8bca6d2f1a3f1f89d"
 const root = path.resolve(import.meta.dir, "../../..")
