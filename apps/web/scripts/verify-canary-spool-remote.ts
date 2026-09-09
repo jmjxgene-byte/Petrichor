@@ -4,9 +4,10 @@ import { createHash, randomUUID } from "node:crypto"
 import { acceptArtifactBlock, finalizeArtifactSpool, missingArtifactBlocks, openArtifactSpool } from "./canary-artifact-spool"
 
 if (process.argv[2] !== "--synthetic-only-approved") throw new Error("approval_gate")
-if (process.argv[3] && !["--fake-provider", "--handoff"].includes(process.argv[3])) throw new Error("mode_gate")
+if (process.argv[3] && !["--fake-provider", "--handoff", "--command-port"].includes(process.argv[3])) throw new Error("mode_gate")
 const providerMode = process.argv[3] === "--fake-provider"
-const handoffMode = process.argv[3] === "--handoff"
+const commandMode = process.argv[3] === "--command-port"
+const handoffMode = process.argv[3] === "--handoff" || commandMode
 const target = process.env.QA_SSH_TARGET, identity = process.env.QA_SSH_IDENTITY, port = process.env.QA_SSH_PORT, node = process.env.QA_REMOTE_NODE
 if (!target || !identity || !port || !/^\d+$/.test(port) || !node || !/^\/[a-zA-Z0-9/._-]+$/.test(node)) throw new Error("ssh_gate")
 const owner = randomUUID(), remoteRoot = `/tmp/petrichor-spool-${owner}`
@@ -30,9 +31,11 @@ async function ssh(command: string, input?: string, allowFailureReport = false) 
 const call = (action: string, index?: number) => ssh(`${node} ${quote(remoteRoot + "/agent.mjs")} ${action} ${owner}${index == null ? "" : ` ${index}`}`)
 let remoteMayExist = false
 try {
-    const build = await Bun.build({ entrypoints: [path.join(import.meta.dir, handoffMode ? "remote-handoff-synthetic-agent.ts" : "remote-spool-synthetic-agent.ts")], target: "node", minify: true })
+    const build = await Bun.build({ entrypoints: [path.join(import.meta.dir, commandMode ? "remote-command-synthetic-agent.ts" : handoffMode ? "remote-handoff-synthetic-agent.ts" : "remote-spool-synthetic-agent.ts")], target: "node", minify: true,
+        define: commandMode ? { SYNTHETIC_PROCESS_FIXTURE: JSON.stringify(fs.readFileSync(path.join(import.meta.dir, "../src/server/retrieval/fixtures/canary-command-process.mjs"), "utf8")) } : undefined })
     if (!build.success || build.outputs.length !== 1) throw new Error("bundle_gate")
     const bundle = await build.outputs[0].text(), sha = createHash("sha256").update(bundle).digest("hex")
+    report.bundleSha = sha
     const bootstrap = `const fs=require("fs"),crypto=require("crypto");const root=${JSON.stringify(remoteRoot)},owner=${JSON.stringify(owner)};if(process.getuid()!==0)throw Error("root");const b=fs.readFileSync(0);if(crypto.createHash("sha256").update(b).digest("hex")!==${JSON.stringify(sha)})throw Error("sha");fs.mkdirSync(root,{mode:448});fs.writeFileSync(root+"/owner",owner,{mode:384,flag:"wx"});fs.writeFileSync(root+"/agent.mjs",b,{mode:384,flag:"wx"});console.log(JSON.stringify({ready:true}));`
     remoteMayExist = true
     await ssh(`${node} -e ${quote(bootstrap)}`, bundle)
@@ -72,6 +75,10 @@ try {
 } catch (e) { report.error = e instanceof Error && /^[a-z_]+$/.test(e.message) ? e.message : "verification_failed" }
 finally {
     if (remoteMayExist) {
+        if (commandMode) {
+            try { report.runtimeCleaned = (await ssh(`${node} ${quote(remoteRoot + "/agent.mjs")} cleanup ${owner}`)).runtimeCleaned === true }
+            catch { report.runtimeCleaned = false; report.passed = false }
+        }
         const cleanup = `const fs=require("fs");const root=${JSON.stringify(remoteRoot)},owner=${JSON.stringify(owner)};if(!fs.existsSync(root)){console.log(JSON.stringify({absent:true}));process.exit(0)}const s=fs.lstatSync(root);if(process.getuid()!==0||s.uid!==0||!s.isDirectory()||s.isSymbolicLink()||(s.mode&63)!==0||fs.readFileSync(root+"/owner","utf8")!==owner)throw Error("owner_gate");fs.rmSync(root,{recursive:true});console.log(JSON.stringify({absent:!fs.existsSync(root)}));`
         try { report.remoteCleaned = (await ssh(`${node} -e ${quote(cleanup)}`)).absent === true } catch { report.remoteCleaned = false }
     }

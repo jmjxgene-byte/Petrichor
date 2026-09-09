@@ -13,3 +13,11 @@
 同日新增仅测试的`fixtures/canary-command-process.mjs`。每次协议调用均通过execFile启动独立本机进程，使用私有测试目录保存合成响应和ACK，子进程不继承业务环境变量。第一轮完成产物持久化并写入ACK后退出7，模拟ACK返回丢失；创建新的port后恢复成功，未再执行execute-one，也未重复下载已保存块。总执行次数1，结果文件保持0600，测试结束自动删除本阶段临时目录。此为真实本机子进程、模拟Docker协议；没有实跑Docker/SSH，也不证明断电fsync或真实网络故障恢复。
 
 最新定向5项通过，全量1595通过/40既有跳过，typecheck/build通过；Lint最初因mjs未显式导入process/Buffer失败，补标准库import后Lint和定向回归通过，未放宽规则。生产入口bundle未改变，仍使用上文9300e7b9开头SHA。旧remote handoff演练入口未接入新command-port，不能以旧演练成功替代本节点远端验收。
+
+## 已授权远端纯合成演练
+
+同日，用户单独授权后增加`remote-command-synthetic-agent.ts`，通过`verify-canary-spool-remote.ts --synthetic-only-approved --command-port`完成唯一一次真实宿主Docker命令演练。宿主使用当前command-port与host-controller；Web容器运行仅测试的合成协议替身，不运行真实provider入口、不读取业务配置或凭证。私有临时目录内固定只生成第0项，故意在ACK持久化后返回失败，再创建新port恢复。
+
+结果：passed=true、controllerExitCode=0、simulatedInvocations=1、ackLossRecovered=true、recoveryInvocations=0、recoveryBlocks=0；合成结果144000字节，SHA `9d8fc9dc1c45761a9f3a2cc3da35e28a6679670754ffce870f87370f5eed0129`。实际演练bundle SHA `efdec83c8b7eac577bf4e2595dcfc393fe7c393c892705bd91579d1cb10b66f9`，fixture SHA `3948196f4b653f2a6cab51d8eda7957b7c6cd71d0e0a23c70af5dd1c49b15861`。模型/数据库调用0；runtimeCleaned/remoteCleaned/localCleaned及webHealthy/webImageUnchanged/webInstanceUnchanged均true，另一次只读检查确认本次两处远端目录不存在，Web仍健康且未重启。
+
+定向13项、全量1595通过/40既有跳过，typecheck/lint/build/diff通过。私有本地只留安全终态报告，不提交原始远端元数据。此项验证了真实Docker命令、分块、ACK恢复和清理，但没有验证真实模型输出或生产凭证桥接，也不是物理断网/断电测试。传输恢复门已通过；下一步独立确认真实provider profile和新执行身份，不能复用两次旧失败批次，不能据此发布MVP。
