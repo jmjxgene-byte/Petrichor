@@ -2,6 +2,9 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
+import { fileURLToPath } from "node:url"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { containerRuntimeIdentity, createCanaryCommandPort, type CanaryCommand } from "../../../scripts/canary-command-port"
 import { advanceCanaryHost, initializeCanaryHost } from "../../../scripts/canary-host-controller"
@@ -41,6 +44,32 @@ function fixture() {
     return { root, c, container, runner, port: createCanaryCommandPort(c, runner), executions: () => executions, loseAck: () => { loseAck = true } }
 }
 describe("受控命令port（无Docker/网络的完整宿主交接）", () => {
+    it("独立真实子进程通过磁盘交接，ACK返回丢失后新port只恢复", async () => {
+        const f = fixture(), directory = path.join(f.root, "host")
+        const { containerId: _containerId, runtimeIdentity: _runtimeIdentity, ...identity } = f.c
+        fs.writeFileSync(path.join(f.root, "fixture.json"), JSON.stringify({ syntheticOnly: true, container: f.container, identity }), { flag: "wx", mode: 0o600 })
+        const processFixture = fileURLToPath(new URL("./fixtures/canary-command-process.mjs", import.meta.url))
+        const commands: string[] = []
+        const runner = async (command: CanaryCommand) => {
+            commands.push(command.args[0] === "exec" ? command.args[6] : "inspect")
+            const output = await promisify(execFile)(process.execPath, [processFixture, f.root, ...command.args], {
+                encoding: "utf8", timeout: command.timeout, maxBuffer: command.maxBuffer,
+                env: { PATH: "/usr/bin:/bin", LANG: "C" },
+            })
+            return output.stdout
+        }
+        const binding = { ...identity, runtimeIdentity: f.c.runtimeIdentity, version: 1, calls: 22, expiresAt: "2030-01-01T00:00:00Z" }
+        initializeCanaryHost(directory, binding)
+        await expect(advanceCanaryHost({ directory, binding, port: createCanaryCommandPort(f.c, runner), ordinal: 0, mode: "execute-one", now: 0 })).rejects.toThrow("ack_unconfirmed")
+        const beforeRecovery = commands.length
+        const restored = await advanceCanaryHost({ directory, binding, port: createCanaryCommandPort(f.c, runner), ordinal: 0, mode: "recover", now: 0 })
+        expect(restored.acknowledged).toBe(true)
+        expect(commands.filter(c => c === "execute-one")).toHaveLength(1)
+        expect(commands.slice(beforeRecovery)).not.toContain("execute-one")
+        expect(commands.slice(beforeRecovery)).not.toContain("block")
+        expect(fs.readFileSync(path.join(f.root, "invocation"), "utf8")).toBe("synthetic")
+        expect(fs.statSync(path.join(directory, "received-0/artifact.bin")).mode & 0o077).toBe(0)
+    }, 15000)
     it("宿主→命令协议→合成产物→ACK，ACK中断恢复不重新执行", async () => {
         const f = fixture(), directory = path.join(f.root, "host")
         const { containerId: _containerId, ...identity } = f.c
