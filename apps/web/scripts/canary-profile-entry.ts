@@ -13,7 +13,7 @@ async function main() {
     }
     if (action !== "--read-profile-approved" || process.platform !== "linux" || process.getuid?.() !== 1000
         || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(owner)
-        || !/^[1-9][0-9]*$/.test(user) || !Number.isSafeInteger(Number(user)) || !/^[a-f0-9]{64}$/.test(expectedSha)) throw new Error("profile_gate")
+        || (user !== "Gene" && (!/^[1-9][0-9]*$/.test(user) || !Number.isSafeInteger(Number(user)))) || !/^[a-f0-9]{64}$/.test(expectedSha)) throw new Error("profile_gate")
     const root = `/tmp/petrichor-profile-${owner}`, entry = fileURLToPath(import.meta.url)
     assertPrivateSpoolDirectory(root)
     if (path.dirname(entry) !== root || fs.lstatSync(root).uid !== 1000 || readPrivateSpoolFile(path.join(root, "owner"), 100).toString() !== owner) throw new Error("owner_gate")
@@ -25,7 +25,7 @@ async function main() {
     if (!url) throw new Error("database_missing")
     const client = postgres(url, { max: 1, prepare: false, connect_timeout: 10, onnotice: () => {} })
     try {
-        const profile = await readCanaryProviderProfile({ client, userId: Number(user) })
+        const profile = await readCanaryProviderProfile({ client, userId: user === "Gene" ? "Gene" : Number(user) })
         const result = { mode: "metadata_only", ...profile, modelCalls: 0, selectsCredentialCiphertext: false }
         publishSpoolFile(path.join(root, "result.json"), Buffer.from(JSON.stringify(result)))
         console.log(JSON.stringify(result))

@@ -7,6 +7,7 @@ function fixture(overrides: Record<string, unknown> = {}, gate = { role: "petric
         const sql = parts.join("?")
         if (sql.includes("set_config")) return []
         if (sql.includes("current_user")) return [gate]
+        if (sql.includes("select id from petrichor_user")) { expect(params).toEqual(["Gene"]); return [{ id: 1 }] }
         if (sql.includes("select api_key_enc")) { expect(params).toEqual([2, 1]); return [{ api_key_enc: "synthetic-cipher" }] }
         expect(params).toEqual([1])
         return [{ binding_user: "1", model_user: "1", provider_user: "1", credential_user: "1", model_ref: 9,
@@ -26,6 +27,20 @@ function fixture(overrides: Record<string, unknown> = {}, gate = { role: "petric
     return { client: { begin } as unknown as postgres.Sql, userId: 1, decrypt, use, events, tx }
 }
 describe("canary只读凭证桥接", () => {
+    it("同一只读事务唯一解析Gene身份，不假定生产ID", async () => {
+        const f = fixture()
+        expect((await readCanaryProviderProfile({ ...f, userId: "Gene" })).configurationValid).toBe(true)
+        expect(f.tx.mock.calls.some(([parts]) => parts.join("").includes("where nickname="))).toBe(true)
+        expect(f.tx.mock.calls.every(([parts]) => !parts.join("").includes("api_key_enc"))).toBe(true)
+    })
+    it("Gene不存在或重名均停止，不读取绑定", async () => {
+        for (const owners of [[], [{ id: 1 }, { id: 2 }]]) {
+            const f = fixture(), original = f.tx.getMockImplementation()!
+            f.tx.mockImplementation(async (parts, ...params) => parts.join("").includes("select id from petrichor_user") ? owners : original(parts, ...params))
+            await expect(readCanaryProviderProfile({ ...f, userId: "Gene" })).rejects.toThrow("provider_profile_failed")
+            expect(f.tx.mock.calls.every(([parts]) => !parts.join("").includes("from petrichor_ai_binding"))).toBe(true)
+        }
+    })
     it("元数据核验不选择密文，指纹与执行桥接一致", async () => {
         const f = fixture(), result = await readCanaryProviderProfile(f)
         expect(f.tx.mock.calls.every(([parts]) => !parts.join("").includes("api_key_enc"))).toBe(true)

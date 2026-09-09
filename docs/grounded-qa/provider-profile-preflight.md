@@ -9,3 +9,11 @@
 验证：12项mock事务定向测试通过，全量1598通过/40既有跳过，typecheck/lint/build/diff通过，构建大chunk提示保留。数据库SQL尚未在真实Postgres执行；不能将mock测试称为生产配置核验。连接行为继续遵循现有prepare:false约束，参考[Supabase连接文档](https://supabase.com/docs/guides/database/connecting-to-postgres)。本轮无迁移、授权变更、远端部署、真实数据库或模型调用。
 
 下一门仅申请一次生产配置元数据只读核验，限定当前用户和用途，不读取API Key密文/明文、不调用provider。成功后固定profile指纹，另行授权新的真实模型批次。凭证桥接代码改变，旧9300e7b9生产入口bundle仅为历史预检产物；新真实批次必须重新构建和固定其SHA，不能混用旧身份。
+
+## 一次真实只读核验结果
+
+同日用户确认继续后，先补同事务的具名管理员唯一匹配，避免把合成测试userId=1误当生产身份；未匹配或重名时停止。profile入口支持具名选择，新包SHA `471d76a1b5c99a16c9be4e177fda12c203e3a63ea7fe67ccdb1a99b30691186a`。
+
+本机启动器首次因URL pathname未解码而找不到中文路径，在预约、SSH和数据库访问之前失败；改用fileURLToPath并确认无started标记后执行尚未消耗的唯一核验。结果configurationValid=true，BGE-M3/1024与固定provider、启用状态、绑定归属和只读/隔离级别门均通过；模型调用0、密文读取false。真实profile指纹仅留私有报告，不写入公开报告。临时工具已删除，另一次只读检查确认目录不存在；Web健康、镜像和启动实例未变。
+
+最新14项定向、全量1600通过/40既有跳过，typecheck/lint/build/diff通过。此结果只证明配置和SQL契约，不证明Key有效、模型可达、余额充足或检索质量；真实模型批次尚未开始。下一步为新身份、固定profile与新入口SHA的有限嵌入验收，仍需独立模型调用授权，不复用旧失败批次。

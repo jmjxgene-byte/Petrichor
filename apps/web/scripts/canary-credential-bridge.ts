@@ -1,10 +1,16 @@
 import type postgres from "postgres"
 import { createHash } from "node:crypto"
 
-async function profileInTransaction(tx: postgres.TransactionSql, userId: number) {
+async function profileInTransaction(tx: postgres.TransactionSql, selector: number | "Gene") {
     await tx`select set_config('statement_timeout','8000',true),set_config('lock_timeout','1000',true)`
     const [gate] = await tx`select current_user as role,current_setting('transaction_read_only') as ro,current_setting('transaction_isolation') as isolation`
     if (gate?.role !== "petrichor_runtime" || gate?.ro !== "on" || gate?.isolation !== "repeatable read") throw new Error("role_gate")
+    let userId: number
+    if (selector === "Gene") {
+        const owners = await tx`select id from petrichor_user where nickname=${selector} and system_role='SUPER_ADMIN' limit 2`
+        if (owners.length !== 1 || !Number.isSafeInteger(Number(owners[0].id)) || Number(owners[0].id) <= 0) throw new Error("owner_gate")
+        userId = Number(owners[0].id)
+    } else userId = selector
     // 只读取身份/版本/能力；URL与headers在SQL内归约为布尔值，不返回其内容。
     const rows = await tx`select b.user_id as binding_user,m.user_id as model_user,p.user_id as provider_user,c.user_id as credential_user,
         m.id as model_ref,m.model_id,m.dimensions,m.enabled as model_enabled,p.enabled as provider_enabled,
@@ -30,8 +36,8 @@ async function profileInTransaction(tx: postgres.TransactionSql, userId: number)
 }
 
 /** 纯配置核验：SQL不选择密文列，没有decrypt/use回调，也不访问provider。 */
-export async function readCanaryProviderProfile(input: { client: postgres.Sql; userId: number }) {
-    if (!Number.isSafeInteger(input.userId) || input.userId <= 0) throw new Error("credential_user_invalid")
+export async function readCanaryProviderProfile(input: { client: postgres.Sql; userId: number | "Gene" }) {
+    if (input.userId !== "Gene" && (!Number.isSafeInteger(input.userId) || input.userId <= 0)) throw new Error("credential_user_invalid")
     try {
         const profile = await input.client.begin("read only isolation level repeatable read", tx => profileInTransaction(tx, input.userId))
         return { providerProfileHash: profile.providerProfileHash, model: "BAAI/bge-m3", dimensions: 1024,
