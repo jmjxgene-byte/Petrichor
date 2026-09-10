@@ -15,7 +15,7 @@ function fixture() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "petrichor-command-port-")); roots.push(root)
     const container = { id: "a".repeat(64), image: `sha256:${"b".repeat(64)}`, startedAt: "2026-09-09T00:00:00Z", running: true }
     const c = { containerId: container.id, executionId: randomUUID(), runtimeIdentity: containerRuntimeIdentity(container.id, container.image, container.startedAt),
-        codeSha: "c".repeat(64), planHash: "d".repeat(64), requestSetHash: "e".repeat(64), providerProfileHash: "f".repeat(64) }
+        codeSha: "c".repeat(64), planHash: "d".repeat(64), requestSetHash: "e".repeat(64), providerProfileHash: "f".repeat(64), calls: 22 }
     const states = Array<"not_started" | "persisted">(22).fill("not_started"), bytes = Buffer.from("synthetic-result".repeat(9000))
     let executions = 0, loseAck = false
     const manifests = new Map<number, ReturnType<typeof describeArtifact>>()
@@ -46,7 +46,7 @@ function fixture() {
 describe("受控命令port（无Docker/网络的完整宿主交接）", () => {
     it("独立真实子进程通过磁盘交接，ACK返回丢失后新port只恢复", async () => {
         const f = fixture(), directory = path.join(f.root, "host")
-        const { containerId: _containerId, runtimeIdentity: _runtimeIdentity, ...identity } = f.c
+        const { containerId: _containerId, runtimeIdentity: _runtimeIdentity, calls: _calls, ...identity } = f.c
         fs.writeFileSync(path.join(f.root, "fixture.json"), JSON.stringify({ syntheticOnly: true, container: f.container, identity }), { flag: "wx", mode: 0o600 })
         const processFixture = fileURLToPath(new URL("./fixtures/canary-command-process.mjs", import.meta.url))
         const commands: string[] = []

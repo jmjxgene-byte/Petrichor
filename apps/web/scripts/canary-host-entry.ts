@@ -14,7 +14,7 @@ async function main() {
     if (fs.lstatSync(root).uid !== 0 || readPrivateSpoolFile(path.join(root, "owner"), 100).toString() !== owner) throw new Error("owner_gate")
     const config = JSON.parse(readPrivateSpoolFile(path.join(root, "command-config.json"), 8192).toString())
     const binding = JSON.parse(readPrivateSpoolFile(path.join(root, "binding.json"), 8192).toString())
-    if (config.executionId !== owner || binding.executionId !== owner || binding.calls !== 22) throw new Error("binding_gate")
+    if (config.executionId !== owner || binding.executionId !== owner || binding.calls !== config.calls) throw new Error("binding_gate")
     for (const field of ["codeSha", "planHash", "requestSetHash", "providerProfileHash", "runtimeIdentity"]) if (config[field] !== binding[field]) throw new Error("binding_gate")
     const port = createCanaryCommandPort(config, runCanaryDockerCommand), directory = path.join(root, "journal")
     if (action === "initialize") {

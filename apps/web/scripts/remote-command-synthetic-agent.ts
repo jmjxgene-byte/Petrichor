@@ -31,7 +31,7 @@ else {
     try {
         const shim = `import process from 'node:process';const [a,o,v]=process.argv.slice(2);process.argv=[process.execPath,import.meta.filename,${JSON.stringify(root)},'exec','--user','1000',${JSON.stringify(before.id)},'bun',${JSON.stringify(root + "/entry.js")},a,o,v];await import('./fixture.mjs');`
         const c = { containerId: before.id, executionId: owner, runtimeIdentity: containerRuntimeIdentity(before.id, before.image, before.startedAt),
-            codeSha: hash(shim), planHash: "a".repeat(64), requestSetHash: "b".repeat(64), providerProfileHash: "c".repeat(64) }
+            codeSha: hash(shim), planHash: "a".repeat(64), requestSetHash: "b".repeat(64), providerProfileHash: "c".repeat(64), calls: 22 }
         const identity = { executionId: owner, codeSha: c.codeSha, planHash: c.planHash, requestSetHash: c.requestSetHash, providerProfileHash: c.providerProfileHash }
         const payload = JSON.stringify({ shim, fixture: SYNTHETIC_PROCESS_FIXTURE, config: { syntheticOnly: true, container: before, identity } })
         const bootstrap = `const fs=require('fs'),c=require('crypto'),p=${JSON.stringify(root)},owner=${JSON.stringify(owner)},b=fs.readFileSync(0);if(process.getuid()!==1000||c.createHash('sha256').update(b).digest('hex')!==${JSON.stringify(hash(payload))})throw Error('gate');const x=JSON.parse(b);fs.mkdirSync(p,{mode:448});for(const [n,v] of Object.entries({'owner':owner,'entry.js':x.shim,'fixture.mjs':x.fixture,'fixture.json':JSON.stringify(x.config)}))fs.writeFileSync(p+'/'+n,v,{flag:'wx',mode:384});console.log('{"ready":true}');`

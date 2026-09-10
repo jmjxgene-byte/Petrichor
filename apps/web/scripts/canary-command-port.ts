@@ -4,7 +4,8 @@ import { z } from "zod"
 import type { CanaryRuntimePort } from "./canary-host-controller"
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
 const configSchema = z.object({ containerId: digest, executionId: z.string().uuid(), runtimeIdentity: digest,
-    codeSha: digest, planHash: digest, requestSetHash: digest, providerProfileHash: digest }).strict()
+    codeSha: digest, planHash: digest, requestSetHash: digest, providerProfileHash: digest,
+    calls: z.number().int().min(1).max(22) }).strict()
 export type CanaryCommand = { args: string[]; timeout: number; maxBuffer: number }
 export type CanaryCommandRunner = (command: CanaryCommand) => Promise<string>
 
@@ -21,7 +22,7 @@ export function containerRuntimeIdentity(id: string, image: string, startedAt: s
 
 export function createCanaryCommandPort(raw: unknown, runner: CanaryCommandRunner): CanaryRuntimePort {
     const c = configSchema.parse(raw)
-    const index = (n: number) => { if (!Number.isInteger(n) || n < 0 || n >= 22) throw new Error("command_ordinal_invalid"); return String(n) }
+    const index = (n: number) => { if (!Number.isInteger(n) || n < 0 || n >= c.calls) throw new Error("command_ordinal_invalid"); return String(n) }
     const call = async (args: string[], timeout = 10000) => {
         let output: string
         try { output = await runner({ args, timeout, maxBuffer: 65536 }) } catch { throw new Error("canary_command_failed") }
@@ -46,7 +47,7 @@ export function createCanaryCommandPort(raw: unknown, runner: CanaryCommandRunne
     const inspect = async () => {
         const s = z.object({ executionId: z.literal(c.executionId), codeSha: z.literal(c.codeSha), planHash: z.literal(c.planHash),
             requestSetHash: z.literal(c.requestSetHash), providerProfileHash: z.literal(c.providerProfileHash),
-            states: z.array(z.enum(["not_started", "outcome_unknown", "persisted"])).length(22), modelCalls: z.literal(0), databaseCalls: z.literal(0) }).strict().safeParse(await action("status"))
+            states: z.array(z.enum(["not_started", "outcome_unknown", "persisted"])).length(c.calls), modelCalls: z.literal(0), databaseCalls: z.literal(0) }).strict().safeParse(await action("status"))
         if (!s.success) throw new Error("command_status_mismatch")
         return { runtimeIdentity: c.runtimeIdentity, states: s.data.states }
     }
