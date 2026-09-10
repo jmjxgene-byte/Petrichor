@@ -17,7 +17,7 @@ const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`
 const owner = "ae3a2166-4be4-4cd7-82ec-25e60d589039"
 const remoteHostRoot = `/root/petrichor-canary-${owner}`
 const runtimeRoot = `/tmp/petrichor-rerank-runtime-${owner}`
-const outputRoot = path.join(dataRoot, `rerank-canary-${owner}`)
+const outputRoot = path.join(dataRoot, process.argv[2] === "--remote-preflight" ? `rerank-runtime-preflight-${owner}-${process.pid}` : `rerank-canary-${owner}`)
 const embeddingDirectory = path.join(dataRoot, "embedding-approved")
 const packDirectory = path.join(dataRoot, "rerank-approved")
 const profileHash = process.env.QA_RERANK_PROFILE_HASH
@@ -29,7 +29,10 @@ async function run(argv: string[], input?: string, timeout = 30_000) {
     try {
         if (input != null) { child.stdin.write(input); await child.stdin.end() }
         const [out, err, code] = await Promise.all([stdout, stderr, child.exited])
-        if (code !== 0) throw new Error("process_failed")
+        if (code !== 0) {
+            const category = /permission denied|publickey/i.test(err) ? "ssh_permission" : /timed? ?out|signal/i.test(err) ? "timeout" : /not found|no such file/i.test(err) ? "missing_path" : /EEXIST|already exists/i.test(err) ? "remote_existing" : /SyntaxError|ReferenceError|TypeError/i.test(err) ? "remote_script_error" : "process_failed"
+            throw new Error(category)
+        }
         return { output: out, stderr: err }
     } finally { clearTimeout(timer) }
 }
@@ -67,11 +70,13 @@ async function main() {
     let before: { id: string; image: string; startedAt: string; health: string; user: string; readonly: boolean } | undefined
     let remoteRootCreated = false
     let runtimeCreated = false
+    let stage = "inspect"
     try {
         const inspectFormat = quote('{"id":{{json .Id}},"image":{{json .Image}},"startedAt":{{json .State.StartedAt}},"health":{{json .State.Health.Status}},"user":{{json .Config.User}},"readonly":{{json .HostConfig.ReadonlyRootfs}}}')
         const raw = await remoteJson("docker inspect petrichor-web-1 --format " + inspectFormat)
         before = raw as typeof before
         if (!before || !/^[a-f0-9]{64}$/.test(before.id) || !/^sha256:[a-f0-9]{64}$/.test(before.image) || before.health !== "healthy" || before.user !== "bun" || before.readonly !== true) throw new Error("web_gate")
+        stage = "build"
         const runtimeIdentity = hash(JSON.stringify({ id: before.id, image: before.image, startedAt: before.startedAt }))
         const codeBundle = await Bun.build({ entrypoints: [path.join(repositoryRoot, "apps/web/scripts/canary-rerank-runtime-entry.ts")], target: "bun", minify: true })
         const hostBundle = await Bun.build({ entrypoints: [path.join(repositoryRoot, "apps/web/scripts/canary-host-entry.ts")], target: "node", minify: true })
@@ -79,19 +84,31 @@ async function main() {
         const entry = Buffer.from(await codeBundle.outputs[0].arrayBuffer()), host = Buffer.from(await hostBundle.outputs[0].arrayBuffer())
         const codeSha = hash(entry), hostSha = hash(host)
         report.codeSha = codeSha; report.hostSha = hostSha
-        const config = { containerId: before.id, executionId: pack.executionId, runtimeIdentity, codeSha, planHash: pack.planHash, requestSetHash: pack.requestSetHash, providerProfileHash: profileHash, calls: 8 }
+        const config = { containerId: before.id, executionId: pack.executionId, runtimeIdentity, codeSha, planHash: pack.planHash, requestSetHash: pack.requestSetHash, providerProfileHash: profileHash, calls: 8, runtimeDirectory: "petrichor-rerank-runtime" }
         const binding = { version: 1, executionId: pack.executionId, runtimeIdentity, codeSha, planHash: pack.planHash, requestSetHash: pack.requestSetHash, providerProfileHash: profileHash, calls: 8, expiresAt: new Date(Date.now() + 1_800_000).toISOString() }
         const hostPayload = JSON.stringify({ owner, host: host.toString(), config, binding })
         const hostBootstrap = `const fs=require('fs'),c=require('crypto'),p=${JSON.stringify(remoteHostRoot)},b=fs.readFileSync(0);if(process.getuid()!==0||c.createHash('sha256').update(b).digest('hex')!==${JSON.stringify(hash(hostPayload))})throw Error('gate');const x=JSON.parse(b);fs.mkdirSync(p,{mode:448});for(const [n,v] of Object.entries({'owner':x.owner,'host.mjs':x.host,'command-config.json':JSON.stringify(x.config),'binding.json':JSON.stringify(x.binding)}))fs.writeFileSync(p+'/'+n,v,{flag:'wx',mode:384});console.log('{"ready":true}')`
+        stage = "host_transfer"
         remoteRootCreated = true
-        if (!(await remoteJson(`/usr/bin/node -e ${quote(hostBootstrap)}`, 30_000)).ready) throw new Error("host_transfer_gate")
+        const hostTransfer = await ssh(`/usr/bin/node -e ${quote(hostBootstrap)}`, hostPayload, 30_000)
+        if (!JSON.parse(hostTransfer.output).ready) throw new Error("host_transfer_gate")
         const approval = { version: 1, executionId: pack.executionId, planHash: pack.planHash, codeSha, providerProfileHash: profileHash, requestSetHash: pack.requestSetHash, userId: "Gene", phase: "rerank", maxCalls: 8, expiresAt: binding.expiresAt }
         const runtimePayload = JSON.stringify({ owner, entry: entry.toString(), approval, pack })
         const runtimeBootstrap = `const fs=require('fs'),c=require('crypto'),p=${JSON.stringify(runtimeRoot)},b=fs.readFileSync(0);if(process.getuid()!==1000||c.createHash('sha256').update(b).digest('hex')!==${JSON.stringify(hash(runtimePayload))})throw Error('gate');const x=JSON.parse(b);fs.mkdirSync(p,{mode:448});for(const [n,v] of Object.entries({'owner':x.owner,'entry.js':x.entry,'approval-rerank.json':JSON.stringify(x.approval),'requests-rerank.json':JSON.stringify(x.pack)}))fs.writeFileSync(p+'/'+n,v,{flag:'wx',mode:384});console.log('{"ready":true}')`
+        stage = "runtime_transfer"
         runtimeCreated = true
         const runtimeTransfer = await ssh(`docker exec -i --user 1000 ${before.id} bun -e ${quote(runtimeBootstrap)}`, runtimePayload, 30_000)
         if (!JSON.parse(runtimeTransfer.output).ready) throw new Error("runtime_transfer_gate")
+        stage = "host_initialize"
         if (!(await remoteJson(`/usr/bin/node ${quote(remoteHostRoot + "/host.mjs")} initialize ${pack.executionId}`, 90_000)).initialized) throw new Error("host_initialize_gate")
+        if (process.argv[2] === "--remote-preflight") {
+            stage = "runtime_status"
+            const status = await remoteJson(`/usr/bin/node ${quote(remoteHostRoot + "/host.mjs")} status ${pack.executionId}`, 30_000)
+            if (!Array.isArray(status.states) || status.states.length !== 8 || status.states.some(state => state !== "not_started")
+                || !Array.isArray(status.acknowledged) || status.acknowledged.some(value => value !== false)) throw new Error("preflight_status_gate")
+            Object.assign(report, { passed: true, setupOnly: true, modelCalls: 0, databaseWrites: 0, retries: 0 })
+            return
+        }
         const localReceived = path.join(outputRoot, "received"); localPrivateDirectory(localReceived)
         const mirror = async (ordinal: number) => {
             const remoteDir = `${remoteHostRoot}/journal/received-${ordinal}`
@@ -104,6 +121,7 @@ async function main() {
             }
             return finalizeArtifactSpool(destination, manifest)
         }
+        stage = "execute"
         for (let ordinal = 0; ordinal < 8; ordinal++) {
             const step = await remoteJson(`/usr/bin/node ${quote(remoteHostRoot + "/host.mjs")} step ${pack.executionId} ${ordinal}`, 90_000)
             if (step.ordinal !== ordinal || step.acknowledged !== true || typeof step.sha256 !== "string") throw new Error("host_step_gate")
@@ -112,8 +130,10 @@ async function main() {
             report.completed = ordinal + 1; report.modelCalls = ordinal + 1
             fs.writeFileSync(path.join(outputRoot, "progress.json"), JSON.stringify(report), { flag: ordinal === 0 ? "wx" : "w", mode: 0o600 })
         }
+        stage = "final_status"
         const status = await remoteJson(`/usr/bin/node ${quote(remoteHostRoot + "/host.mjs")} status ${pack.executionId}`, 30_000)
         if (!Array.isArray(status.states) || status.states.length !== 8 || status.states.some(state => state !== "persisted") || !Array.isArray(status.acknowledged) || status.acknowledged.some(value => value !== true)) throw new Error("host_final_status_gate")
+        stage = "consume_results"
         const evaluation = evaluateOfflineEmbeddingCorpus(corpus)
         const cases = evaluation.cases.map((item, index) => {
             const question = syntheticQaDataset.cases.find(row => row.id === item.id)!
@@ -126,7 +146,8 @@ async function main() {
         Object.assign(report, { passed: true, completed: 8, modelCalls: 8, allResultsConsumed: true, resultHash: safe.resultHash, rerankerProfileVerified: false,
             rawTextPersisted: false, rawVectorsPersisted: false, productionIndexWrites: 0 })
     } catch (error) {
-        report.error = error instanceof Error && /^[a-z_]+$/.test(error.message) ? error.message : "rerank_canary_failed"
+        const reason = error instanceof Error && /^[a-z_]+$/.test(error.message) ? error.message : "rerank_canary_failed"
+        report.error = `${stage}_${reason}`
     } finally {
         if (runtimeCreated && before) {
             const cleanup = `const fs=require('fs'),p=${JSON.stringify(runtimeRoot)},o=${JSON.stringify(pack.executionId)};if(!fs.existsSync(p)){console.log('{"absent":true}');process.exit(0)}const s=fs.lstatSync(p);if(process.getuid()!==1000||s.uid!==1000||!s.isDirectory()||s.isSymbolicLink()||(s.mode&63)||fs.readFileSync(p+'/owner','utf8')!==o)throw Error('owner');fs.rmSync(p,{recursive:true});console.log(JSON.stringify({absent:!fs.existsSync(p)}));`

@@ -5,15 +5,18 @@ import type { CanaryRuntimePort } from "./canary-host-controller"
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
 const configSchema = z.object({ containerId: digest, executionId: z.string().uuid(), runtimeIdentity: digest,
     codeSha: digest, planHash: digest, requestSetHash: digest, providerProfileHash: digest,
-    calls: z.number().int().min(1).max(22) }).strict()
+    calls: z.number().int().min(1).max(22), runtimeDirectory: z.string().regex(/^[a-z0-9-]{1,40}$/).default("petrichor-runtime") }).strict()
 export type CanaryCommand = { args: string[]; timeout: number; maxBuffer: number }
 export type CanaryCommandRunner = (command: CanaryCommand) => Promise<string>
 
 /** 仅在宿主显式调用；不使用shell、不传env/Key，不返回原始stderr。 */
 export const runCanaryDockerCommand: CanaryCommandRunner = command => new Promise((resolve, reject) => {
     execFile("docker", command.args, { encoding: "utf8", timeout: command.timeout, maxBuffer: command.maxBuffer,
-        env: { PATH: "/usr/local/bin:/usr/bin:/bin", LANG: "C" } }, (error, stdout) => {
-        if (error) reject(new Error("canary_command_failed")); else resolve(stdout)
+        env: { PATH: "/usr/local/bin:/usr/bin:/bin", LANG: "C" } }, (error, stdout, stderr) => {
+        if (error) {
+            const category = /"category":"([A-Za-z0-9_]+)"/.exec(stderr)?.[1] ?? (/timeout|timed out/i.test(stderr) ? "timeout" : "command")
+            reject(new Error(`canary_command_failed_${category}`))
+        } else resolve(stdout)
     })
 })
 export function containerRuntimeIdentity(id: string, image: string, startedAt: string) {
@@ -25,7 +28,10 @@ export function createCanaryCommandPort(raw: unknown, runner: CanaryCommandRunne
     const index = (n: number) => { if (!Number.isInteger(n) || n < 0 || n >= c.calls) throw new Error("command_ordinal_invalid"); return String(n) }
     const call = async (args: string[], timeout = 10000) => {
         let output: string
-        try { output = await runner({ args, timeout, maxBuffer: 65536 }) } catch { throw new Error("canary_command_failed") }
+        try { output = await runner({ args, timeout, maxBuffer: 65536 }) } catch (error) {
+            if (error instanceof Error && /^canary_command_failed_[A-Za-z0-9_]+$/.test(error.message)) throw error
+            throw new Error("canary_command_failed")
+        }
         if (Buffer.byteLength(output) > 65536) throw new Error("command_output_limit")
         try { return JSON.parse(output) as unknown } catch { throw new Error("command_output_invalid") }
     }
@@ -38,7 +44,7 @@ export function createCanaryCommandPort(raw: unknown, runner: CanaryCommandRunne
     }
     const action = async (name: string, value = "") => {
         await checkContainer()
-        const result = await call(["exec", "--user", "1000", c.containerId, "bun", `/tmp/petrichor-runtime-${c.executionId}/entry.js`, name, c.executionId, value], name === "execute-one" ? 45000 : 10000)
+        const result = await call(["exec", "--user", "1000", c.containerId, "bun", `/tmp/${c.runtimeDirectory}-${c.executionId}/entry.js`, name, c.executionId, value], name === "execute-one" ? 45000 : 10000)
         await checkContainer()
         return result
     }

@@ -37,4 +37,7 @@ async function main() {
         throw new Error("batch_step_failed")
     }
 }
-if (import.meta.main) main().catch(() => { console.error(JSON.stringify({ failed: true, category: "host_execution_failed", retryAllowed: false })); process.exitCode = 1 })
+if (import.meta.main) main().catch(error => {
+    const category = error instanceof Error && /^canary_command_failed_[A-Za-z0-9_]+$/.test(error.message) ? error.message.slice("canary_command_failed_".length) : "host_execution_failed"
+    console.error(JSON.stringify({ failed: true, category, retryAllowed: false })); process.exitCode = 1
+})
