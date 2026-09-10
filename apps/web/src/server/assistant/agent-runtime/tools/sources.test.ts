@@ -271,10 +271,50 @@ describe("unified source tools", () => {
         })
     })
 
+    it("混合范围中慢速外部源超时不阻塞本地候选", async () => {
+        const local = { ...source, ref: "doc-library:3" as const, kind: "doc-library" as const, id: "3", name: "本地文档" }
+        mocks.resolveSources.mockResolvedValue({ scope: { mode: "all" }, selected: [local, source], unavailable: [] })
+        mocks.searchDocuments.mockResolvedValueOnce([{
+            documentId: "12", chunkId: "1", libraryId: "3", title: "本地命中", snippet: "本地摘要", href: "/document/12",
+            expectedUpdatedAt: new Date(0).toISOString(), anchorContentHash: "a".repeat(64),
+        }])
+        mocks.readDocument.mockResolvedValueOnce({ documentId: "12", href: "/document/12", title: "本地命中", fileName: "local.md",
+            updatedAt: new Date(0).toISOString(), anchorIndex: 1, chunks: [{ chunkIndex: 1, text: "本地证据", locator: null }] })
+        mocks.searchGeneOps.mockImplementationOnce(() => new Promise((resolve) => setTimeout(() => resolve([]), 3_000)))
+        const ctx = { ...context(), focus: { sourceScope: { mode: "all" } }, queryDeadlineAt: Date.now() + 2_000 }
+        const tool = sourceTools.find((item) => item.id === "source.lookup")!
+        const raw = await tool.execute(ctx, { query: "合成" })
+        const normalized = tool.normalize!(raw, {})
+        expect(normalized.evidence?.map((item) => item.sourceId)).toEqual(["12:chunk:1"])
+        expect(normalized.data).toMatchObject({ readCount: 1, failedReadCount: 0 })
+        expect(JSON.stringify(normalized.data)).toContain("source_timeout")
+    })
+
+    it("混合范围中外部深读超时仍保留已完成的本地证据", async () => {
+        const local = { ...source, ref: "doc-library:3" as const, kind: "doc-library" as const, id: "3", name: "本地文档" }
+        mocks.resolveSources.mockResolvedValue({ scope: { mode: "all" }, selected: [local, source], unavailable: [] })
+        mocks.searchDocuments.mockResolvedValueOnce([{
+            documentId: "12", chunkId: "1", libraryId: "3", title: "本地命中", snippet: "本地摘要", href: "/document/12",
+            expectedUpdatedAt: new Date(0).toISOString(), anchorContentHash: "a".repeat(64),
+        }])
+        mocks.readDocument.mockResolvedValueOnce({ documentId: "12", href: "/document/12", title: "本地命中", fileName: "local.md",
+            updatedAt: new Date(0).toISOString(), anchorIndex: 1, chunks: [{ chunkIndex: 1, text: "本地证据", locator: null }] })
+        mocks.searchGeneOps.mockResolvedValueOnce([{
+            result_key: "r1", document_id: "doc-1", title: "外部候选", snippet: "外部摘要", source_url: "https://example.com/post/1",
+        }])
+        mocks.readGeneOpsChunks.mockImplementationOnce(() => new Promise((resolve) => setTimeout(() => resolve([]), 3_000)))
+        const ctx = { ...context(), focus: { sourceScope: { mode: "all" } }, queryDeadlineAt: Date.now() + 2_000 }
+        const tool = sourceTools.find((item) => item.id === "source.lookup")!
+        const raw = await tool.execute(ctx, { query: "合成" })
+        const normalized = tool.normalize!(raw, {})
+        expect(normalized.evidence?.map((item) => item.sourceId)).toEqual(["12:chunk:1"])
+        expect(normalized.data).toMatchObject({ readCount: 1, failedReadCount: 1 })
+    })
+
     it("external-only failure is explicit instead of falling back", async () => {
         mocks.searchGeneOps.mockRejectedValueOnce(new Error("GeneOps unavailable"))
         const tool = sourceTools.find((item) => item.id === "source.search")!
-        await expect(tool.execute(context(), { query: "Amazon" })).rejects.toThrow("GeneOps unavailable")
+        await expect(tool.execute(context(), { query: "Amazon" })).rejects.toThrow("GeneOps 数据源不可用")
     })
 
     it("rejects a candidate whose read kind does not match its source", async () => {

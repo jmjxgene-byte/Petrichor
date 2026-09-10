@@ -92,6 +92,48 @@ type SourceReadOutput = {
 }
 
 const RRF_K = 60
+const SOURCE_LOOKUP_TASK_BUDGET_MS = 6_000
+const SOURCE_READ_TASK_BUDGET_MS = 1_500
+
+/**
+ * 统一资料源必须在 source.lookup 的 8 秒总预算内收敛。
+ * 某个外部适配器迟迟不返回时只取消该适配器，不能让本地候选一起被工具级
+ * timeout 丢掉；子信号同时传给底层查询，避免留下未受控的网络请求。
+ */
+async function runSourceTask<T>(
+    ctx: ToolExecutionContext,
+    run: (taskCtx: ToolExecutionContext) => Promise<T>,
+    budgetMs: number,
+): Promise<T> {
+    if (ctx.abortSignal?.aborted) throw new Error("source_cancelled")
+    const deadline = Math.min(ctx.queryDeadlineAt ?? Infinity, Date.now() + budgetMs)
+    const controller = new AbortController()
+    const abort = () => controller.abort()
+    ctx.abortSignal?.addEventListener("abort", abort, { once: true })
+    const timeoutMs = Math.max(1, deadline - Date.now())
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    try {
+        const timedOut = new Promise<never>((_resolve, reject) => {
+            timeout = setTimeout(() => {
+                controller.abort()
+                reject(new Error("source_timeout"))
+            }, timeoutMs)
+        })
+        return await Promise.race([run({ ...ctx, abortSignal: controller.signal, queryDeadlineAt: deadline }), timedOut])
+    } catch (error) {
+        if (controller.signal.aborted && !ctx.abortSignal?.aborted) throw new Error("source_timeout")
+        throw error
+    } finally {
+        if (timeout) clearTimeout(timeout)
+        ctx.abortSignal?.removeEventListener("abort", abort)
+    }
+}
+
+function safeSourceFailure(error: unknown) {
+    if (error instanceof Error && ["source_timeout", "source_cancelled"].includes(error.message)) return error.message
+    if (error instanceof Error && error.message === "本轮关键词文档版本已变化，未合并新旧内容") return error.message
+    return "source_unavailable"
+}
 
 function requireTool(tools: AgentToolDefinition[], id: string) {
     const found = tools.find((item) => item.id === id)
@@ -297,6 +339,7 @@ async function searchGeneOps(
 async function executeSourceSearch(
     ctx: ToolExecutionContext,
     raw: unknown,
+    reserveMs = 0,
 ): Promise<SourceSearchOutput> {
     const input = sourceSearchSchema.parse(raw)
     const resolved = await resolveAssistantSources(ctx.userId, (ctx.focus ?? null) as AssistantFocus | null)
@@ -309,37 +352,41 @@ async function executeSourceSearch(
 
     const tasks: Array<{
         source: AssistantSourceCatalogItem
-        run: () => Promise<SourceCandidate[]>
+        run: (taskCtx: ToolExecutionContext) => Promise<SourceCandidate[]>
     }> = []
     const knowledgeSources = sources.filter((source) => source.kind === "knowledge-base")
     const documentSources = sources.filter((source) => source.kind === "doc-library")
     const externalSources = sources.filter((source) => source.kind === "external-source")
     if (resolved.scope.mode === "selected") {
         for (const source of knowledgeSources) {
-            tasks.push({ source, run: async () => await searchKnowledge(ctx, source, input.query) })
+            tasks.push({ source, run: async (taskCtx) => await searchKnowledge(taskCtx, source, input.query) })
         }
-        if (documentSources[0]) tasks.push({ source: documentSources[0], run: async () => documentSources.length === 1
-            ? searchDocumentLibrary(ctx, documentSources[0], input.query, reportDegraded)
-            : searchDocumentsAcross(ctx, documentSources, input.query, reportDegraded) })
+        if (documentSources[0]) tasks.push({ source: documentSources[0], run: async (taskCtx) => documentSources.length === 1
+            ? searchDocumentLibrary(taskCtx, documentSources[0], input.query, reportDegraded)
+            : searchDocumentsAcross(taskCtx, documentSources, input.query, reportDegraded) })
     } else {
         if (knowledgeSources[0]) {
             tasks.push({
                 source: { ...knowledgeSources[0], name: "全部知识库" },
-                run: async () => await searchKnowledgeAcross(ctx, knowledgeSources, input.query),
+                run: async (taskCtx) => await searchKnowledgeAcross(taskCtx, knowledgeSources, input.query),
             })
         }
         if (documentSources[0]) {
             tasks.push({
                 source: { ...documentSources[0], name: "全部文档库" },
-                run: async () => await searchDocumentsAcross(ctx, documentSources, input.query, reportDegraded),
+                run: async (taskCtx) => await searchDocumentsAcross(taskCtx, documentSources, input.query, reportDegraded),
             })
         }
     }
     for (const source of externalSources) {
-        tasks.push({ source, run: async () => await searchGeneOps(ctx, source, input) })
+        tasks.push({ source, run: async (taskCtx) => await searchGeneOps(taskCtx, source, input) })
     }
 
-    const settled = await Promise.allSettled(tasks.map((task) => task.run()))
+    const taskBudget = Math.min(
+        SOURCE_LOOKUP_TASK_BUDGET_MS,
+        Math.max(1, (ctx.queryDeadlineAt ?? Infinity) - Date.now() - reserveMs),
+    )
+    const settled = await Promise.allSettled(tasks.map((task) => runSourceTask(ctx, task.run, taskBudget)))
 
     const candidates: SourceCandidate[] = []
     const degradedSources = resolved.unavailable.map((source) => ({
@@ -356,14 +403,14 @@ async function executeSourceSearch(
             degradedSources.push({
                 sourceRef: source.ref,
                 sourceName: source.name,
-                message: result.reason instanceof Error ? result.reason.message : "查询失败",
+                message: safeSourceFailure(result.reason),
             })
         }
     })
 
     const externalOnly = sources.every((source) => source.kind === "external-source")
     if (externalOnly && degradedSources.length > 0 && candidates.length === 0) {
-        throw new Error(degradedSources[0]?.message ?? "GeneOps 数据源不可用")
+        throw new Error(degradedSources[0]?.message === "source_timeout" ? "source_timeout" : "GeneOps 数据源不可用")
     }
     const deduped = new Map<string, SourceCandidate>()
     for (const candidate of [...candidates].sort((a, b) => b.score - a.score)) {
@@ -508,7 +555,7 @@ function annotateEvidence(
 }
 
 async function executeSourceLookup(ctx: ToolExecutionContext, raw: unknown) {
-    const search = await executeSourceSearch(ctx, raw)
+    const search = await executeSourceSearch(ctx, raw, SOURCE_READ_TASK_BUDGET_MS)
     // 每轮最多3个窗口；两轮合计不超过快速检索的6窗口上限。
     // 只在最靠前的6个候选内做文档去重优先，不能为了凑来源去深读长尾。
     const pool = search.candidates.slice(0, 6)
@@ -528,7 +575,7 @@ async function executeSourceLookup(ctx: ToolExecutionContext, raw: unknown) {
         if (!selected.some((item) => item.candidateKey === candidate.candidateKey)) selected.push(candidate)
     }
     const reads = await Promise.allSettled(
-        selected.map((candidate) => executeSourceRead(ctx, candidate.read)),
+        selected.map((candidate) => runSourceTask(ctx, (readCtx) => executeSourceRead(readCtx, candidate.read), SOURCE_READ_TASK_BUDGET_MS)),
     )
     return { search, reads }
 }
