@@ -51,7 +51,9 @@ export function validateSiteGraphDraft(
             severity: "error",
             code: "missing_root",
             target: SITE_GRAPH_ROOT_KEY,
-            message: "缺少根节点，前台点群无法建立层级",
+            message: draft.nodes.length === 0
+                ? "当前星图为空：请先公开分享至少一篇知识库文章，再运行「Agent 生成」；本地文档与外部数据源不会自动公开。"
+                : "缺少根节点，前台点群无法建立层级",
         })
     }
 
@@ -245,7 +247,7 @@ export function validateSiteGraphDraft(
 
     const errorCount = issues.filter((issue) => issue.severity === "error").length
     const warningCount = issues.filter((issue) => issue.severity === "warning").length
-    const score = Math.max(0, 100 - errorCount * 20 - warningCount * 5)
+    const score = draft.nodes.length === 0 ? 0 : Math.max(0, 100 - errorCount * 20 - warningCount * 5)
 
     return {
         score,

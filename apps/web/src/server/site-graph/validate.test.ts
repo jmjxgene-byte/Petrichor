@@ -50,6 +50,12 @@ function codesOf(report: ReturnType<typeof validateSiteGraphDraft>) {
 }
 
 describe("validateSiteGraphDraft", () => {
+    it("空图为0分且明确提示公开文章和生成步骤，不绕过发布校验", () => {
+        const result = validateSiteGraphDraft({ nodes: [], edges: [] })
+        expect(result.passed).toBe(false)
+        expect(result.score).toBe(0)
+        expect(result.issues.find(i => i.code === "missing_root")?.message).toContain("本地文档与外部数据源不会自动公开")
+    })
     it("结构完好的图谱校验通过并给出层级深度", () => {
         const report = validateSiteGraphDraft(baseDraft(), { publicArticleIds: new Set(["1"]) })
         expect(report.passed).toBe(true)

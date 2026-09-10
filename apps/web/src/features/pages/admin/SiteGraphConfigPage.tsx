@@ -656,7 +656,8 @@ export function SiteGraphConfigPage() {
                             {generating ? <Loader2 className="animate-spin" /> : <Sparkles className="text-primary" />}
                             Agent 生成
                         </Button>
-                        <Button type="button" size="sm" onClick={() => void handlePublish()} disabled={disabled}>
+                        <Button type="button" size="sm" onClick={() => void handlePublish()} disabled={disabled || !validation?.passed || !stats?.nodeCount}
+                            aria-describedby="site-graph-publish-help">
                             <Send />
                             发布到前台
                         </Button>
@@ -702,6 +703,14 @@ export function SiteGraphConfigPage() {
                         </DropdownMenu>
                     </div>
                 </div>
+
+                <p id="site-graph-publish-help" role="status" className="px-5 pb-4 text-sm text-muted-foreground">
+                    {loading ? "正在检查发布条件…" : !stats?.nodeCount
+                        ? "尚无可发布的星图。请先公开分享至少一篇知识库文章，再点击「Agent 生成」，校验通过后即可发布。本地文档和外部数据源不会自动公开。"
+                        : !validation?.passed
+                            ? "发布已暂停：请根据下方校验报告修复错误项，再重新校验。评分不代表已满足发布条件。"
+                            : "校验已通过，可以发布。服务端仍会在发布时重新检查公开范围和图谱结构。"}
+                </p>
 
                 {/* 类型图例：表格与星图共用这套颜色，放在头部当索引 */}
                 <div className="relative flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t bg-muted/30 px-5 py-2.5">
