@@ -96,6 +96,7 @@ function AboutStoryLoadingSkeleton() {
 }
 
 export function AboutPage() {
+    const branding = useSiteBranding()
     const [profile, setProfile] = React.useState<AboutProfileResponse>(fallbackProfile)
     const [loading, setLoading] = React.useState(true)
     const [error, setError] = React.useState<string | null>(null)
@@ -226,22 +227,20 @@ export function AboutPage() {
                             </section>
                         </div>
 
-                        {profile.quote || profile.contactText || (profile.contactLabel && profile.contactHref) ? <div className="mt-4 max-w-xl">
+                        {profile.quote || (branding.showContact && branding.contactLabel && branding.contactHref) ? <div className="mt-4 max-w-xl">
                             <BlueNote>
                                 {profile.quote ? <span className="block break-words italic">"{profile.quote}"</span> : null}
                                 {(() => {
-                                    const hasLink = Boolean(profile.contactLabel && profile.contactHref)
-                                    if (!profile.contactText && !hasLink) return null
+                                    const hasLink = Boolean(branding.showContact && branding.contactLabel && branding.contactHref)
+                                    if (!hasLink) return null
                                     return (
                                         <span className="mt-2.5 block not-italic">
-                                            {profile.contactText}
-                                            {profile.contactText && hasLink ? " " : ""}
                                             {hasLink ? (
                                                 <a
-                                                    href={profile.contactHref}
+                                                    href={branding.contactHref}
                                                     className="font-semibold underline underline-offset-2"
                                                 >
-                                                    {profile.contactLabel}
+                                                    {branding.contactLabel}
                                                 </a>
                                             ) : null}
                                         </span>

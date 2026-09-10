@@ -110,7 +110,8 @@ export async function adminAboutProfileUpdate(request: AppRequest) {
 
 async function loadPublicAboutProfileResponse() {
     const profile = await loadAboutProfileOrNull()
-    return buildAboutProfileResponse(profile)
+    // 旧联系方式仅保留在管理接口；前台统一从品牌公开接口读取。
+    return { ...buildAboutProfileResponse(profile), contactText: "", contactLabel: "", contactHref: "" }
 }
 
 async function loadAboutProfileOrNull() {

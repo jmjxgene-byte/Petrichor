@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm"
+import { publicSiteBranding } from "@/lib/site-branding"
 import {
     DEFAULT_RETYPESET_APPEARANCE,
     type RetypesetAppearanceConfig,
@@ -18,7 +19,8 @@ export const loadCachedPublicSiteAppearance = cachePublicContent(
 
 export async function loadPublicSiteAppearanceResponse() {
     const record = await loadSiteAppearanceOrNull()
-    return buildSiteAppearanceResponse(record)
+    const response = buildSiteAppearanceResponse(record)
+    return { ...response, branding: publicSiteBranding(response.branding) }
 }
 
 export async function loadPublicSiteAppearanceForFirstPaint(): Promise<RetypesetAppearanceConfig> {

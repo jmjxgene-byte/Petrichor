@@ -33,3 +33,10 @@ export function readSiteBranding(raw: unknown): SiteBranding {
     try { return siteBrandingSchema.parse(typeof raw === "string" ? JSON.parse(raw) : raw ?? {}) }
     catch { return DEFAULT_SITE_BRANDING }
 }
+export function publicSiteBranding(branding: SiteBranding): SiteBranding {
+    return { ...branding,
+        contactHref: branding.showContact ? branding.contactHref : "",
+        contactLabel: branding.showContact ? branding.contactLabel : "",
+        maintainer: branding.showMaintainer ? branding.maintainer : "",
+    }
+}

@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest"
-import { DEFAULT_SITE_BRANDING, readSiteBranding, siteBrandingSchema } from "./site-branding"
+import { DEFAULT_SITE_BRANDING, readSiteBranding, siteBrandingSchema, publicSiteBranding } from "./site-branding"
 import { validateSiteAppearanceInput } from "../server/appearance/logic"
 import { validateAboutProfileInput } from "../server/about/logic"
 describe("站点品牌配置边界", () => {
+    it("隐藏联系方式和署名时公开投影不暴露存档值", () => {
+        const stored = { ...DEFAULT_SITE_BRANDING, contactHref: "mailto:private@example.test", contactLabel: "联系", maintainer: "存档维护者" }
+        expect(publicSiteBranding(stored)).toMatchObject({ contactHref: "", contactLabel: "", maintainer: "" })
+        expect(stored.contactHref).toBe("mailto:private@example.test")
+        expect(publicSiteBranding({ ...stored, showContact: true }).contactHref).toBe(stored.contactHref)
+    })
     it("空配置隐藏个人信息与推广入口", () => {
         expect(DEFAULT_SITE_BRANDING).toMatchObject({ showContact: false, showMaintainer: false, showProjectPage: false, contactHref: "", avatarUrl: "" })
         expect(readSiteBranding("{broken")).toEqual(DEFAULT_SITE_BRANDING)

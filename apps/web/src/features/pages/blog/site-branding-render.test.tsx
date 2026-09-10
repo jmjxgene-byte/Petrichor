@@ -9,6 +9,12 @@ import { PetrichorPage } from "../petrichor/PetrichorPage"
 import { AboutPage } from "../about/AboutPage"
 beforeEach(() => { mock.branding = { ...DEFAULT_SITE_BRANDING } })
 describe("品牌公开渲染", () => {
+    it("关于我联系方式与页脚共享品牌开关", () => {
+        mock.branding = { ...DEFAULT_SITE_BRANDING, showContact: true, contactLabel: "新联系入口", contactHref: "mailto:new@example.test" }
+        expect(renderToStaticMarkup(<MemoryRouter><AboutPage /></MemoryRouter>)).toContain("mailto:new@example.test")
+        mock.branding.showContact = false
+        expect(renderToStaticMarkup(<MemoryRouter><AboutPage /></MemoryRouter>)).not.toContain("mailto:new@example.test")
+    })
     it("未加载的关于页不展示上游头像、个人简介或空引用便签", () => {
         const html = renderToStaticMarkup(<MemoryRouter><AboutPage /></MemoryRouter>)
         expect(html).not.toContain("/about-avatar.png")

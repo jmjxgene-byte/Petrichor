@@ -252,9 +252,9 @@ export function AboutProfileConfigPage() {
 
             <div className="space-y-4 rounded-lg border border-dashed p-4">
               <div className="space-y-1">
-                <Label>联系方式（蓝色便签）</Label>
+                <Label>旧版联系方式（兼容存档）</Label>
                 <p className="text-xs text-muted-foreground">
-                  显示在 quote 下方。三项任一留空即隐藏对应部分；「链接文字」与「链接地址」需同时填写才会渲染为可点击链接。
+                  此处保留原有数据，不再控制前台。蓝色便签和页脚的联系方式统一在「外观设置 → 站点品牌」配置。
                 </p>
               </div>
               <div className="grid gap-4 md:grid-cols-3">
