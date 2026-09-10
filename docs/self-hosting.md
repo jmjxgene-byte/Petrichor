@@ -6,6 +6,7 @@
 
 - Web 只绑定宿主机 `127.0.0.1:3000`，公网仅通过 OpenResty/Cloudflare 访问。
 - 构建与运行使用 `Dockerfile.selfhost`；Vercel 配置和 `Dockerfile.vercel` 保持不变。
+- `Dockerfile.selfhost` 的 Bun 1.3.14 Debian 基础层固定为已在 Gene-OVH 核验的 digest；构建时使用 `--pull=false`，避免标签漂移。
 - 容器不执行数据库迁移；迁移仍通过本地受控 `MIGRATION_DATABASE_URL` 在发布前完成。
 - `.env.production` 只存在于服务器且权限为 0600，不进入镜像、Git、日志或 1Panel 公共变量页面。
 - 候选容器也通过 Compose 的 `env_file` 加载同一配置，不能直接用 `docker run --env-file` 替代：后者会保留单引号字面量，使加密盐等配置校验失败。不要通过修改原密钥来规避解析差异。
