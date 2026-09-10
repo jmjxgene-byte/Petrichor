@@ -14,12 +14,14 @@ const dataRoot = path.join(repositoryRoot, ".data")
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex")
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`
 // 由不可覆盖的本机请求包固定执行身份；不得在运行时生成或替换。
-const owner = "ae3a2166-4be4-4cd7-82ec-25e60d589039"
+const owner = process.env.QA_RERANK_EXECUTION_ID ?? "ae3a2166-4be4-4cd7-82ec-25e60d589039"
+if (!/^[a-f0-9-]{36}$/.test(owner)) throw new Error("rerank_execution_id_gate")
 const remoteHostRoot = `/root/petrichor-canary-${owner}`
 const runtimeRoot = `/tmp/petrichor-rerank-runtime-${owner}`
 const outputRoot = path.join(dataRoot, process.argv[2] === "--remote-preflight" ? `rerank-runtime-preflight-${owner}-${process.pid}` : `rerank-canary-${owner}`)
 const embeddingDirectory = path.join(dataRoot, "embedding-approved")
-const packDirectory = path.join(dataRoot, "rerank-approved")
+const packDirectory = path.resolve(repositoryRoot, process.env.QA_RERANK_PACK_DIRECTORY ?? ".data/rerank-approved")
+if (!packDirectory.startsWith(dataRoot + path.sep)) throw new Error("rerank_pack_directory_gate")
 const profileHash = process.env.QA_RERANK_PROFILE_HASH
 
 async function run(argv: string[], input?: string, timeout = 30_000) {
@@ -63,7 +65,7 @@ async function main() {
     const plan = planGroundedCanary(), corpus = loadOfflineEmbeddingCorpus(embeddingDirectory), preflight = prepareRerankPreflight(corpus)
     if (preflight.requestSetHash !== JSON.parse(readPrivateSpoolFile(path.join(packDirectory, "requests-rerank.json"), 512 * 1024).toString()).requestSetHash) throw new Error("rerank_pack_changed")
     const pack = JSON.parse(readPrivateSpoolFile(path.join(packDirectory, "requests-rerank.json"), 512 * 1024).toString()) as { version: 1; executionId: string; planHash: string; requestSetHash: string; requests: unknown[] }
-    if (pack.version !== 1 || pack.planHash !== plan.planHash || pack.requests.length !== 8 || pack.executionId !== "ae3a2166-4be4-4cd7-82ec-25e60d589039") throw new Error("rerank_pack_identity")
+    if (pack.version !== 1 || pack.planHash !== plan.planHash || pack.requests.length !== 8 || pack.executionId !== owner) throw new Error("rerank_pack_identity")
     localPrivateDirectory(outputRoot)
     const report: Record<string, unknown> = { passed: false, executionId: pack.executionId, planHash: pack.planHash, requestSetHash: pack.requestSetHash,
         model: "BAAI/bge-reranker-v2-m3", sharedProviderCredential: true, modelCalls: 0, databaseWrites: 0, retries: 0, completed: 0 }
