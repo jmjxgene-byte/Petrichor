@@ -17,6 +17,7 @@ describe("重排结果消费契约", () => {
     it.each([
         { results: [{ index: 0, relevance_score: 0.9 }, { index: 0, relevance_score: 0.1 }, { index: 2, relevance_score: 0 }] },
         { results: [{ index: 0, relevance_score: 0.9 }, { index: 3, relevance_score: 0.1 }, { index: 1, relevance_score: 0 }] },
+        { results: [{ index: -1, relevance_score: 0.9 }, { index: 0, relevance_score: 0.1 }, { index: 1, relevance_score: 0 }] },
         { results: [{ index: 0, relevance_score: 0.1 }, { index: 1, relevance_score: 0.9 }, { index: 2, relevance_score: 0 }] },
         { results: [{ index: 0, relevance_score: 0.9, document: { text: "secret" } }, { index: 1, relevance_score: 0.1 }, { index: 2, relevance_score: 0 }] },
     ])("拒绝重复、越界/缺索引、分数乱序和正文回显", raw => {
