@@ -1,5 +1,6 @@
 import { resolveRerankConfig, type RerankConfig } from "@/server/assistant/agent-runtime/config"
 import { buildQueryTokens } from "./tokenize"
+import { z } from "zod"
 
 /**
  * 可插拔 Reranker（§29/§92/§141）。
@@ -31,6 +32,24 @@ export interface Reranker {
         candidates: T[],
         options?: RerankOptions,
     ): Promise<Array<RerankedCandidate<T>>>
+}
+
+const externalRankRowSchema = z.object({ index: z.number().int().nonnegative(), relevance_score: z.number().finite().optional(), score: z.number().finite().optional() }).strict()
+const externalResponseSchema = z.object({ results: z.array(externalRankRowSchema) }).passthrough()
+
+export function parseExternalRerankResults(raw: unknown, candidateCount: number, topN: number) {
+    if (!Number.isInteger(candidateCount) || candidateCount < 1 || candidateCount > 20
+        || !Number.isInteger(topN) || topN < 1 || topN > candidateCount) throw new Error("rerank_candidate_limit")
+    let parsed: z.infer<typeof externalResponseSchema>
+    try { parsed = externalResponseSchema.parse(raw) }
+    catch { throw new Error("rerank_invalid_results") }
+    if (parsed.results.length !== topN || new Set(parsed.results.map(item => item.index)).size !== topN
+        || parsed.results.some((item, index) => item.index >= candidateCount
+            || (item.relevance_score == null && item.score == null)
+            || (index > 0 && (parsed.results[index - 1].relevance_score ?? parsed.results[index - 1].score)! < (item.relevance_score ?? item.score)!))) {
+        throw new Error("rerank_invalid_results")
+    }
+    return parsed.results.map(item => ({ index: item.index, relevance_score: (item.relevance_score ?? item.score)! }))
 }
 
 /** 关闭 rerank 时使用：原样返回，保持 RRF 顺序 */
@@ -107,6 +126,8 @@ export class OpenAiCompatibleReranker implements Reranker {
         if (candidates.length === 0) return []
         options?.signal?.throwIfAborted()
         if (!this.config.baseUrl) throw new Error("RAG_RERANK_BASE_URL 未配置")
+        if (candidates.length > 20) throw new Error("rerank_candidate_limit")
+        if (Buffer.byteLength(query, "utf8") > 8_000) throw new Error("rerank_query_limit")
         const topN = Math.min(options?.topN ?? this.config.topN, candidates.length)
         if (!Number.isInteger(topN) || topN < 1) throw new Error("rerank_invalid_limit")
         const documents = candidates.map((candidate) => renderDocument(candidate))
@@ -145,17 +166,11 @@ export class OpenAiCompatibleReranker implements Reranker {
                 parts.push(value)
             }
         } finally { await reader.cancel(); reader.releaseLock() }
-        const payload = JSON.parse(Buffer.concat(parts).toString("utf8")) as {
-            results?: Array<{ index: number; relevance_score?: number; score?: number }>
-        }
-        const results = payload.results
-        if (!Array.isArray(results) || results.length !== topN || new Set(results.map((item) => item?.index)).size !== topN
-            || results.some((item) => !item || !Number.isInteger(item.index) || item.index < 0 || item.index >= candidates.length
-                || typeof (item.relevance_score ?? item.score) !== "number" || !Number.isFinite(item.relevance_score ?? item.score))) throw new Error("rerank_invalid_results")
+        const results = parseExternalRerankResults(JSON.parse(Buffer.concat(parts).toString("utf8")), candidates.length, topN)
         signal.throwIfAborted()
         return results.map((item) => ({
                 ...candidates[item.index],
-                rerankScore: (item.relevance_score ?? item.score)!,
+                rerankScore: item.relevance_score,
             }))
     }
 }

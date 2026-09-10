@@ -4,6 +4,7 @@ import {
     LocalLexicalReranker,
     NoopReranker,
     OpenAiCompatibleReranker,
+    parseExternalRerankResults,
     rerankAdaptively,
     rerankWithFallback,
 } from "./reranker"
@@ -15,6 +16,16 @@ const candidates = [
 ]
 
 describe("Reranker", () => {
+    it("严格校验外部结果的索引、分数顺序和候选上限", () => {
+        expect(parseExternalRerankResults({ results: [{ index: 1, relevance_score: 0.9 }, { index: 0, relevance_score: 0.2 }] }, 2, 2)).toEqual([
+            { index: 1, relevance_score: 0.9 }, { index: 0, relevance_score: 0.2 },
+        ])
+        expect(() => parseExternalRerankResults({ results: [{ index: 0, relevance_score: 0.2 }, { index: 1, relevance_score: 0.9 }] }, 2, 2)).toThrow("invalid_results")
+        expect(() => parseExternalRerankResults({ results: [{ index: 0, relevance_score: 0.9 }, { index: 0, relevance_score: 0.2 }] }, 2, 2)).toThrow("invalid_results")
+        expect(() => parseExternalRerankResults({ results: [{ index: 2, relevance_score: 0.9 }] }, 2, 1)).toThrow("invalid_results")
+        expect(() => parseExternalRerankResults({ results: [{ index: 0, document: "echo", relevance_score: 0.9 }] }, 1, 1)).toThrow()
+        expect(() => parseExternalRerankResults({ results: [] }, 21, 1)).toThrow("candidate_limit")
+    })
     it("未启用时返回 Noop，保持 RRF 顺序", async () => {
         const reranker = createReranker({
             enabled: false,
