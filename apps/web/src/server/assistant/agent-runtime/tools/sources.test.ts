@@ -271,6 +271,29 @@ describe("unified source tools", () => {
         })
     })
 
+    it("同一来源的多个 GeneOps 深读串行，外部连接并发数保持为一", async () => {
+        mocks.searchGeneOps.mockResolvedValueOnce([
+            { result_key: "r1", document_id: "doc-1", title: "外部一", snippet: "摘要", source_url: "https://example.com/1" },
+            { result_key: "r2", document_id: "doc-2", title: "外部二", snippet: "摘要", source_url: "https://example.com/2" },
+            { result_key: "r3", document_id: "doc-3", title: "外部三", snippet: "摘要", source_url: "https://example.com/3" },
+        ])
+        let inFlight = 0
+        let maxInFlight = 0
+        mocks.readGeneOpsChunks.mockImplementation(async (ctx, input) => {
+            void ctx
+            inFlight += 1
+            maxInFlight = Math.max(maxInFlight, inFlight)
+            await new Promise((resolve) => setTimeout(resolve, 20))
+            inFlight -= 1
+            return [{ document_id: input.documentId, chunk_position: 0, chunk_kind: "post", title: "外部内容", content: "证据", author: null, source_url: "https://example.com" }]
+        })
+        const tool = sourceTools.find((item) => item.id === "source.lookup")!
+        const normalized = tool.normalize!(await tool.execute(context(), { query: "Amazon", limit: 10 }), {})
+        expect(mocks.readGeneOpsChunks).toHaveBeenCalledTimes(3)
+        expect(maxInFlight).toBe(1)
+        expect(normalized.evidence).toHaveLength(3)
+    })
+
     it("混合范围中慢速外部源超时不阻塞本地候选", async () => {
         const local = { ...source, ref: "doc-library:3" as const, kind: "doc-library" as const, id: "3", name: "本地文档" }
         mocks.resolveSources.mockResolvedValue({ scope: { mode: "all" }, selected: [local, source], unavailable: [] })

@@ -574,10 +574,32 @@ async function executeSourceLookup(ctx: ToolExecutionContext, raw: unknown) {
         if (selected.length === 3) break
         if (!selected.some((item) => item.candidateKey === candidate.candidateKey)) selected.push(candidate)
     }
-    const reads = await Promise.allSettled(
-        selected.map((candidate) => runSourceTask(ctx, (readCtx) => executeSourceRead(readCtx, candidate.read), SOURCE_READ_TASK_BUDGET_MS)),
-    )
+    const reads = await readSourceCandidates(ctx, selected)
     return { search, reads }
+}
+
+/** 本地读取可以并行；GeneOps 读取必须串行，保证一个 Function 实例最多一个外部连接。 */
+async function readSourceCandidates(
+    ctx: ToolExecutionContext,
+    candidates: SourceCandidate[],
+): Promise<PromiseSettledResult<SourceReadOutput>[]> {
+    const reads: Array<PromiseSettledResult<SourceReadOutput> | undefined> = Array.from({ length: candidates.length })
+    const readOne = async (index: number, candidate: SourceCandidate) => {
+        try {
+            reads[index] = { status: "fulfilled", value: await runSourceTask(
+                ctx,
+                (readCtx) => executeSourceRead(readCtx, candidate.read),
+                SOURCE_READ_TASK_BUDGET_MS,
+            ) }
+        } catch (reason) {
+            reads[index] = { status: "rejected", reason }
+        }
+    }
+    await Promise.all(candidates.flatMap((candidate, index) => candidate.read.kind === "geneops" ? [] : [readOne(index, candidate)]))
+    for (const [index, candidate] of candidates.entries()) {
+        if (candidate.read.kind === "geneops") await readOne(index, candidate)
+    }
+    return reads.filter((item): item is PromiseSettledResult<SourceReadOutput> => item != null)
 }
 
 function normalizeSourceLookup(output: unknown): ToolNormalizerResult {
