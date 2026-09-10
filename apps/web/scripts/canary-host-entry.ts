@@ -21,14 +21,14 @@ async function main() {
         const snapshot = await port.inspect()
         if (snapshot.states.some(s => s !== "not_started")) throw new Error("runtime_already_started")
         initializeCanaryHost(directory, binding)
-        console.log(JSON.stringify({ initialized: true, calls: 22 })); return
+        console.log(JSON.stringify({ initialized: true, calls: config.calls })); return
     }
     if (action === "status") {
         const snapshot = await port.inspect()
-        console.log(JSON.stringify({ states: snapshot.states, acknowledged: Array.from({ length: 22 }, (_, i) => fs.existsSync(path.join(directory, `ack-${i}.json`))) })); return
+        console.log(JSON.stringify({ states: snapshot.states, acknowledged: Array.from({ length: config.calls }, (_, i) => fs.existsSync(path.join(directory, `ack-${i}.json`))) })); return
     }
     if (fs.existsSync(path.join(root, "terminal-failure.json"))) throw new Error("batch_terminal_no_retry")
-    if (!/^(0|[1-9][0-9]*)$/.test(raw) || Number(raw) >= 22) throw new Error("ordinal_gate")
+    if (!/^(0|[1-9][0-9]*)$/.test(raw) || Number(raw) >= config.calls) throw new Error("ordinal_gate")
     try {
         const result = await advanceCanaryHost({ directory, binding, port, ordinal: Number(raw), mode: "execute-one" })
         console.log(JSON.stringify(result))

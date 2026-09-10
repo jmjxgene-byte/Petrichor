@@ -23,7 +23,7 @@ export type SafeRerankCase = {
 export function parseRerankResponse(raw: unknown, expectedCount: number) {
     if (!Number.isInteger(expectedCount) || expectedCount < 1 || expectedCount > 20) throw new Error("rerank_candidate_count")
     const parsed = responseSchema.parse(raw)
-    if (parsed.results.length !== expectedCount || parsed.results.some((row, index) => row.index !== index
+    if (parsed.results.length !== expectedCount || new Set(parsed.results.map(row => row.index)).size !== expectedCount || parsed.results.some((row, index) => row.index >= expectedCount
         || !Number.isFinite(row.relevance_score) || (index > 0 && parsed.results[index - 1].relevance_score < row.relevance_score))) {
         throw new Error("rerank_result_contract")
     }
