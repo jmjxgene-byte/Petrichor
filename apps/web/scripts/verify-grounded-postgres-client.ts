@@ -56,6 +56,7 @@ try {
   assert(baseline.n === 8, "baseline_eight_migrations")
   const [absent] = await admin`select to_regclass('public.petrichor_doc_index_generation') is null as absent`
   assert(absent.absent, "baseline_has_no_new_index")
+  await admin`update petrichor_site_appearance set public_qa_enabled=false where id=1`
   const [retained] = await admin`insert into petrichor_user(email,password_hash) values('upgrade@example.invalid','synthetic-old-hash') returning id`
   const beforeLedger = await admin`select filename,checksum,applied_at,execution_ms from petrichor_schema_migration order by filename`
   stage = "upgrade_failure_rollback"
@@ -81,6 +82,8 @@ try {
     const [rolledBack] = await admin`select to_regclass('public.petrichor_doc_index_generation') is null as index_absent,
       to_regclass('public.petrichor_qa_rollback_marker') is null as marker_absent`
     assert(rolledBack.index_absent && rolledBack.marker_absent, "upgrade_all_pending_ddl_rolled_back")
+    const [brandingRollback] = await admin`select count(*)::int as n from information_schema.columns where table_schema='public' and table_name='petrichor_site_appearance' and column_name='branding_json'`
+    assert(brandingRollback.n === 0, "branding_column_rolled_back")
     const [oldUser] = await admin`select password_hash from petrichor_user where id=${retained.id}`
     assert(oldUser.password_hash === "synthetic-old-hash", "upgrade_existing_data_rolled_back")
     const afterLedger = await admin`select filename,checksum,applied_at,execution_ms from petrichor_schema_migration order by filename`
@@ -88,7 +91,9 @@ try {
   } finally { fs.rmSync(faultRoot, { recursive: true }); assert(!fs.existsSync(faultRoot), "fault_fixture_cleaned") }
   stage = "baseline_upgrade"
   const upgraded = await migrate(dbUrl("petrichor_migrator"), false)
-  assert(upgraded.code === 0 && upgraded.output.includes("新执行 1 个迁移"), "baseline_upgrade_exactly_one_migration")
+  assert(upgraded.code === 0 && upgraded.output.includes("新执行 2 个迁移"), "baseline_upgrade_exactly_two_migrations")
+  const [ledger] = await admin`select count(*)::int as n from petrichor_schema_migration`
+  assert(ledger.n === 10, "ten_migrations_recorded")
   const [preserved] = await admin`select password_hash from petrichor_user where id=${retained.id}`
   assert(preserved.password_hash === "synthetic-old-hash", "upgrade_preserves_existing_user")
   const second = await migrate(dbUrl("petrichor_migrator"), true)
@@ -97,6 +102,15 @@ try {
   assert(repeat.code === 0 && repeat.output.includes("新执行 0 个迁移"), "migrate_no_pending")
   stage = "acl_and_constraints"
   const runtime = postgres(dbUrl("petrichor_runtime"), { max: 1, prepare: false, onnotice: () => {} }); clients.push(runtime)
+  const [branding] = await runtime`select public_qa_enabled,branding_json from petrichor_site_appearance where id=1`
+  assert(branding.public_qa_enabled === false && branding.branding_json === "{}", "branding_default_preserves_qa_disabled")
+  await runtime`update petrichor_site_appearance set branding_json=${JSON.stringify({ title: "Synthetic branding", showContact: false })} where id=1`
+  const [savedBranding] = await runtime`select branding_json from petrichor_site_appearance where id=1`
+  assert(JSON.parse(savedBranding.branding_json).title === "Synthetic branding", "runtime_branding_roundtrip")
+  for (const role of ["anon", "authenticated", "service_role"]) {
+    const [permission] = await admin`select has_column_privilege(${role},'public.petrichor_site_appearance','branding_json','SELECT') as allowed`
+    assert(permission.allowed === false, `${role}_cannot_read_branding_column`)
+  }
   const [tables] = await admin`select count(*)::int as total, count(*) filter(where relrowsecurity)::int as rls
     from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind='r' and (c.relname like 'petrichor_%' or c.relname like 'better_auth_%')`
   assert(tables.total > 0 && tables.total === tables.rls, "all_application_tables_rls")
