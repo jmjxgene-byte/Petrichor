@@ -201,6 +201,7 @@ export async function executeGeneOpsRpc<T>(
         sourceId?: number
         threadId?: number
         runId?: number
+        abortSignal?: AbortSignal
         toolName: string
         queryType: string
         parameters: unknown
@@ -219,7 +220,7 @@ export async function executeGeneOpsRpc<T>(
         }
         const client = createSourceClient(decodeConnection(source.connectionEnc))
         try {
-            const result = await query(client)
+            const result = await runGeneOpsQuery(client, query, input.abortSignal)
             resultCount = Array.isArray(result) ? result.length : result == null ? 0 : 1
             return result
         } finally {
@@ -258,7 +259,33 @@ function createSourceClient(connection: GeneOpsConnection) {
         prepare: false,
         connect_timeout: 5,
         idle_timeout: 5,
+        connection: {
+            statement_timeout: 7_000,
+            lock_timeout: 1_000,
+        },
     })
+}
+
+/** 将统一资料源的取消信号传入外部查询；取消时销毁连接，避免超时后的悬挂请求。 */
+async function runGeneOpsQuery<T>(
+    client: ReturnType<typeof postgres>,
+    query: (client: ReturnType<typeof postgres>) => Promise<T>,
+    signal?: AbortSignal,
+): Promise<T> {
+    if (!signal) return query(client)
+    if (signal.aborted) throw new Error("GeneOps query cancelled")
+    let rejectAbort!: (reason: Error) => void
+    const aborted = new Promise<never>((_resolve, reject) => { rejectAbort = reject })
+    const onAbort = () => {
+        void client.end({ timeout: 0 })
+        rejectAbort(new Error("GeneOps query cancelled"))
+    }
+    signal.addEventListener("abort", onAbort, { once: true })
+    try {
+        return await Promise.race([query(client), aborted])
+    } finally {
+        signal.removeEventListener("abort", onAbort)
+    }
 }
 
 function parseJsonRecord(value: string | null): Record<string, unknown> | null {
