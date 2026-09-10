@@ -281,7 +281,7 @@ describe("unified source tools", () => {
         mocks.readDocument.mockResolvedValueOnce({ documentId: "12", href: "/document/12", title: "本地命中", fileName: "local.md",
             updatedAt: new Date(0).toISOString(), anchorIndex: 1, chunks: [{ chunkIndex: 1, text: "本地证据", locator: null }] })
         mocks.searchGeneOps.mockImplementationOnce(() => new Promise((resolve) => setTimeout(() => resolve([]), 3_000)))
-        const ctx = { ...context(), focus: { sourceScope: { mode: "all" } }, queryDeadlineAt: Date.now() + 2_000 }
+        const ctx = { ...context(), focus: { sourceScope: { mode: "all" } }, queryDeadlineAt: Date.now() + 5_000 }
         const tool = sourceTools.find((item) => item.id === "source.lookup")!
         const raw = await tool.execute(ctx, { query: "合成" })
         const normalized = tool.normalize!(raw, {})
@@ -302,8 +302,8 @@ describe("unified source tools", () => {
         mocks.searchGeneOps.mockResolvedValueOnce([{
             result_key: "r1", document_id: "doc-1", title: "外部候选", snippet: "外部摘要", source_url: "https://example.com/post/1",
         }])
-        mocks.readGeneOpsChunks.mockImplementationOnce(() => new Promise((resolve) => setTimeout(() => resolve([]), 3_000)))
-        const ctx = { ...context(), focus: { sourceScope: { mode: "all" } }, queryDeadlineAt: Date.now() + 2_000 }
+        mocks.readGeneOpsChunks.mockImplementationOnce(() => new Promise((resolve) => setTimeout(() => resolve([]), 4_000)))
+        const ctx = { ...context(), focus: { sourceScope: { mode: "all" } }, queryDeadlineAt: Date.now() + 5_000 }
         const tool = sourceTools.find((item) => item.id === "source.lookup")!
         const raw = await tool.execute(ctx, { query: "合成" })
         const normalized = tool.normalize!(raw, {})

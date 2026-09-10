@@ -92,8 +92,8 @@ type SourceReadOutput = {
 }
 
 const RRF_K = 60
-const SOURCE_LOOKUP_TASK_BUDGET_MS = 6_000
-const SOURCE_READ_TASK_BUDGET_MS = 1_500
+const SOURCE_LOOKUP_TASK_BUDGET_MS = 4_500
+const SOURCE_READ_TASK_BUDGET_MS = 3_000
 
 /**
  * 统一资料源必须在 source.lookup 的 8 秒总预算内收敛。

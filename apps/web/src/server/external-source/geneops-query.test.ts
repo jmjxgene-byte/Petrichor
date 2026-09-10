@@ -34,6 +34,14 @@ describe("GeneOps 查询质量能力绑定", () => {
         expect(read.requiredCapability).toBeUndefined()
     })
 
+    it("把取消信号传给外部查询执行器，而不写入审计参数", async () => {
+        const controller = new AbortController()
+        const input = await searchGeneOps({ ...actor, abortSignal: controller.signal }, { query: "FBA", mode: "exact" }) as unknown as Record<string, unknown>
+        expect(input.abortSignal).toBe(controller.signal)
+        expect(input.parameters).toMatchObject({ query: "FBA", mode: "exact" })
+        expect(JSON.stringify(input.parameters)).not.toContain("AbortSignal")
+    })
+
     it("Graph 搜索与展开必须绑定 graph 质量能力", async () => {
         const search = auditInput(await searchGeneOpsGraph(actor, { query: "FBA" }))
         const expand = auditInput(await expandGeneOpsGraph(actor, { nodeId: "node-1" }))

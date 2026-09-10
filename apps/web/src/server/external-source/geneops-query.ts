@@ -59,6 +59,7 @@ export type GeneOpsAuditActor = {
     sourceId?: number
     threadId?: number
     runId?: number
+    abortSignal?: AbortSignal
 }
 
 export async function searchGeneOps(actor: GeneOpsAuditActor, raw: unknown) {
@@ -134,6 +135,7 @@ function audit(
         ...(actor.sourceId != null ? { sourceId: actor.sourceId } : {}),
         ...(actor.threadId != null ? { threadId: actor.threadId } : {}),
         ...(actor.runId != null ? { runId: actor.runId } : {}),
+        ...(actor.abortSignal ? { abortSignal: actor.abortSignal } : {}),
         toolName,
         queryType,
         parameters,

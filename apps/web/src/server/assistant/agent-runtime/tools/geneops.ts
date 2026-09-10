@@ -177,5 +177,6 @@ function actorContext(ctx: ToolExecutionContext, sourceId: string) {
         sourceId: Number(sourceId),
         ...(ctx.threadId != null ? { threadId: ctx.threadId } : {}),
         ...(ctx.dbRunId != null ? { runId: ctx.dbRunId } : {}),
+        ...(ctx.abortSignal ? { abortSignal: ctx.abortSignal } : {}),
     }
 }
