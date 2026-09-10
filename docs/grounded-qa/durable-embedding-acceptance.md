@@ -25,3 +25,11 @@
 在固定3篇合成文档/8题上，6题含工程草稿证据且全部映射成功（unmapped=0）；6题的词法、语义和RRF Top-20均命中目标。`late-1`命中`synthetic-topic-1:45`，窗口覆盖39–45片段，anchor范围在4,000字符预算内。2题分别要求澄清和不足，未产生证据召回。结果报告为`.data/embedding-approved/consumer-report-v2.json`（目录0700、文件0600），只保存安全元数据和候选ID；旧同名报告未覆盖。
 
 该结果是离线组件契约和锚点定位通过，不是60题人工评测、Postgres真实索引、重排或问答正确率验收。样本过小且gold来自工程草稿，不能宣称Recall@20达到MVP门槛，也不能证明语义优于词法。下一步冻结消费格式并准备重排请求清单；真实重排仍需单独授权，不能使用旧失败批次或修改生产索引。
+
+## 固定PG17消费验收
+
+随后用`materialize-canary-pg-fixture.ts`把上述已验收artifact转换为独立`.data/canary-dry-run-20260910/embed.json`，仅供本机测试。该输入由当前22项结果生成（48个文档passage、8个查询向量），目录0700、文件0600，未覆盖旧`canary-dry-run`输入。`verify-grounded-postgres-local.ts`增加`QA_CANARY_DIRECTORY`，拒绝目录越出工作树。
+
+使用固定PG17/pgvector与Bun镜像、内部网络、无端口发布/业务挂载，运行`QA_CANARY=true QA_CANARY_DRY_RUN=true`完成PostgreSQL临时表消费：应用表RLS/ACL、Deep/索引状态机和迁移回滚保持通过，额外`native_model_canary_candidates`通过，说明新嵌入输入能进入原生向量/词法候选查询。模型调用、生产索引写入和生产数据库连接均为0；容器、网络及基线源码副本清理成功。客户端共82项检查通过，宿主总验收通过。
+
+此次只验证“持久化嵌入→Postgres临时候选”的数据契约，不创建或切换正式generation，不验证重排、完整问答生成或质量指标；不得把合成canary候选当作生产索引。原始新输入和消费报告继续留在本地受限目录，下一步需在重排授权前先固定候选清单和模型能力合同。

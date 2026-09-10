@@ -158,8 +158,11 @@ export function evaluateOfflineEmbeddingCorpus(corpus: OfflineEmbeddingCorpus) {
 async function main() {
     const directory = process.argv[2], outputName = process.argv[3] ?? "consumer-report.json"
     if (!directory || process.argv.length > 4 || !/^consumer-report(?:-v[1-9][0-9]*)?\.json$/.test(outputName)) throw new Error("usage: canary-embedding-consumer <embedding-artifact-directory> [consumer-report-vN.json]")
-    const report = evaluateOfflineEmbeddingCorpus(loadOfflineEmbeddingCorpus(path.resolve(directory)))
-    const output = path.join(path.resolve(directory), outputName)
+    const repositoryRoot = path.resolve(import.meta.dir, "../../..")
+    const resolvedDirectory = path.resolve(repositoryRoot, directory)
+    if (!resolvedDirectory.startsWith(path.join(repositoryRoot, ".data") + path.sep)) throw new Error("consumer_directory_gate")
+    const report = evaluateOfflineEmbeddingCorpus(loadOfflineEmbeddingCorpus(resolvedDirectory))
+    const output = path.join(resolvedDirectory, outputName)
     if (fs.existsSync(output)) throw new Error("consumer_report_exists")
     fs.writeFileSync(output, JSON.stringify(report, null, 2), { flag: "wx", mode: 0o600 })
     const safeCases = report.cases.map(item => {
