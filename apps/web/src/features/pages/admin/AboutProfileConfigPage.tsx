@@ -210,7 +210,7 @@ export function AboutProfileConfigPage() {
                   value={profile.displayName}
                   disabled={loading}
                   onChange={(event) => setProfile((current) => ({ ...current, displayName: event.target.value }))}
-                  placeholder="CiZai"
+                  placeholder="站点维护者"
                 />
               </div>
               <div className="space-y-2">
@@ -220,7 +220,7 @@ export function AboutProfileConfigPage() {
                   value={profile.roleTitle}
                   disabled={loading}
                   onChange={(event) => setProfile((current) => ({ ...current, roleTitle: event.target.value }))}
-                  placeholder="Creative Dev & Visual Artist"
+                  placeholder="可留空"
                 />
               </div>
             </div>
@@ -246,7 +246,7 @@ export function AboutProfileConfigPage() {
                 disabled={loading}
                 onChange={(event) => setProfile((current) => ({ ...current, quote: event.target.value }))}
                 rows={3}
-                placeholder="Code is just another medium for painting dreams."
+                placeholder="填写你的引用语，留空不显示内容"
               />
             </div>
 

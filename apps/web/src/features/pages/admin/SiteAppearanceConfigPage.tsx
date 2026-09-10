@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Input } from "@/components/ui/input"
+import { readSiteBranding, type SiteBranding } from "@/lib/site-branding"
+import { updatePublicBranding } from "@/lib/use-site-branding"
 import {
     adminSiteAppearanceApi,
     type SiteAppearanceResponse,
@@ -52,15 +55,20 @@ export function SiteAppearanceConfigPage() {
         try {
             const res = await adminSiteAppearanceApi.update({
                 publicQaEnabled: config.publicQaEnabled,
+                branding: config.branding ?? readSiteBranding(null),
             })
             setConfig(res.data)
+            updatePublicBranding(res.data.branding)
             toast.success("前台配置已保存")
         } catch (e) {
             toast.error(resolveApiError(e, "保存前台配置失败"))
         } finally {
             setSaving(false)
         }
-    }, [config.publicQaEnabled])
+    }, [config])
+    const branding = config.branding ?? readSiteBranding(null)
+    const setBranding = <K extends keyof SiteBranding,>(key: K, value: SiteBranding[K]) =>
+        setConfig(previous => ({ ...previous, branding: { ...(previous.branding ?? readSiteBranding(null)), [key]: value } }))
 
     return (
         <div className="mx-auto w-full max-w-4xl space-y-6 p-4 md:p-8">
@@ -72,7 +80,7 @@ export function SiteAppearanceConfigPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={fetchConfig} disabled={loading}>
+                    <Button variant="outline" size="sm" onClick={fetchConfig} disabled={loading || saving}>
                         {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
                         <span className="ml-2">刷新</span>
                     </Button>
@@ -83,6 +91,38 @@ export function SiteAppearanceConfigPage() {
                 </div>
             </div>
 
+            <Card>
+                <CardHeader>
+                    <CardTitle>站点品牌</CardTitle>
+                    <CardDescription>所有字段都会公开展示，请勿填写密钥。留空可隐藏。简介和技能仍在「关于我」编辑；软件许可证声明保留。</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2">
+                    {([
+                        ["title", "站点标题"], ["subtitle", "站点副标题"], ["copyrightOwner", "版权/站点名称"],
+                        ["maintainer", "站点维护者（不是原软件作者）"], ["contactLabel", "联系链接文字"],
+                        ["contactHref", "联系地址（HTTPS 或 mailto）"], ["repositoryUrl", "本站源码仓库（HTTPS）"],
+                        ["avatarUrl", "关于页头像（站内路径或 HTTPS）"],
+                    ] as const).map(([key, label]) => <div key={key} className="space-y-2">
+                        <Label htmlFor={`branding-${key}`}>{label}</Label>
+                        <Input id={`branding-${key}`} value={branding[key]} disabled={loading || saving}
+                            maxLength={key.endsWith("Url") || key === "contactHref" ? 500 : 200}
+                            onChange={event => setBranding(key, event.target.value)} />
+                    </div>)}
+                    <div className="space-y-2">
+                        <Label htmlFor="branding-start-year">版权起始年（可空）</Label>
+                        <Input id="branding-start-year" type="number" min={1900} max={2100} value={branding.startYear ?? ""}
+                            disabled={loading || saving} onChange={event => setBranding("startYear", event.target.value ? Number(event.target.value) : null)} />
+                    </div>
+                    {([
+                        ["showContact", "显示公开联系方式"], ["showMaintainer", "显示站点维护署名"],
+                        ["showProjectPage", "显示项目宣传页及入口"], ["showProjectActions", "显示项目源码按钮"],
+                    ] as const).map(([key, label]) => <div key={key} className="flex items-center justify-between gap-3 rounded-md border p-3">
+                        <Label htmlFor={`branding-${key}`}>{label}</Label>
+                        <Switch id={`branding-${key}`} checked={branding[key]} disabled={loading || saving} onCheckedChange={value => setBranding(key, value)} />
+                    </div>)}
+                    <p className="text-xs text-muted-foreground md:col-span-2">旧作者个人署名和一键部署推广按钮不再默认展示。头像地址请使用稳定的公开资源地址，不要填写临时预签名 URL。</p>
+                </CardContent>
+            </Card>
             <Card>
                 <CardHeader>
                     <CardTitle className="text-base">前台问答</CardTitle>

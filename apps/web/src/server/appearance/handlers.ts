@@ -71,12 +71,14 @@ export async function adminSiteAppearanceUpdate(request: AppRequest) {
             .values({
                 id: SITE_APPEARANCE_ID,
                 publicQaEnabled: input.publicQaEnabled,
+                ...(input.branding ? { brandingJson: JSON.stringify(input.branding) } : {}),
                 updatedAt: now,
             })
             .onConflictDoUpdate({
                 target: siteAppearance.id,
                 set: {
                     publicQaEnabled: input.publicQaEnabled,
+                    ...(input.branding ? { brandingJson: JSON.stringify(input.branding) } : {}),
                     updatedAt: now,
                 },
             })

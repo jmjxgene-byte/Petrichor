@@ -62,7 +62,7 @@ export function buildStaticPublicPageMetadata(pathname: string): PageMetadata {
         return buildPublicMetadata({ title: "标签", description: "按标签浏览 Petrichor 公开文章。", pathname })
     }
     if (pathname === "/about") {
-        return buildPublicMetadata({ title: "关于", description: "了解 CiZai 的个人介绍、技术栈与创作方向。", pathname })
+        return buildPublicMetadata({ title: "关于", description: "了解本站的介绍与维护信息。", pathname })
     }
     if (pathname === "/ask") {
         return buildPublicMetadata({ title: "AI 问答", description: "向 AI 提问，基于 Petrichor 公开文章实时检索作答。", pathname })
@@ -75,7 +75,7 @@ export function buildStaticPublicPageMetadata(pathname: string): PageMetadata {
         })
     }
     if (pathname === "/projects") {
-        return buildPublicMetadata({ title: "开源项目", description: "CiZai 做过、参与过的一些开源项目。", pathname })
+        return buildPublicMetadata({ title: "开源项目", description: "本站展示的开源项目。", pathname })
     }
     if (pathname === "/petrichor") {
         return buildPublicMetadata({

@@ -644,22 +644,23 @@ export const agentCallLogs = pgTable("petrichor_agent_call_log", {
 
 export const siteAboutProfiles = pgTable("petrichor_site_about_profile", {
     id: integer("id").primaryKey(),
-    displayName: text("display_name").notNull().default("CiZai"),
-    roleTitle: text("role_title").notNull().default("Creative Dev & Visual Artist"),
-    intro: text("intro").notNull().default("我是 CiZai，是一个普普通通的程序员。\n\n目前就职于金山办公\n\n我的兴趣主要在 Coding / AI 方向。\n\n我喜欢 Minecraft。"),
-    expertiseJson: text("expertise_json").notNull().default("[\"Frontend Architecture\",\"AI 应用开发\",\"Knowledge Systems\",\"Creative Coding\"]"),
-    toolkitJson: text("toolkit_json").notNull().default("[\"TypeScript\",\"React\",\"Bun\",\"Vite\",\"AI\",\"PostgreSQL\",\"Minecraft\"]"),
-    quote: text("quote").notNull().default("Code is just another medium for painting dreams."),
+    displayName: text("display_name").notNull().default("站点维护者"),
+    roleTitle: text("role_title").notNull().default(""),
+    intro: text("intro").notNull().default(""),
+    expertiseJson: text("expertise_json").notNull().default("[]"),
+    toolkitJson: text("toolkit_json").notNull().default("[]"),
+    quote: text("quote").notNull().default(""),
     // 正文逐句注记（下划线/高亮 + 悬停气泡）：JSON 数组 [{phrase,style,note?}]，style ∈ red|green|blue|yellow
-    accentsJson: text("accents_json").notNull().default('[{"phrase":"CiZai","style":"red","note":"yep, that\'s me"},{"phrase":"程序员","style":"green","note":"just a dev"},{"phrase":"金山办公","style":"blue","note":"where I work"},{"phrase":"Coding / AI","style":"green","note":"my playground"},{"phrase":"Minecraft","style":"blue","note":"★ my comfort game"}]'),
+    accentsJson: text("accents_json").notNull().default("[]"),
     // 蓝色便签里的联系方式：引导语 + 链接文字 + 链接地址（三者均可留空以隐藏）
-    contactText: text("contact_text").notNull().default("想聊点什么？随时"),
-    contactLabel: text("contact_label").notNull().default("message me"),
-    contactHref: text("contact_href").notNull().default("mailto:zang@linux.do"),
+    contactText: text("contact_text").notNull().default(""),
+    contactLabel: text("contact_label").notNull().default(""),
+    contactHref: text("contact_href").notNull().default(""),
     ...timestamps,
 })
 
 export const siteAppearance = pgTable("petrichor_site_appearance", {
+    brandingJson: text("branding_json").notNull().default("{}"),
     id: integer("id").primaryKey(),
     publicQaEnabled: boolean("public_qa_enabled").notNull().default(true),
     ...timestamps,

@@ -92,11 +92,10 @@ describe("about profile logic", () => {
         expect(parseAccentsJson("{bad", DEFAULT_ABOUT_PROFILE.accents)).toEqual([...DEFAULT_ABOUT_PROFILE.accents])
     })
 
-    it("拒绝空值和超长列表", () => {
+    it("名称仍必填，允许清空展示列表，拒绝超长列表", () => {
         expect(() => validateAboutProfileInput({ displayName: " ", roleTitle: "dev", intro: "intro", expertise: ["AI"], toolkit: ["TS"], quote: "q" }))
             .toThrow("名称不能为空")
-        expect(() => validateAboutProfileInput({ displayName: "n", roleTitle: "dev", intro: "intro", expertise: [], toolkit: ["TS"], quote: "q" }))
-            .toThrow("Expertise 不能为空")
+        expect(validateAboutProfileInput({ displayName: "n", roleTitle: "dev", intro: "intro", expertise: [], toolkit: ["TS"], quote: "q" }).expertise).toEqual([])
         expect(() => validateAboutProfileInput({
             displayName: "n",
             roleTitle: "dev",

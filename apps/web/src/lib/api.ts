@@ -607,12 +607,14 @@ export const adminSiteGraphApi = {
 }
 
 export interface SiteAppearanceResponse {
+  branding?: import("./site-branding").SiteBranding
   publicQaEnabled: boolean
   createdAt?: string | null
   updatedAt?: string | null
 }
 
 export interface SiteAppearanceUpdateRequest {
+  branding?: import("./site-branding").SiteBranding
   publicQaEnabled: boolean
 }
 

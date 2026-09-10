@@ -765,35 +765,29 @@ create index if not exists idx_petrichor_agent_call_log_key_created
 
 create table if not exists petrichor_site_about_profile (
     id integer primary key,
-    display_name text not null default 'CiZai',
-    role_title text not null default 'Creative Dev & Visual Artist',
-    intro text not null default $about_intro$我是 CiZai，是一个普普通通的程序员。
-
-目前就职于金山办公
-
-我的兴趣主要在 Coding / AI 方向。
-
-我喜欢 Minecraft。$about_intro$,
-    expertise_json text not null default '["Frontend Architecture","AI 应用开发","Knowledge Systems","Creative Coding"]',
-    toolkit_json text not null default '["TypeScript","React","Bun","Vite","AI","PostgreSQL","Minecraft"]',
-    quote text not null default 'Code is just another medium for painting dreams.',
-    accents_json text not null default $about_accents$[{"phrase":"CiZai","style":"red","note":"yep, that's me"},{"phrase":"程序员","style":"green","note":"just a dev"},{"phrase":"金山办公","style":"blue","note":"where I work"},{"phrase":"Coding / AI","style":"green","note":"my playground"},{"phrase":"Minecraft","style":"blue","note":"★ my comfort game"}]$about_accents$,
-    contact_text text not null default '想聊点什么？随时',
-    contact_label text not null default 'message me',
-    contact_href text not null default 'mailto:zang@linux.do',
+    display_name text not null default '站点维护者',
+    role_title text not null default '',
+    intro text not null default '',
+    expertise_json text not null default '[]',
+    toolkit_json text not null default '[]',
+    quote text not null default '',
+    accents_json text not null default $about_accents$[]$about_accents$,
+    contact_text text not null default '',
+    contact_label text not null default '',
+    contact_href text not null default '',
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );
 
 -- 为已存在的旧表幂等补列（首次发布注记/联系方式功能时升级用）。
 alter table petrichor_site_about_profile
-    add column if not exists accents_json text not null default $about_accents$[{"phrase":"CiZai","style":"red","note":"yep, that's me"},{"phrase":"程序员","style":"green","note":"just a dev"},{"phrase":"金山办公","style":"blue","note":"where I work"},{"phrase":"Coding / AI","style":"green","note":"my playground"},{"phrase":"Minecraft","style":"blue","note":"★ my comfort game"}]$about_accents$;
+    add column if not exists accents_json text not null default $about_accents$[]$about_accents$;
 alter table petrichor_site_about_profile
-    add column if not exists contact_text text not null default '想聊点什么？随时';
+    add column if not exists contact_text text not null default '';
 alter table petrichor_site_about_profile
-    add column if not exists contact_label text not null default 'message me';
+    add column if not exists contact_label text not null default '';
 alter table petrichor_site_about_profile
-    add column if not exists contact_href text not null default 'mailto:zang@linux.do';
+    add column if not exists contact_href text not null default '';
 
 insert into petrichor_site_about_profile (
     id,
@@ -805,22 +799,17 @@ insert into petrichor_site_about_profile (
     quote
 ) values (
     1,
-    'CiZai',
-    'Creative Dev & Visual Artist',
-    $about_intro$我是 CiZai，是一个普普通通的程序员。
-
-目前就职于金山办公
-
-我的兴趣主要在 Coding / AI 方向。
-
-我喜欢 Minecraft。$about_intro$,
-    '["Frontend Architecture","AI 应用开发","Knowledge Systems","Creative Coding"]',
-    '["TypeScript","React","Bun","Vite","AI","PostgreSQL","Minecraft"]',
-    'Code is just another medium for painting dreams.'
+    '站点维护者',
+    '',
+    '',
+    '[]',
+    '[]',
+    ''
 ) on conflict (id) do nothing;
 
 create table if not exists petrichor_site_appearance (
     id integer primary key,
+    branding_json text not null default '{}',
     public_qa_enabled boolean not null default true,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
@@ -828,6 +817,9 @@ create table if not exists petrichor_site_appearance (
 
 alter table petrichor_site_appearance
     add column if not exists public_qa_enabled boolean not null default true;
+
+alter table petrichor_site_appearance
+    add column if not exists branding_json text not null default '{}';
 
 insert into petrichor_site_appearance (id, public_qa_enabled)
 values (1, true)

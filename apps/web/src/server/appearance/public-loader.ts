@@ -38,6 +38,14 @@ export async function loadSiteAppearanceOrNull() {
             .limit(1)
         return record ?? null
     } catch (error) {
+        const details = collectErrorParts(error).join("\n").toLowerCase()
+        if (details.includes("42703") && details.includes("branding_json")) {
+            // 旧库尚未迁移时保留真实问答开关，不能回退成默认开启。
+            const [legacy] = await getDb().select({ id: siteAppearance.id, publicQaEnabled: siteAppearance.publicQaEnabled,
+                createdAt: siteAppearance.createdAt, updatedAt: siteAppearance.updatedAt }).from(siteAppearance)
+                .where(eq(siteAppearance.id, SITE_APPEARANCE_ID)).limit(1)
+            return legacy ? { ...legacy, brandingJson: "{}" } : null
+        }
         if (isMissingSiteAppearanceTableError(error)) {
             return null
         }

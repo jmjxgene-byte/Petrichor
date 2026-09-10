@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useSiteBranding } from "@/lib/use-site-branding"
 
 import { RetypesetSiteFooter, RetypesetSiteHeader, RetypesetSiteNav } from "@/features/pages/blog/RetypesetSiteChrome"
 
@@ -12,10 +13,6 @@ import { BlueNote, DateTag, HandStamp, HandUnderline, LinkDoodle, MarkerHighligh
    本页是纯静态介绍，不走接口；内容源自仓库 README / docs，改文案直接改下面的常量。 */
 
 const LINKS = {
-    repo: "https://github.com/Ciao1019/Petrichor",
-    demo: "https://wl.do",
-    deploy:
-        "https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FCiao1019%2FPetrichor&project-name=petrichor&repository-name=petrichor&root-directory=apps%2Fweb",
     license: "https://github.com/Ciao1019/Petrichor/blob/master/LICENSE",
 } as const
 
@@ -227,6 +224,7 @@ function SectionHeading({ index, label, title }: { index: string; label: string;
 }
 
 export function PetrichorPage() {
+    const branding = useSiteBranding()
     const [parallax, setParallax] = React.useState({ x: 0, y: 0 })
 
     const handlePointerMove = React.useCallback((event: React.PointerEvent<HTMLElement>) => {
@@ -242,6 +240,12 @@ export function PetrichorPage() {
     const resetParallax = React.useCallback(() => {
         setParallax({ x: 0, y: 0 })
     }, [])
+
+    if (!branding.showProjectPage) return <main className="retypeset-home min-h-screen p-8">
+        <RetypesetSiteHeader dockVisible />
+        <p className="mx-auto my-20 max-w-xl">本站未启用项目宣传页。<a href="/">返回首页</a></p>
+        <RetypesetSiteFooter dockVisible />
+    </main>
 
     return (
         <main
@@ -303,17 +307,14 @@ export function PetrichorPage() {
                         </p>
                     </div>
 
-                    <div className="mt-9 flex flex-wrap items-center gap-3">
+                    {branding.showProjectActions && branding.repositoryUrl ? <div className="mt-9 flex flex-wrap items-center gap-3">
                         <a href="/demo" className="promo-cta promo-cta--ink">
                             免登录体验工作台
                         </a>
-                        <a href={LINKS.repo} target="_blank" rel="noopener noreferrer" className="promo-cta promo-cta--paper">
+                        <a href={branding.repositoryUrl} target="_blank" rel="noopener noreferrer" className="promo-cta promo-cta--paper">
                             GitHub 仓库
                         </a>
-                        <a href={LINKS.deploy} target="_blank" rel="noopener noreferrer" className="promo-cta promo-cta--paper">
-                            一键部署
-                        </a>
-                    </div>
+                    </div> : null}
                     <p className="mt-3 text-[0.72rem]" style={{ color: "var(--desk-sheet-muted)" }}>
                         演示模式为纯前端沙盒：数据只在你的浏览器内存里，随便改，刷新即重置。
                     </p>
@@ -535,24 +536,21 @@ export function PetrichorPage() {
                                 </span>
                                 <span className="mt-2.5 block not-italic">
                                     Apache-2.0 开源，允许自托管与商用改造。Fork 一份，填几个环境变量，它就是
-                                    <a href={LINKS.repo} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-2">
+                                    <strong>
                                         你自己的知识底座
-                                    </a>
+                                    </strong>
                                     。
                                 </span>
                             </BlueNote>
                         </div>
-                        <div className="mt-8 flex flex-wrap items-center gap-3">
-                            <a href={LINKS.deploy} target="_blank" rel="noopener noreferrer" className="promo-cta promo-cta--ink">
-                                一键部署到 Vercel
-                            </a>
-                            <a href={LINKS.repo} target="_blank" rel="noopener noreferrer" className="promo-cta promo-cta--paper">
+                        {branding.showProjectActions && branding.repositoryUrl ? <div className="mt-8 flex flex-wrap items-center gap-3">
+                            <a href={branding.repositoryUrl} target="_blank" rel="noopener noreferrer" className="promo-cta promo-cta--paper">
                                 阅读源码
                             </a>
                             <a href={LINKS.license} target="_blank" rel="noopener noreferrer" className="promo-cta promo-cta--paper">
                                 License
                             </a>
-                        </div>
+                        </div> : null}
                     </section>
                 </div>
             </section>

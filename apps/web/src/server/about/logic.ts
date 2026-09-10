@@ -1,4 +1,6 @@
 import type { SiteAboutProfileRecord } from "@/server/db/schema"
+import { NEUTRAL_ABOUT_PROFILE } from "@/lib/about-defaults"
+import { readSiteBranding, siteBrandingSchema } from "@/lib/site-branding"
 import { badRequest } from "@/server/http/response"
 
 export const ABOUT_PROFILE_ID = 1
@@ -14,24 +16,7 @@ export interface AboutAccent {
     note?: string
 }
 
-export const DEFAULT_ABOUT_PROFILE = {
-    displayName: "CiZai",
-    roleTitle: "Creative Dev & Visual Artist",
-    intro: "我是 CiZai，是一个普普通通的程序员。\n\n目前就职于金山办公\n\n我的兴趣主要在 Coding / AI 方向。\n\n我喜欢 Minecraft。",
-    expertise: ["Frontend Architecture", "AI 应用开发", "Knowledge Systems", "Creative Coding"],
-    toolkit: ["TypeScript", "React", "Bun", "Vite", "AI", "PostgreSQL", "Minecraft"],
-    quote: "Code is just another medium for painting dreams.",
-    accents: [
-        { phrase: "CiZai", style: "red", note: "yep, that's me" },
-        { phrase: "程序员", style: "green", note: "just a dev" },
-        { phrase: "金山办公", style: "blue", note: "where I work" },
-        { phrase: "Coding / AI", style: "green", note: "my playground" },
-        { phrase: "Minecraft", style: "blue", note: "★ my comfort game" },
-    ],
-    contactText: "想聊点什么？随时",
-    contactLabel: "message me",
-    contactHref: "mailto:zang@linux.do",
-} as const
+export const DEFAULT_ABOUT_PROFILE = NEUTRAL_ABOUT_PROFILE
 
 export interface AboutProfileResponse {
     displayName: string
@@ -102,7 +87,7 @@ export function buildAboutProfileResponse(record?: SiteAboutProfileRecord | null
         // 联系方式三项允许为空（用户可清空以隐藏），故不走 safeText 回退默认。
         contactText: record.contactText ?? DEFAULT_ABOUT_PROFILE.contactText,
         contactLabel: record.contactLabel ?? DEFAULT_ABOUT_PROFILE.contactLabel,
-        contactHref: record.contactHref ?? DEFAULT_ABOUT_PROFILE.contactHref,
+        contactHref: readSiteBranding({ contactHref: record.contactHref ?? "" }).contactHref,
         createdAt: formatDate(record.createdAt),
         updatedAt: formatDate(record.updatedAt),
     }
@@ -110,18 +95,20 @@ export function buildAboutProfileResponse(record?: SiteAboutProfileRecord | null
 
 export function validateAboutProfileInput(raw: unknown): AboutProfileInput {
     const value = isRecord(raw) ? raw : {}
+    const contact = siteBrandingSchema.shape.contactHref.safeParse(value.contactHref ?? "")
+    if (!contact.success) throw badRequest("联系地址仅支持 HTTPS 或 mailto")
 
     return {
         displayName: normalizeRequiredText(value.displayName, DEFAULT_ABOUT_PROFILE.displayName, "名称", textLimits.displayName),
-        roleTitle: normalizeRequiredText(value.roleTitle, DEFAULT_ABOUT_PROFILE.roleTitle, "副标题", textLimits.roleTitle),
-        intro: normalizeRequiredText(value.intro, DEFAULT_ABOUT_PROFILE.intro, "自我介绍", textLimits.intro),
+        roleTitle: normalizeClearableText(value.roleTitle, "副标题", textLimits.roleTitle),
+        intro: normalizeClearableText(value.intro, "自我介绍", textLimits.intro),
         expertise: normalizeRequiredList(value.expertise, DEFAULT_ABOUT_PROFILE.expertise, "Expertise"),
         toolkit: normalizeRequiredList(value.toolkit, DEFAULT_ABOUT_PROFILE.toolkit, "Toolkit"),
-        quote: normalizeRequiredText(value.quote, DEFAULT_ABOUT_PROFILE.quote, "quote", textLimits.quote),
+        quote: normalizeClearableText(value.quote, "quote", textLimits.quote),
         accents: normalizeAccentsInput(value.accents),
         contactText: normalizeOptionalText(value.contactText, textLimits.contactText, "联系引导语"),
         contactLabel: normalizeOptionalText(value.contactLabel, textLimits.contactLabel, "联系链接文字"),
-        contactHref: normalizeOptionalText(value.contactHref, textLimits.contactHref, "联系链接地址"),
+        contactHref: normalizeOptionalText(contact.data, textLimits.contactHref, "联系链接地址"),
     }
 }
 
@@ -233,6 +220,9 @@ export function parseProfileListJson(raw: string | null | undefined, fallback: r
     }
 }
 
+function normalizeClearableText(raw: unknown, label: string, maxLength: number) {
+    return String(raw ?? "").trim() ? normalizeRequiredText(raw, "", label, maxLength) : ""
+}
 function normalizeRequiredText(raw: unknown, fallback: string, label: string, maxLength: number) {
     const value = String(raw ?? fallback)
         .replace(/\r\n?/g, "\n")
@@ -257,9 +247,6 @@ function normalizeRequiredList(raw: unknown, fallback: readonly string[], label:
             : String(raw).split(/\r?\n/)
     const values = normalizeListForRead(source, [])
 
-    if (values.length === 0) {
-        throw badRequest(`${label} 不能为空`)
-    }
     if (values.length > textLimits.listCount) {
         throw badRequest(`${label} 数量不能超过 ${textLimits.listCount}`)
     }

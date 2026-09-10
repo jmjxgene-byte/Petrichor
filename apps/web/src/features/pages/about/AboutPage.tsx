@@ -1,30 +1,15 @@
 "use client"
 
 import * as React from "react"
+import { NEUTRAL_ABOUT_PROFILE } from "@/lib/about-defaults"
+import { useSiteBranding } from "@/lib/use-site-branding"
 
 import { RetypesetSiteFooter, RetypesetSiteHeader, RetypesetSiteNav } from "@/features/pages/blog/RetypesetSiteChrome"
 import { publicAboutProfileApi, type AboutAccent, type AboutProfileResponse } from "@/lib/api"
 
 import { BlueNote, HandUnderline, MarkerHighlight } from "./DeskAccents"
 
-const fallbackProfile: AboutProfileResponse = {
-    displayName: "CiZai",
-    roleTitle: "Creative Dev & Visual Artist",
-    intro: "我是 CiZai，是一个普普通通的程序员。\n\n目前就职于金山办公\n\n我的兴趣主要在 Coding / AI 方向。\n\n我喜欢 Minecraft。",
-    expertise: ["Frontend Architecture", "AI 应用开发", "Knowledge Systems", "Creative Coding"],
-    toolkit: ["TypeScript", "React", "Bun", "Vite", "AI", "PostgreSQL", "Minecraft"],
-    quote: "Code is just another medium for painting dreams.",
-    accents: [
-        { phrase: "CiZai", style: "red", note: "yep, that's me" },
-        { phrase: "程序员", style: "green", note: "just a dev" },
-        { phrase: "金山办公", style: "blue", note: "where I work" },
-        { phrase: "Coding / AI", style: "green", note: "my playground" },
-        { phrase: "Minecraft", style: "blue", note: "★ my comfort game" },
-    ],
-    contactText: "想聊点什么？随时",
-    contactLabel: "message me",
-    contactHref: "mailto:zang@linux.do",
-}
+const fallbackProfile: AboutProfileResponse = { ...NEUTRAL_ABOUT_PROFILE }
 
 /* 用「关于我」配置里的注记表，把一段正文切成「普通片段 + 被包裹的点缀片段」：
    style 为 red/green/blue 时画手绘波浪下划线，yellow 时画荧光笔高亮，note 非空则
@@ -64,9 +49,11 @@ function resolveApiError(error: unknown) {
 }
 
 function PixelAvatar() {
+    const branding = useSiteBranding()
+    if (!branding.avatarUrl) return <div className="flex h-full items-center justify-center text-muted-foreground">未设置头像</div>
     return (
         <img
-            src="/about-avatar.png"
+            src={branding.avatarUrl}
             alt="头像"
             className="relative z-10 h-full w-full rounded-md object-cover drop-shadow-[0_0_15px_rgba(255,255,255,0.22)]"
             loading="lazy"
@@ -239,9 +226,9 @@ export function AboutPage() {
                             </section>
                         </div>
 
-                        <div className="mt-4 max-w-xl">
+                        {profile.quote || profile.contactText || (profile.contactLabel && profile.contactHref) ? <div className="mt-4 max-w-xl">
                             <BlueNote>
-                                <span className="block break-words italic">"{profile.quote}"</span>
+                                {profile.quote ? <span className="block break-words italic">"{profile.quote}"</span> : null}
                                 {(() => {
                                     const hasLink = Boolean(profile.contactLabel && profile.contactHref)
                                     if (!profile.contactText && !hasLink) return null
@@ -261,7 +248,7 @@ export function AboutPage() {
                                     )
                                 })()}
                             </BlueNote>
-                        </div>
+                        </div> : null}
                     </div>
                 </div>
             </section>

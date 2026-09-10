@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Github, MessageCircleQuestion, Search } from "@/components/iconimate"
 import { Link } from "react-router-dom"
+import { useSiteBranding } from "@/lib/use-site-branding"
 
 import { BlogSearchDialog, useBlogSearchHotkey } from "@/components/blog-search-dialog"
 import { StaticNoise } from "@/cuicui/other/creative-effects/animated-noise/static-noise"
@@ -19,9 +20,7 @@ type RetypesetSiteNavItem = {
 let retypesetScrollbarMounts = 0
 
 const RETYPESET_SCROLLBAR_HIDDEN_CLASS = "retypeset-scrollbar-hidden"
-const RETYPESET_SITE_EMAIL = "zang@linux.do"
 const RETYPESET_SITE_RSS_HREF = "/atom.xml"
-const RETYPESET_SITE_START_YEAR = 2024
 
 const retypesetSiteCopy = {
     siteTitle: "Petrichor",
@@ -37,7 +36,6 @@ const retypesetSiteCopy = {
     githubTrigger: "GitHub 仓库",
 } as const
 
-const RETYPESET_SITE_GITHUB_HREF = "https://github.com/Ciao1019/Petrichor"
 
 const retypesetSiteNavItems: RetypesetSiteNavItem[] = [
     { section: "articles", href: "/#articles", label: retypesetSiteCopy.navPosts, internal: true },
@@ -52,11 +50,9 @@ function getDockVisibilityClass(dockVisible: boolean) {
     return dockVisible ? "lg:opacity-100" : "lg:pointer-events-none lg:opacity-0"
 }
 
-function getCopyrightYearRange() {
+function getCopyrightYearRange(startYear: number | null) {
     const currentYear = new Date().getFullYear()
-    return RETYPESET_SITE_START_YEAR === currentYear
-        ? `${RETYPESET_SITE_START_YEAR}`
-        : `${RETYPESET_SITE_START_YEAR}-${currentYear}`
+    return !startYear || startYear >= currentYear ? `${currentYear}` : `${startYear}-${currentYear}`
 }
 
 function getChromeLinkClassName(active: boolean) {
@@ -85,6 +81,7 @@ function useRetypesetScrollbarVisibility() {
 }
 
 export function RetypesetSiteHeader({ dockVisible }: { dockVisible: boolean }) {
+    const branding = useSiteBranding()
     useRetypesetScrollbarVisibility()
     const dockVisibilityClass = getDockVisibilityClass(dockVisible)
 
@@ -97,16 +94,16 @@ export function RetypesetSiteHeader({ dockVisible }: { dockVisible: boolean }) {
             <header
                 className={`${dockVisibilityClass} retypeset-c-secondary mb-[2.625rem] transition-opacity duration-150 lg:fixed lg:right-[max(5rem,calc(50vw-35rem))] lg:top-20 lg:z-30 lg:mb-0 lg:w-56`}
             >
-                <h1 className="retypeset-font-title retypeset-c-primary mb-[0.45rem] w-3/4 text-[2rem] font-bold leading-none lg:w-full lg:text-4xl">
+                <h1 className="retypeset-font-title retypeset-c-primary mb-[0.45rem] w-3/4 break-words text-[2rem] font-bold leading-none lg:w-full lg:text-4xl">
                     <span className="box-content inline-block pr-1">
                         <Link id="site-title-link" to="/#articles">
-                            {retypesetSiteCopy.siteTitle}
+                            {branding.title}
                         </Link>
                     </span>
                 </h1>
-                <h2 className="retypeset-font-navbar w-3/4 text-sm leading-snug lg:w-full lg:text-base">
-                    {retypesetSiteCopy.siteSubtitle}
-                </h2>
+                {branding.subtitle ? <h2 className="retypeset-font-navbar w-3/4 break-words text-sm leading-snug lg:w-full lg:text-base">
+                    {branding.subtitle}
+                </h2> : null}
             </header>
         </div>
     )
@@ -119,6 +116,7 @@ export function RetypesetSiteNav({
     activeSection: RetypesetSiteActiveSection
     dockVisible: boolean
 }) {
+    const branding = useSiteBranding()
     const dockVisibilityClass = getDockVisibilityClass(dockVisible)
     const [searchOpen, setSearchOpen] = React.useState(false)
     const openSearch = React.useCallback(() => setSearchOpen(true), [])
@@ -131,7 +129,7 @@ export function RetypesetSiteNav({
                 className={`${dockVisibilityClass} retypeset-font-navbar mb-[2.625rem] text-[0.9rem] font-semibold leading-[2.45em] transition-opacity duration-150 lg:fixed lg:right-[max(5rem,calc(50vw-35rem))] lg:bottom-[min(calc(9.04rem+3.85vw),12.5rem)] lg:z-30 lg:mb-0 lg:w-56 lg:text-base`}
             >
                 <ul>
-                    {retypesetSiteNavItems.map((item) => {
+                    {retypesetSiteNavItems.filter(item => item.section !== "petrichor" || branding.showProjectPage).map((item) => {
                         const active = item.section === activeSection
                         const className = getChromeLinkClassName(active)
 
@@ -171,8 +169,8 @@ export function RetypesetSiteNav({
                         <MessageCircleQuestion className="size-4" aria-hidden="true" />
                         <span className="sr-only">{retypesetSiteCopy.navAsk}</span>
                     </Link>
-                    <a
-                        href={RETYPESET_SITE_GITHUB_HREF}
+                    {branding.repositoryUrl ? <a
+                        href={branding.repositoryUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label={retypesetSiteCopy.githubTrigger}
@@ -181,7 +179,7 @@ export function RetypesetSiteNav({
                     >
                         <Github className="size-4" aria-hidden="true" />
                         <span className="sr-only">{retypesetSiteCopy.githubTrigger}</span>
-                    </a>
+                    </a> : null}
                 </div>
             </nav>
             <BlogSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
@@ -190,8 +188,9 @@ export function RetypesetSiteNav({
 }
 
 export function RetypesetSiteFooter({ dockVisible }: { dockVisible: boolean }) {
+    const branding = useSiteBranding()
     const dockVisibilityClass = getDockVisibilityClass(dockVisible)
-    const year = getCopyrightYearRange()
+    const year = getCopyrightYearRange(branding.startYear)
 
     return (
         <div className="retypeset-home contents">
@@ -202,26 +201,16 @@ export function RetypesetSiteFooter({ dockVisible }: { dockVisible: boolean }) {
                     <a className="retypeset-highlight-hover retypeset-footer-link py-[0.2rem] transition-colors" href={RETYPESET_SITE_RSS_HREF}>
                         RSS
                     </a>
-                    /
-                    <a
+                    {branding.showContact && branding.contactHref && branding.contactLabel ? <> / <a
                         className="retypeset-highlight-hover retypeset-footer-link py-[0.2rem] transition-colors"
-                        href={`mailto:${RETYPESET_SITE_EMAIL}`}
+                        href={branding.contactHref}
                     >
-                        Email
-                    </a>
+                        {branding.contactLabel}
+                    </a></> : null}
                 </p>
-                <p>© {year} Petrichor</p>
-                <p>
-                    Powered by{" "}
-                    <a
-                        className="retypeset-highlight-hover retypeset-footer-link py-[0.2rem] transition-colors"
-                        href="https://github.com/Ciao1019"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                    >
-                        CiZaii
-                    </a>
-                </p>
+                <p>© {year} {branding.copyrightOwner || branding.title}</p>
+                {branding.showMaintainer && branding.maintainer ? <p>站点维护：{branding.maintainer}</p> : null}
+                <p><a href="https://github.com/Ciao1019/Petrichor/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">Petrichor · Apache-2.0</a></p>
             </footer>
         </div>
     )
