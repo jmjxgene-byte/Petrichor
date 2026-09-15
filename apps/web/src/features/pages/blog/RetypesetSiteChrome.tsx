@@ -198,7 +198,7 @@ export function RetypesetSiteFooter({ dockVisible }: { dockVisible: boolean }) {
             >
                 <p>RSS / Email</p>
                 <p>© {year} Petrichor</p>
-                <p>Powered by CiZaii</p>
+                <p>Powered by Gene</p>
             </footer>
         </div>
     )
