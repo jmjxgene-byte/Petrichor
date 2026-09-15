@@ -128,10 +128,6 @@
   content: "";
 }
 
-.retypeset-home .retypeset-footer-link::after {
-  bottom: 0.35em;
-}
-
 .retypeset-home .retypeset-highlight-static::after,
 .retypeset-home .retypeset-highlight-hover:hover::after {
   transform: scaleX(1);

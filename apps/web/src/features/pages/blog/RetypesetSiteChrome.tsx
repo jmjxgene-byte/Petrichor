@@ -19,8 +19,6 @@ type RetypesetSiteNavItem = {
 let retypesetScrollbarMounts = 0
 
 const RETYPESET_SCROLLBAR_HIDDEN_CLASS = "retypeset-scrollbar-hidden"
-const RETYPESET_SITE_EMAIL = "zang@linux.do"
-const RETYPESET_SITE_RSS_HREF = "/atom.xml"
 const RETYPESET_SITE_START_YEAR = 2024
 
 const retypesetSiteCopy = {
@@ -198,30 +196,9 @@ export function RetypesetSiteFooter({ dockVisible }: { dockVisible: boolean }) {
             <footer
                 className={`${dockVisibilityClass} retypeset-font-navbar text-xs leading-[1.25em] transition-opacity duration-150 lg:fixed lg:right-[max(5rem,calc(50vw-35rem))] lg:bottom-20 lg:z-30 lg:w-56 lg:text-sm`}
             >
-                <p>
-                    <a className="retypeset-highlight-hover retypeset-footer-link py-[0.2rem] transition-colors" href={RETYPESET_SITE_RSS_HREF}>
-                        RSS
-                    </a>
-                    /
-                    <a
-                        className="retypeset-highlight-hover retypeset-footer-link py-[0.2rem] transition-colors"
-                        href={`mailto:${RETYPESET_SITE_EMAIL}`}
-                    >
-                        Email
-                    </a>
-                </p>
+                <p>RSS / Email</p>
                 <p>© {year} Petrichor</p>
-                <p>
-                    Powered by{" "}
-                    <a
-                        className="retypeset-highlight-hover retypeset-footer-link py-[0.2rem] transition-colors"
-                        href="https://github.com/Ciao1019"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                    >
-                        CiZaii
-                    </a>
-                </p>
+                <p>Powered by Gene</p>
             </footer>
         </div>
     )
